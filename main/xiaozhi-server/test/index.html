@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小智服务器测试页面</title>
+    <link rel="stylesheet" href="assets/css/main.css">
+</head>
+
+<body>
+    <div class="container">
+        <h1>小智服务器测试页面</h1>
+
+        <div id="scriptStatus" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);">
+            正在加载Opus库...</div>
+
+        <!-- 设备配置面板 -->
+        <div class="section">
+            <h2>
+                设备配置
+                <span class="device-info">
+                    <span>MAC: <strong id="displayMac"></strong></span>
+                    <span>客户端: <strong id="displayClient">web_test_client</strong></span>
+                </span>
+                <button class="toggle-button" id="toggleConfig">编辑</button>
+            </h2>
+            <div class="config-panel" id="configPanel">
+                <div class="control-panel">
+                    <div class="config-item">
+                        <label for="deviceMac">设备MAC:</label>
+                        <input type="text" id="deviceMac" placeholder="设备MAC地址">
+                    </div>
+                    <div class="config-item">
+                        <label for="deviceName">设备名称:</label>
+                        <input type="text" id="deviceName" value="Web测试设备" placeholder="设备名称">
+                    </div>
+                    <div class="config-item">
+                        <label for="clientId">客户端ID:</label>
+                        <input type="text" id="clientId" value="web_test_client" placeholder="客户端ID">
+                    </div>
+                    <div class="config-item">
+                        <label for="token">认证Token:</label>
+                        <input type="text" id="token" value="your-token1" placeholder="认证Token">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 连接信息 -->
+        <div class="section">
+            <h2>
+                连接信息
+                <span class="connection-status">
+                    <span>OTA: <span id="otaStatus" class="status">ota未连接</span></span>
+                    <span>WS: <span id="connectionStatus" class="status">ws未连接</span></span>
+                </span>
+            </h2>
+            <div class="connection-controls">
+                <input type="text" id="otaUrl" value="http://127.0.0.1:8002/xiaozhi/ota/"
+                    placeholder="OTA服务器地址，如：http://127.0.0.1:8002/xiaozhi/ota/" />
+                <input type="text" id="serverUrl" value="ws://127.0.0.1:8000/xiaozhi/v1/"
+                    placeholder="WebSocket服务器地址，如：ws://127.0.0.1:8000/xiaozhi/v1/" />
+                <button id="connectButton">连接</button>
+                <button id="authTestButton">测试认证</button>
+                <button id="otaTestButton">测试OTA</button>
+            </div>
+        </div>
+
+        <!-- 消息交互 -->
+        <div class="section">
+            <div class="tabs">
+                <button class="tab active" data-tab="text">文本消息</button>
+                <button class="tab" data-tab="voice">语音消息</button>
+                <button class="tab" data-tab="nfc">NFC测试</button>
+            </div>
+
+            <!-- 文本消息标签页 -->
+            <div class="tab-content active" id="textTab">
+                <div class="message-input">
+                    <input type="text" id="messageInput" placeholder="输入消息..." disabled>
+                    <button id="sendTextButton" disabled>发送</button>
+                </div>
+            </div>
+
+            <!-- 语音消息标签页 -->
+            <div class="tab-content" id="voiceTab">
+                <div class="audio-controls">
+                    <button id="recordButton" class="record-button" disabled>开始录音</button>
+                    <button id="stopButton" disabled>停止录音</button>
+                </div>
+                <canvas id="audioVisualizer" class="audio-visualizer"></canvas>
+            </div>
+
+            <!-- NFC测试标签页 -->
+            <div class="tab-content" id="nfcTab">
+                <div class="message-input">
+                    <input type="text" id="nfcCardId" placeholder="输入NFC卡片ID..." disabled>
+                    <button id="sendNfcButton" disabled>发送NFC</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 会话记录 -->
+        <div class="section">
+            <h2>会话记录</h2>
+            <div class="flex-container">
+                <div id="conversation" class="conversation"></div>
+                <div id="logContainer">
+                    <div class="log-entry log-info">准备就绪，请连接服务器开始测试...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Opus解码库 -->
+    <script src="libopus.js"></script>
+    
+    <!-- JavaScript模块 -->
+    <script src="assets/js/utils.js"></script>
+    <script src="assets/js/config.js"></script>
+    <script src="assets/js/websocket.js"></script>
+    <script src="assets/js/audio.js"></script>
+    <script src="assets/js/ros2.js"></script>
+    <script src="assets/js/ui.js"></script>
+
+    <!-- 初始化脚本 -->
+    <script>
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            // 延迟初始化，确保所有模块都已加载
+            setTimeout(() => {
+                window.ui.initializePage();
+            }, 100);
+        });
+
+        // Opus库加载完成回调
+        window.onload = () => {
+            setTimeout(() => {
+                utils.checkOpusLoaded();
+            }, 500);
+        };
+    </script>
+</body>
+</html>

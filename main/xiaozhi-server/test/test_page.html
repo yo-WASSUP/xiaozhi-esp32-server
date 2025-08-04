@@ -596,6 +596,10 @@
         let analyser = null;
         let audioChunks = [];
         let isRecording = false;
+        
+        // ROS2消息累积
+        let ros2MessageBuffer = '';
+        let ros2MessageTimer = null;
         let visualizerCanvas = document.getElementById('audioVisualizer');
         let visualizerContext = visualizerCanvas.getContext('2d');
         let audioQueue = [];
@@ -1484,7 +1488,22 @@
                                 if (message.text && message.text !== '😊') {
                                     addMessage(message.text);
                                     
-                                    // 检查是否包含ROS2命令
+                                    // 累积消息用于ROS2命令检测
+                                    ros2MessageBuffer += message.text + '\n';
+                                    
+                                    // 清除之前的定时器
+                                    if (ros2MessageTimer) {
+                                        clearTimeout(ros2MessageTimer);
+                                    }
+                                    
+                                    // 设置定时器，在消息接收完成后检查ROS2命令
+                                    ros2MessageTimer = setTimeout(() => {
+                                        log(`检查累积的消息: ${ros2MessageBuffer}`, 'debug');
+                                        checkAndExecuteROS2Command(ros2MessageBuffer);
+                                        ros2MessageBuffer = ''; // 清空缓冲区
+                                    }, 1000); // 1秒后检查
+                                    
+                                    // 同时检查单条消息
                                     checkAndExecuteROS2Command(message.text);
                                 }
                             }else if (message.type === 'mcp') {
@@ -1709,15 +1728,66 @@
 
             // ROS2命令检测和执行函数
             function checkAndExecuteROS2Command(text) {
-                // 检查文本中是否包含ROS2命令
-                const ros2CommandRegex = /ros2\s+topic\s+pub\s+--once\s+[^\n]+/g;
-                const matches = text.match(ros2CommandRegex);
+                log(`检查文本中的ROS2命令: ${text.substring(0, 100)}...`, 'debug');
+                
+                // 更宽松的正则表达式匹配，支持JSON格式的参数
+                const ros2CommandRegex = /ros2\s+topic\s+pub\s+--once\s+[^\s]+\s+[^\s]+\s+'[^']*\{[^}]*\}[^']*'/gs;
+                let matches = text.match(ros2CommandRegex);
                 
                 if (matches) {
                     matches.forEach(command => {
-                        log(`检测到ROS2命令: ${command}`, 'info');
-                        displayROS2Command(command);
+                        log(`🎯 检测到完整ROS2命令: ${command}`, 'success');
+                        displayROS2Command(command.trim());
                     });
+                    return;
+                }
+                
+                // 如果没有匹配到完整命令，尝试逐行检查
+                if (text.includes('ros2 topic pub') || text.includes('/cmd_vel')) {
+                    log(`🔍 检测到ROS2相关内容，尝试提取命令...`, 'info');
+                    
+                    // 尝试匹配单行完整命令
+                    const singleLineRegex = /ros2\s+topic\s+pub\s+--once\s+[^\s]+\s+[^\s]+\s+'[^']*'/g;
+                    const singleLineMatches = text.match(singleLineRegex);
+                    if (singleLineMatches) {
+                        singleLineMatches.forEach(command => {
+                            log(`🚀 检测到单行ROS2命令: ${command}`, 'success');
+                            displayROS2Command(command.trim());
+                        });
+                        return;
+                    }
+                    
+                    const lines = text.split(/[\r\n]+/);
+                    let commandParts = [];
+                    let inCommand = false;
+                    
+                    for (let line of lines) {
+                        line = line.trim();
+                        if (line.startsWith('ros2 topic pub')) {
+                            commandParts = [line];
+                            inCommand = true;
+                        } else if (inCommand && line) {
+                            commandParts.push(line);
+                            // 如果这行包含JSON格式的参数，说明命令完整了
+                            if (line.includes('{') && line.includes('}')) {
+                                const fullCommand = commandParts.join(' ');
+                                log(`🚀 提取到完整ROS2命令: ${fullCommand}`, 'success');
+                                displayROS2Command(fullCommand);
+                                return;
+                            }
+                        }
+                    }
+                    
+                    // 如果还是没有找到完整命令，尝试简单合并
+                    if (commandParts.length > 0) {
+                        const fullCommand = commandParts.join(' ');
+                        if (fullCommand.includes('/cmd_vel') && fullCommand.includes('{')) {
+                            log(`🔧 合并后的ROS2命令: ${fullCommand}`, 'info');
+                            displayROS2Command(fullCommand);
+                        } else {
+                            log(`⚠️ ROS2命令不完整: ${fullCommand}`, 'warning');
+                        }
+                    }
                 }
             }
 

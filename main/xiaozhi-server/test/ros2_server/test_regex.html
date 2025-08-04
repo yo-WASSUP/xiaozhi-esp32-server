@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ROS2命令检测测试</title>
+</head>
+<body>
+    <h2>ROS2命令检测测试</h2>
+    <div id="results"></div>
+
+    <script>
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.style.color = type === 'success' ? 'green' : (type === 'error' ? 'red' : 'blue');
+            div.textContent = message;
+            document.getElementById('results').appendChild(div);
+        }
+
+        function testROS2Detection() {
+            // 测试用的命令文本（从日志中复制的）
+            const testText = `机器人前进命令已生成，请在Ubuntu客户端执行:
+ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist '{"linear": {"x": 0.5, "y": 0.0, "z": 0.0}, "angular": {"x": 0.0, "y": 0.0, "z": 0.0}}'`;
+
+            log('开始测试ROS2命令检测...', 'info');
+            log(`测试文本: ${testText}`, 'info');
+
+            // 测试新的正则表达式
+            const ros2CommandRegex = /ros2\s+topic\s+pub\s+--once\s+[^\s]+\s+[^\s]+\s+'[^']*\{[^}]*\}[^']*'/gs;
+            let matches = testText.match(ros2CommandRegex);
+            
+            if (matches) {
+                matches.forEach(command => {
+                    log(`✅ 检测到完整ROS2命令: ${command}`, 'success');
+                });
+            } else {
+                log('❌ 未检测到ROS2命令，尝试单行匹配...', 'error');
+                
+                // 尝试单行匹配
+                const singleLineRegex = /ros2\s+topic\s+pub\s+--once\s+[^\s]+\s+[^\s]+\s+'[^']*'/g;
+                const singleLineMatches = testText.match(singleLineRegex);
+                if (singleLineMatches) {
+                    singleLineMatches.forEach(command => {
+                        log(`✅ 检测到单行ROS2命令: ${command}`, 'success');
+                    });
+                } else {
+                    log('❌ 单行匹配也失败', 'error');
+                }
+            }
+        }
+
+        // 运行测试
+        testROS2Detection();
+    </script>
+</body>
+</html>
