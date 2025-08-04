@@ -14,6 +14,7 @@ npm install
 
 ```
 npm run serve
+ ./node_modules/.bin/vue-cli-service serve
 ```
 
 ### Compiles and minifies for production

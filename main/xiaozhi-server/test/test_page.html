@@ -1483,6 +1483,9 @@
                                 // 添加大模型回复到会话记录
                                 if (message.text && message.text !== '😊') {
                                     addMessage(message.text);
+                                    
+                                    // 检查是否包含ROS2命令
+                                    checkAndExecuteROS2Command(message.text);
                                 }
                             }else if (message.type === 'mcp') {
                                 const payload = message.payload || {};
@@ -1703,6 +1706,178 @@
             messageInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') sendTextMessage();
             });
+
+            // ROS2命令检测和执行函数
+            function checkAndExecuteROS2Command(text) {
+                // 检查文本中是否包含ROS2命令
+                const ros2CommandRegex = /ros2\s+topic\s+pub\s+--once\s+[^\n]+/g;
+                const matches = text.match(ros2CommandRegex);
+                
+                if (matches) {
+                    matches.forEach(command => {
+                        log(`检测到ROS2命令: ${command}`, 'info');
+                        displayROS2Command(command);
+                    });
+                }
+            }
+
+            // 显示ROS2命令并尝试自动执行
+            function displayROS2Command(command) {
+                try {
+                    log(`处理ROS2命令: ${command}`, 'info');
+                    
+                    // 首先尝试自动执行
+                    executeROS2CommandAuto(command);
+                    
+                    // 创建命令显示框
+                    const commandDisplay = document.createElement('div');
+                    commandDisplay.style.cssText = `
+                        background: #f0f8ff; 
+                        padding: 15px; 
+                        margin: 10px 0; 
+                        border-radius: 8px; 
+                        border-left: 4px solid #2196F3;
+                        font-family: monospace;
+                    `;
+                    
+                    const commandId = 'cmd_' + Date.now();
+                    commandDisplay.innerHTML = `
+                        <div style="margin-bottom: 10px;">
+                            <strong style="color: #2196F3;">🤖 ROS2机器人控制命令:</strong>
+                            <span id="${commandId}_status" style="margin-left: 10px; padding: 2px 8px; border-radius: 12px; font-size: 12px;">⏳ 执行中...</span>
+                        </div>
+                        <div style="background: #2d3748; color: #fff; padding: 10px; border-radius: 4px; margin: 10px 0; overflow-x: auto;">
+                            <code>${command}</code>
+                        </div>
+                        <div>
+                            <button onclick="executeROS2CommandAuto('${command.replace(/'/g, "\\'")}')" 
+                                    style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">
+                                🚀 重新执行
+                            </button>
+                            <button onclick="copyROS2Command('${command.replace(/'/g, "\\'")}')" 
+                                    style="padding: 8px 16px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">
+                                📋 复制命令
+                            </button>
+                            <small style="color: #666;">自动执行或手动复制到Ubuntu终端</small>
+                        </div>
+                    `;
+                    
+                    commandDisplay.dataset.commandId = commandId;
+                    
+                    // 添加到会话记录
+                    document.getElementById('conversation').appendChild(commandDisplay);
+                    
+                    // 滚动到底部
+                    const conversation = document.getElementById('conversation');
+                    conversation.scrollTop = conversation.scrollHeight;
+                    
+                } catch (error) {
+                    log(`显示ROS2命令时出错: ${error.message}`, 'error');
+                }
+            }
+
+            // 自动执行ROS2命令
+            async function executeROS2CommandAuto(command) {
+                const ROS2_EXECUTOR_URL = 'http://localhost:3001';
+                const commandId = 'cmd_' + Date.now();
+                
+                try {
+                    log(`尝试自动执行ROS2命令: ${command}`, 'info');
+                    
+                    // 更新状态显示
+                    updateCommandStatus(commandId, '⏳ 执行中...', '#FFA500');
+                    
+                    const response = await fetch(`${ROS2_EXECUTOR_URL}/execute`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ command: command }),
+                        timeout: 10000
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        log(`ROS2命令执行成功: ${result.output}`, 'success');
+                        updateCommandStatus(commandId, '✅ 执行成功', '#4CAF50');
+                    } else {
+                        log(`ROS2命令执行失败: ${result.error}`, 'error');
+                        updateCommandStatus(commandId, '❌ 执行失败', '#f44336');
+                    }
+                    
+                } catch (error) {
+                    log(`自动执行失败，请确保ROS2执行服务已启动 (http://localhost:3001): ${error.message}`, 'warning');
+                    updateCommandStatus(commandId, '⚠️ 服务未连接', '#FF9800');
+                    
+                    // 显示启动提示
+                    showROS2ServiceTip();
+                }
+            }
+
+            // 更新命令状态显示
+            function updateCommandStatus(commandId, status, color) {
+                const statusElement = document.getElementById(`${commandId}_status`);
+                if (statusElement) {
+                    statusElement.textContent = status;
+                    statusElement.style.background = color;
+                    statusElement.style.color = 'white';
+                }
+            }
+
+            // 显示ROS2服务启动提示
+            function showROS2ServiceTip() {
+                const tipExists = document.getElementById('ros2-service-tip');
+                if (tipExists) return; // 避免重复显示
+                
+                const tip = document.createElement('div');
+                tip.id = 'ros2-service-tip';
+                tip.style.cssText = `
+                    background: #fff3cd; 
+                    color: #856404;
+                    padding: 15px; 
+                    margin: 10px 0; 
+                    border-radius: 8px; 
+                    border-left: 4px solid #ffc107;
+                `;
+                tip.innerHTML = `
+                    <div style="margin-bottom: 10px;">
+                        <strong>💡 启动ROS2执行服务以支持自动执行:</strong>
+                    </div>
+                    <div style="background: #2d3748; color: #fff; padding: 10px; border-radius: 4px; margin: 10px 0; font-family: monospace;">
+                        cd /path/to/xiaozhi-server<br>
+                        npm install<br>
+                        npm start
+                    </div>
+                    <button onclick="this.parentElement.remove()" style="padding: 5px 10px; background: #ffc107; color: #856404; border: none; border-radius: 3px; cursor: pointer;">
+                        知道了
+                    </button>
+                `;
+                
+                document.getElementById('conversation').appendChild(tip);
+            }
+
+            // 复制ROS2命令到剪贴板
+            function copyROS2Command(command) {
+                navigator.clipboard.writeText(command).then(function() {
+                    log('ROS2命令已复制到剪贴板', 'success');
+                    // 显示复制成功提示
+                    const button = event.target;
+                    const originalText = button.textContent;
+                    button.textContent = '✅ 已复制';
+                    button.style.background = '#4CAF50';
+                    setTimeout(() => {
+                        button.textContent = originalText;
+                        button.style.background = '#2196F3';
+                    }, 2000);
+                }, function(err) {
+                    log('复制失败: ' + err, 'error');
+                });
+            }
 
             recordButton.addEventListener('click', () => {
                 if (isRecording) {

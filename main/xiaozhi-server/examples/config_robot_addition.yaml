@@ -1,0 +1,27 @@
+# 在config.yaml中的Intent配置部分添加机器人控制函数
+# 这是需要修改的部分示例
+
+Intent:
+  intent_llm:
+    type: intent_llm
+    llm: ChatGLMLLM
+    functions:
+      - get_weather
+      - get_news_from_newsnow
+      - play_music
+      # 添加机器人控制函数
+      - robot_move              # 基础运动控制
+      - robot_sequence_move     # 序列运动控制
+      - robot_get_status        # 机器人状态查询
+      
+  function_call:
+    type: function_call
+    functions:
+      - change_role
+      - get_weather
+      - get_news_from_newsnow
+      - play_music
+      # 添加机器人控制函数
+      - robot_move              # 基础运动控制
+      - robot_sequence_move     # 序列运动控制
+      - robot_get_status        # 机器人状态查询

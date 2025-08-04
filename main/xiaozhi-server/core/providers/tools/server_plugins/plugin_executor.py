@@ -54,9 +54,17 @@ class ServerPluginExecutor(ToolExecutor):
         necessary_functions = ["handle_exit_intent", "get_lunar"]
 
         # 获取配置中的函数
-        config_functions = self.config["Intent"][
-            self.config["selected_module"]["Intent"]
-        ].get("functions", [])
+        selected_intent_module = self.config["selected_module"]["Intent"]
+        intent_config = self.config["Intent"][selected_intent_module]
+        config_functions = intent_config.get("functions", [])
+        
+        # 添加调试日志
+        from config.logger import setup_logging
+        logger = setup_logging()
+        logger.info(f"DEBUG: 当前Intent模块: {selected_intent_module}")
+        logger.info(f"DEBUG: Intent配置: {intent_config}")
+        logger.info(f"DEBUG: 配置的函数列表: {config_functions}")
+        logger.info(f"DEBUG: ros2_robot_move是否在列表中: {'ros2_robot_move' in config_functions}")
 
         # 转换为列表
         if not isinstance(config_functions, list):
