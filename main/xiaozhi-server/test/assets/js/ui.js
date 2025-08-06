@@ -144,6 +144,12 @@ function initEventListeners() {
         otaTestButton.addEventListener('click', testOTAConnection);
     }
     
+    // 重置设备按钮
+    const resetDeviceButton = document.getElementById('resetDeviceButton');
+    if (resetDeviceButton) {
+        resetDeviceButton.addEventListener('click', resetDevice);
+    }
+    
     // 文本发送按钮
     const sendTextButton = document.getElementById('sendTextButton');
     if (sendTextButton) {
@@ -266,6 +272,47 @@ async function testOTAConnection() {
     }
 }
 
+// 重置设备配置
+function resetDevice() {
+    if (confirm('确定要重置设备配置吗？这将清除所有保存的设备信息，包括MAC地址、设备名称等。')) {
+        try {
+            // 断开连接
+            if (window.websocketManager.isConnected()) {
+                window.websocketManager.disconnectFromServer();
+            }
+            
+            // 清除设备配置
+            window.config.clearDeviceConfig();
+            
+            // 清除URL配置
+            localStorage.removeItem('wsUrl');
+            localStorage.removeItem('otaUrl');
+            
+            // 重置输入框
+            const serverUrlInput = document.getElementById('serverUrl');
+            const otaUrlInput = document.getElementById('otaUrl');
+            
+            if (serverUrlInput) {
+                serverUrlInput.value = 'ws://127.0.0.1:8000/xiaozhi/v1/';
+            }
+            if (otaUrlInput) {
+                otaUrlInput.value = 'http://127.0.0.1:8002/xiaozhi/ota/';
+            }
+            
+            // 显示成功消息
+            showConnectionStatus('设备配置已重置，页面将刷新', 'success');
+            
+            // 2秒后刷新页面
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
+            
+        } catch (error) {
+            utils.log(`重置设备失败: ${error.message}`, 'error');
+        }
+    }
+}
+
 // 导出到全局
 window.ui = {
     addMessage,
@@ -277,5 +324,6 @@ window.ui = {
     initEventListeners,
     initializePage,
     sendNfcCardMessage,
-    testOTAConnection
+    testOTAConnection,
+    resetDevice
 };

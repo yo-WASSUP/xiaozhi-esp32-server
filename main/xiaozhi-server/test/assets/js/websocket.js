@@ -146,6 +146,15 @@ function handleWebSocketMessage(event) {
                 handleTTSMessage(message);
             } else if (message.type === 'mcp') {
                 handleMCPMessage(message);
+            } else if (message.type === 'stt' || message.type === 'asr') {
+                // 处理语音识别结果
+                handleSTTMessage(message);
+            } else if (message.type === 'listen') {
+                // 处理监听状态消息
+                handleListenMessage(message);
+            } else if (message.type === 'text' || message.text) {
+                // 处理包含文本内容的消息
+                handleTextMessage(message);
             } else {
                 utils.log(`收到消息: ${JSON.stringify(message)}`, 'info');
             }
@@ -177,6 +186,65 @@ function handleTTSMessage(message) {
         utils.log(`语音段结束: ${message.text}`, 'info');
     } else if (message.state === 'stop') {
         utils.log('服务器语音传输结束', 'info');
+    }
+}
+
+// 处理语音识别结果消息
+function handleSTTMessage(message) {
+    utils.log(`收到语音识别结果: ${JSON.stringify(message)}`, 'info');
+    
+    if (message.text) {
+        utils.log(`识别文本: ${message.text}`, 'success');
+        // 添加识别结果到会话记录
+        window.ui.addMessage(`[识别] ${message.text}`, true);
+        
+        // 检查ROS2命令
+        if (window.ros2) {
+            window.ros2.checkAndExecuteROS2Command(message.text);
+        }
+    }
+    
+    if (message.state === 'final' || message.is_final) {
+        utils.log('语音识别完成', 'info');
+    }
+}
+
+// 处理监听状态消息
+function handleListenMessage(message) {
+    utils.log(`监听状态: ${JSON.stringify(message)}`, 'info');
+    
+    if (message.state === 'listening') {
+        utils.log('服务器开始监听语音', 'info');
+    } else if (message.state === 'processing') {
+        utils.log('服务器正在处理语音', 'info');
+    } else if (message.state === 'done') {
+        utils.log('语音处理完成', 'info');
+    }
+    
+    // 如果包含识别文本
+    if (message.text) {
+        utils.log(`监听到文本: ${message.text}`, 'success');
+        window.ui.addMessage(`[监听] ${message.text}`, true);
+        
+        // 检查ROS2命令
+        if (window.ros2) {
+            window.ros2.checkAndExecuteROS2Command(message.text);
+        }
+    }
+}
+
+// 处理文本消息
+function handleTextMessage(message) {
+    utils.log(`收到文本消息: ${JSON.stringify(message)}`, 'info');
+    
+    if (message.text) {
+        // 添加到会话记录
+        window.ui.addMessage(message.text);
+        
+        // 检查ROS2命令
+        if (window.ros2) {
+            window.ros2.checkAndExecuteROS2Command(message.text);
+        }
     }
 }
 
@@ -296,6 +364,17 @@ function sendTextMessage() {
     }
 }
 
+// 发送文本数据
+function sendTextData(data) {
+    if (websocket && websocket.readyState === WebSocket.OPEN) {
+        try {
+            websocket.send(data);
+        } catch (error) {
+            utils.log(`发送文本数据失败: ${error.message}`, 'error');
+        }
+    }
+}
+
 // 发送二进制数据
 function sendBinaryData(data) {
     if (websocket && websocket.readyState === WebSocket.OPEN) {
@@ -390,6 +469,7 @@ window.websocketManager = {
     connectToServer,
     disconnectFromServer,
     sendTextMessage,
+    sendTextData,
     sendBinaryData,
     sendHelloMessage,
     connectionStatus,

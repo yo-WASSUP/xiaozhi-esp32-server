@@ -60,11 +60,16 @@ function initConfigPanel() {
         otaUrlInput.value = savedOtaUrl;
     }
 
-    // 生成随机MAC地址（如果没有设置）
+    // 从本地存储恢复设备配置
+    loadDeviceConfig();
+
+    // 生成随机MAC地址（如果本地存储中没有）
     if (!deviceMacInput.value) {
         const randomMac = utils.generateRandomMac();
         deviceMacInput.value = randomMac;
         displayMac.textContent = randomMac;
+        // 立即保存新生成的MAC
+        saveDeviceConfig();
     } else {
         displayMac.textContent = deviceMacInput.value;
     }
@@ -92,6 +97,7 @@ function initConfigPanel() {
     if (deviceMacInput && displayMac) {
         deviceMacInput.addEventListener('input', (e) => {
             displayMac.textContent = e.target.value || '未设置';
+            saveDeviceConfig(); // 自动保存
         });
     }
 
@@ -99,6 +105,23 @@ function initConfigPanel() {
     if (clientIdInput && displayClient) {
         clientIdInput.addEventListener('input', (e) => {
             displayClient.textContent = e.target.value || 'web_test_client';
+            saveDeviceConfig(); // 自动保存
+        });
+    }
+
+    // 监听设备名称变化
+    const deviceNameInput = document.getElementById('deviceName');
+    if (deviceNameInput) {
+        deviceNameInput.addEventListener('input', () => {
+            saveDeviceConfig(); // 自动保存
+        });
+    }
+
+    // 监听Token变化
+    const tokenInput = document.getElementById('token');
+    if (tokenInput) {
+        tokenInput.addEventListener('input', () => {
+            saveDeviceConfig(); // 自动保存
         });
     }
 }
@@ -216,11 +239,87 @@ function initTabs() {
     });
 }
 
+// 保存设备配置到本地存储
+function saveDeviceConfig() {
+    try {
+        const deviceMacInput = document.getElementById('deviceMac');
+        const deviceNameInput = document.getElementById('deviceName');
+        const clientIdInput = document.getElementById('clientId');
+        const tokenInput = document.getElementById('token');
+
+        const config = {
+            deviceMac: deviceMacInput?.value || '',
+            deviceName: deviceNameInput?.value || 'Web测试设备',
+            clientId: clientIdInput?.value || 'web_test_client',
+            token: tokenInput?.value || 'your-token1',
+            lastSaved: new Date().toISOString()
+        };
+
+        localStorage.setItem('deviceConfig', JSON.stringify(config));
+        utils.log('设备配置已保存', 'debug');
+    } catch (error) {
+        utils.log(`保存设备配置失败: ${error.message}`, 'warning');
+    }
+}
+
+// 从本地存储加载设备配置
+function loadDeviceConfig() {
+    try {
+        const saved = localStorage.getItem('deviceConfig');
+        if (!saved) {
+            utils.log('未找到保存的设备配置', 'debug');
+            return false;
+        }
+
+        const config = JSON.parse(saved);
+        
+        const deviceMacInput = document.getElementById('deviceMac');
+        const deviceNameInput = document.getElementById('deviceName');
+        const clientIdInput = document.getElementById('clientId');
+        const tokenInput = document.getElementById('token');
+
+        if (deviceMacInput && config.deviceMac) {
+            deviceMacInput.value = config.deviceMac;
+        }
+        if (deviceNameInput && config.deviceName) {
+            deviceNameInput.value = config.deviceName;
+        }
+        if (clientIdInput && config.clientId) {
+            clientIdInput.value = config.clientId;
+        }
+        if (tokenInput && config.token) {
+            tokenInput.value = config.token;
+        }
+
+        utils.log(`已恢复设备配置，上次保存时间: ${config.lastSaved}`, 'success');
+        return true;
+    } catch (error) {
+        utils.log(`加载设备配置失败: ${error.message}`, 'warning');
+        return false;
+    }
+}
+
+// 清除保存的设备配置
+function clearDeviceConfig() {
+    try {
+        localStorage.removeItem('deviceConfig');
+        utils.log('设备配置已清除', 'info');
+        
+        // 重新初始化配置
+        initConfigPanel();
+    } catch (error) {
+        utils.log(`清除设备配置失败: ${error.message}`, 'error');
+    }
+}
+
 // 导出到全局
 window.config = {
     getConfig,
     validateConfig,
     initConfigPanel,
     testAuthentication,
-    initTabs
+    initTabs,
+    saveDeviceConfig,
+    loadDeviceConfig,
+    clearDeviceConfig
 };

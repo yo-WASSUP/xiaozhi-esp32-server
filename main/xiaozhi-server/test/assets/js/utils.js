@@ -78,12 +78,12 @@ function checkOpusLoaded() {
     }
 }
 
-// 全局变量和常量
+// 全局变量和常量 - 优化播放参数
 const SAMPLE_RATE = 16000;     // 采样率
 const CHANNELS = 1;            // 声道数
 const FRAME_SIZE = 960;        // 帧大小
-const BUFFER_THRESHOLD = 3;    // 缓冲包数量阈值
-const MIN_AUDIO_DURATION = 0.1; // 最小音频长度(秒)
+const BUFFER_THRESHOLD = 1;    // 缓冲包数量阈值，减少到1个包获得最低延迟
+const MIN_AUDIO_DURATION = 0.02; // 最小音频长度，减少到20ms提高响应
 
 // 导出到全局
 window.utils = {
