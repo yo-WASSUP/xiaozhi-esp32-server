@@ -5,433 +5,81 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>小智服务器测试页面</title>
+    <link rel="stylesheet" href="test_page.css">
     <style>
-        body {
-            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-            background-color: white;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            padding: 10px 20px 10px 20px;
-        }
-
-        h1 {
-            color: #333;
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
-        .section {
-            margin-bottom: 20px;
-            padding: 15px;
-            border-radius: 8px;
-            background-color: #f9f9f9;
-        }
-
-        .section h2 {
-            margin-top: 0;
-            color: #444;
-            font-size: 18px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 10px 0;
-        }
-
-        .section h2 .toggle-button {
-            margin-left: auto;
-            padding: 4px 12px;
-            font-size: 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            height: 28px;
-            line-height: 20px;
-        }
-
-        .device-info {
-            display: flex;
-            align-items: center;
-            gap: 20px;
-            margin-left: 20px;
-            padding: 0 15px;
-            background-color: #f9f9f9;
-            border-radius: 4px;
-            height: 28px;
-            line-height: 28px;
-        }
-
-        .device-info span {
-            color: #666;
-            font-size: 13px;
-        }
-
-        .device-info strong {
-            color: #333;
-            font-weight: 500;
-        }
-
-        .config-panel {
-            display: none;
-            transition: all 0.3s ease;
-            margin-top: 5px;
-            padding: 5px 0;
-        }
-
-        .config-panel.expanded {
-            display: block;
-        }
-
-        .control-panel {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-top: 10px;
-        }
-
-        button {
-            padding: 8px 15px;
-            border: none;
-            border-radius: 5px;
-            background-color: #4285f4;
-            color: white;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-
-        button:hover {
-            background-color: #3367d6;
-        }
-
-        button:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
-
-        #serverUrl,
-        #otaUrl {
-            flex-grow: 1;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-        }
-
-        .message-input {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-
-        #messageInput {
-            flex-grow: 1;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-        }
-
-        #nfcCardId {
-            flex-grow: 1;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-        }
-
-        .conversation {
-            max-height: 300px;
-            overflow-y: auto;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            padding: 10px;
-            background-color: white;
-            flex: 1;
-            margin-right: 10px;
-        }
-
-        .message {
-            margin-bottom: 10px;
-            padding: 8px 12px;
-            border-radius: 8px;
-            max-width: 80%;
-        }
-
-        .user {
-            background-color: #e2f2ff;
-            margin-left: auto;
-            margin-right: 10px;
-            text-align: right;
-        }
-
-        .server {
-            background-color: #f0f0f0;
-            margin-right: auto;
-            margin-left: 10px;
-        }
-
-        .status {
-            color: #666;
-            font-style: italic;
-            font-size: 14px;
-            margin: 0;
-            padding: 0;
-        }
-
-        .audio-controls {
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-            margin-top: 20px;
-        }
-
-        .audio-visualizer {
-            height: 60px;
-            width: 100%;
-            margin-top: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            background-color: #fafafa;
-        }
-
-        .record-button {
-            background-color: #db4437;
-        }
-
-        .record-button:hover {
-            background-color: #c53929;
-        }
-
-        .record-button.recording {
-            animation: pulse 1.5s infinite;
-        }
-
-        @keyframes pulse {
-            0% {
-                background-color: #db4437;
-            }
-
-            50% {
-                background-color: #ff6659;
-            }
-
-            100% {
-                background-color: #db4437;
-            }
-        }
-
-        #logContainer {
-            margin-top: 0;
-            padding: 10px;
-            background-color: #f0f0f0;
-            border-radius: 5px;
-            font-family: monospace;
-            height: 300px;
-            overflow-y: auto;
-            flex: 1;
-            margin-left: 10px;
-        }
-
-        .log-entry {
-            margin: 5px 0;
-            font-size: 12px;
-        }
-
-        .log-info {
-            color: #333;
-        }
-
-        .log-error {
-            color: #db4437;
-        }
-
-        .log-success {
-            color: #0f9d58;
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translate(-50%, -60%);
-            }
-
-            to {
-                opacity: 1;
-                transform: translate(-50%, -50%);
-            }
-        }
-
-        .script-status {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            margin-right: 5px;
-        }
-
-        .script-loaded {
-            background-color: #0f9d58;
-        }
-
-        .script-loading {
-            background-color: #f4b400;
-        }
-
-        .script-error {
-            background-color: #db4437;
-        }
-
-        .script-list {
-            margin: 10px 0;
-            padding: 10px;
-            background-color: #f9f9f9;
-            border-radius: 5px;
-            font-family: monospace;
-            font-size: 11px;
-        }
-
-        #scriptStatus.success {
-            background-color: #e6f4ea;
-            color: #0f9d58;
-            border-left: 4px solid #0f9d58;
-        }
-
-        #scriptStatus.error {
-            background-color: #fce8e6;
-            color: #db4437;
-            border-left: 4px solid #db4437;
-        }
-
-        #scriptStatus.warning {
-            background-color: #fef7e0;
-            color: #f4b400;
-            border-left: 4px solid #f4b400;
-        }
-
-        /* 标签页样式 */
-        .tabs {
-            display: flex;
-            margin-bottom: 20px;
-            border-bottom: 2px solid #e0e0e0;
-        }
-
-        .tab {
-            padding: 10px 20px;
-            cursor: pointer;
-            border: none;
-            background: none;
-            font-size: 16px;
-            color: #666;
-            position: relative;
-            transition: all 0.3s ease;
-        }
-
-        .tab:hover {
-            color: #4285f4;
-        }
-
-        .tab.active {
-            color: #4285f4;
-            font-weight: bold;
-        }
-
-        .tab.active::after {
-            content: '';
-            position: absolute;
-            bottom: -2px;
+        #fileProtocolWarning {
+            position: fixed;
+            top: 0;
             left: 0;
             width: 100%;
-            height: 2px;
-            background-color: #4285f4;
-        }
-
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
-        .flex-container {
-            display: flex;
-            gap: 20px;
-            margin-top: 10px;
-        }
-
-        .config-item {
-            display: flex;
-            align-items: center;
-            margin-bottom: 8px;
-            width: 100%;
-        }
-
-        .config-item label {
-            width: 100px;
-            text-align: right;
-            margin-right: 10px;
-            color: #666;
-        }
-
-        .config-item input {
-            flex-grow: 1;
-            padding: 6px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-        }
-
-        .control-panel {
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            margin-top: 10px;
-        }
-
-        .connection-controls {
-            display: flex;
-            gap: 10px;
             align-items: center;
-            width: 100%;
+            justify-content: center;
+            z-index: 9999;
+            color: white;
+            padding: 20px;
+            box-sizing: border-box;
         }
 
-        .connection-controls input {
-            flex: 1;
-            padding: 8px;
-            border: 1px solid #ddd;
+        #fileProtocolWarning h2 {
+            color: #ff4d4d;
+            margin-bottom: 20px;
+        }
+
+        #fileProtocolWarning pre {
+            background-color: green;
+            font-size: 18px;
+            padding: 15px;
             border-radius: 5px;
-            min-width: 200px;
+            font-family: monospace;
+            overflow-x: auto;
+            margin: 15px 0;
         }
 
-        .connection-controls button {
-            white-space: nowrap;
-            padding: 8px 15px;
-        }
-
-        .connection-status {
-            display: flex;
-            align-items: center;
-            gap: 20px;
-            margin-left: 20px;
-            padding: 0 15px;
-            background-color: #f9f9f9;
+        #fileProtocolWarning button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 10px 2px;
+            cursor: pointer;
             border-radius: 4px;
-            height: 28px;
-            line-height: 28px;
         }
 
-        .connection-status span {
-            color: #666;
-            font-size: 13px;
-        }
-
-        .connection-status .status {
-            color: #333;
-            font-weight: 500;
+        #fileProtocolWarning button:hover {
+            background-color: #45a049;
         }
     </style>
+    <script>
+        // 检测是否使用file://协议打开
+        if (window.location.protocol === 'file:') {
+            document.addEventListener('DOMContentLoaded', function () {
+                // 创建警告框
+                const warningDiv = document.createElement('div');
+                warningDiv.id = 'fileProtocolWarning';
+                warningDiv.innerHTML = `
+                    <h2>⚠️ 警告：请使用HTTP服务器打开此页面</h2>
+                    <p>您当前使用的是本地文件方式打开页面（file://协议），这可能导致页面功能异常。</p>
+                    <p>您可以使用nginx映射启动测试页面，也可以请按照以下步骤使用python启动测试http服务：</p>
+                    <ol>
+                        <li>打开命令行终端</li>
+                        <li>命令行进入到 xiaozhi-server/test 目录</li>
+                        <li>执行以下命令启动HTTP服务器：</li>
+                    </ol>
+                    <pre>python -m http.server 8006</pre>
+                    <p>然后在浏览器中访问：<strong>http://localhost:8006/test_page.html</strong></p>
+                `;
+                document.body.appendChild(warningDiv);
+            });
+        }
+    </script>
 </head>
 
 <body>
@@ -439,7 +87,8 @@
         <h1>小智服务器测试页面</h1>
 
         <div id="scriptStatus" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);">
-            正在加载Opus库...</div>
+            正在加载Opus库...
+        </div>
 
         <!-- 添加配置面板 -->
         <div class="section">
@@ -526,7 +175,12 @@
     <!-- Opus解码库 -->
     <script src="libopus.js"></script>
 
-    <script>
+    <script type="module">
+        import { log } from './js/utils/logger.js';
+        import { webSocketConnect } from './js/xiaoZhiConnect.js';
+        import { checkOpusLoaded, initOpusEncoder } from './js/opus.js';
+        import { addMessage } from './js/document.js'
+        import BlockingQueue from './js/utils/BlockingQueue.js'
         // 需要加载的脚本列表 - 移除Opus依赖
         const scriptFiles = [];
 
@@ -537,57 +191,6 @@
             failed: 0,
             total: scriptFiles.length
         };
-
-        // 检查Opus库是否已加载
-        function checkOpusLoaded() {
-            try {
-                // 检查Module是否存在（本地库导出的全局变量）
-                if (typeof Module === 'undefined') {
-                    throw new Error('Opus库未加载，Module对象不存在');
-                }
-
-                // 尝试先使用Module.instance（libopus.js最后一行导出方式）
-                if (typeof Module.instance !== 'undefined' && typeof Module.instance._opus_decoder_get_size === 'function') {
-                    // 使用Module.instance对象替换全局Module对象
-                    window.ModuleInstance = Module.instance;
-                    log('Opus库加载成功（使用Module.instance）', 'success');
-                    updateScriptStatus('Opus库加载成功', 'success');
-
-                    // 3秒后隐藏状态
-                    const statusElement = document.getElementById('scriptStatus');
-                    if (statusElement) statusElement.style.display = 'none';
-                    return;
-                }
-
-                // 如果没有Module.instance，检查全局Module函数
-                if (typeof Module._opus_decoder_get_size === 'function') {
-                    window.ModuleInstance = Module;
-                    log('Opus库加载成功（使用全局Module）', 'success');
-                    updateScriptStatus('Opus库加载成功', 'success');
-
-                    // 3秒后隐藏状态
-                    const statusElement = document.getElementById('scriptStatus');
-                    if (statusElement) statusElement.style.display = 'none';
-                    return;
-                }
-
-                throw new Error('Opus解码函数未找到，可能Module结构不正确');
-            } catch (err) {
-                log(`Opus库加载失败，请检查libopus.js文件是否存在且正确: ${err.message}`, 'error');
-                updateScriptStatus('Opus库加载失败，请检查libopus.js文件是否存在且正确', 'error');
-            }
-        }
-
-        // 更新脚本状态显示
-        function updateScriptStatus(message, type) {
-            const statusElement = document.getElementById('scriptStatus');
-            if (statusElement) {
-                statusElement.textContent = message;
-                statusElement.className = `script-status ${type}`;
-                statusElement.style.display = 'block';
-                statusElement.style.width = 'auto';
-            }
-        }
 
         // 全局变量
         let websocket = null;
@@ -612,7 +215,6 @@
         let totalAudioSize = 0; // 跟踪累积的音频大小
 
         let audioBufferQueue = [];     // 存储接收到的音频包
-        let isAudioBuffering = false;  // 是否正在缓冲音频
         let isAudioPlaying = false;    // 是否正在播放音频
         const BUFFER_THRESHOLD = 3;    // 缓冲包数量阈值，至少累积3个包再开始播放
         const MIN_AUDIO_DURATION = 0.1; // 最小音频长度(秒)，小于这个长度的音频会被合并
@@ -632,40 +234,6 @@
         const conversationDiv = document.getElementById('conversation');
         const logContainer = document.getElementById('logContainer');
 
-        // 日志函数
-        function log(message, type = 'info') {
-            // 将消息按换行符分割成多行
-            const lines = message.split('\n');
-            const now = new Date();
-            // const timestamp = `[${now.toLocaleTimeString()}] `;
-            const timestamp = `[${now.toLocaleTimeString()}.${now.getMilliseconds().toString().padStart(3, '0')}] `;
-            // 为每一行创建日志条目
-            lines.forEach((line, index) => {
-                const logEntry = document.createElement('div');
-                logEntry.className = `log-entry log-${type}`;
-                // 如果是第一条日志，显示时间戳
-                const prefix = index === 0 ? timestamp : ' '.repeat(timestamp.length);
-                logEntry.textContent = `${prefix}${line}`;
-                // logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-                // logEntry.style 保留起始的空格
-                logEntry.style.whiteSpace = 'pre';
-                if (type === 'error') {
-                    logEntry.style.color = 'red';
-                } else if (type === 'debug') {
-                    logEntry.style.color = 'gray';
-                    return;
-                } else if (type === 'warning') {
-                    logEntry.style.color = 'orange';
-                } else if (type === 'success') {
-                    logEntry.style.color = 'green';
-                } else {
-                    logEntry.style.color = 'black';
-                }
-                logContainer.appendChild(logEntry);
-            });
-
-            logContainer.scrollTop = logContainer.scrollHeight;
-        }
 
         // 初始化可视化器
         function initVisualizer() {
@@ -700,21 +268,10 @@
             }
         }
 
-        // 添加消息到会话记录
-        function addMessage(text, isUser = false) {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${isUser ? 'user' : 'server'}`;
-            messageDiv.textContent = text;
-            conversationDiv.appendChild(messageDiv);
-            conversationDiv.scrollTop = conversationDiv.scrollHeight;
-        }
+        const queue = new BlockingQueue();
 
-
-        // 开始音频缓冲过程
-        function startAudioBuffering() {
-            if (isAudioBuffering || isAudioPlaying) return;
-
-            isAudioBuffering = true;
+        // 启动缓存进程
+        async function startAudioBuffering() {
             log("开始音频缓冲...", 'info');
 
             // 先尝试初始化解码器，以便在播放时已准备好
@@ -722,85 +279,105 @@
                 log(`预初始化Opus解码器失败: ${error.message}`, 'warning');
                 // 继续缓冲，我们会在播放时再次尝试初始化
             });
-
-            // 设置超时，如果在一定时间内没有收集到足够的音频包，就开始播放
-            setTimeout(() => {
-                if (isAudioBuffering && audioBufferQueue.length > 0) {
-                    log(`缓冲超时，当前缓冲包数: ${audioBufferQueue.length}，开始播放`, 'info');
-                    playBufferedAudio();
+            const timeout = 300;
+            while (true) {
+                // 每次数据空的时候等三条数据
+                const packets = await queue.dequeue(
+                    3,                       // 至少 3 条
+                    timeout,                     // 最多等 300 ms
+                    (count) => {             // 超时额外回调
+                        log(`缓冲超时，当前缓冲包数: ${count}，开始播放`, 'info');
+                    }
+                );
+                if (packets.length) {
+                    log(`已缓冲 ${packets.length} 个音频包，开始播放`, 'info');
+                    streamingContext.pushAudioBuffer(packets)
                 }
-            }, 300); // 300ms超时
-
-            // 监控缓冲进度
-            const bufferCheckInterval = setInterval(() => {
-                if (!isAudioBuffering) {
-                    clearInterval(bufferCheckInterval);
-                    return;
+                // 50毫秒里，有多少给多少
+                while (true) {
+                    const data = await queue.dequeue(99, 50)
+                    if (data.length) {
+                        streamingContext.pushAudioBuffer(data)
+                    } else {
+                        break
+                    }
                 }
-
-                // 当累积了足够的音频包，开始播放
-                if (audioBufferQueue.length >= BUFFER_THRESHOLD) {
-                    clearInterval(bufferCheckInterval);
-                    log(`已缓冲 ${audioBufferQueue.length} 个音频包，开始播放`, 'info');
-                    playBufferedAudio();
-                }
-            }, 50);
+            }
         }
 
         // 播放已缓冲的音频
-        function playBufferedAudio() {
-            if (isAudioPlaying || audioBufferQueue.length === 0) return;
-
-            isAudioPlaying = true;
-            isAudioBuffering = false;
-
+        async function playBufferedAudio() {
             // 确保Opus解码器已初始化
-            const initDecoderAndPlay = async () => {
-                try {
-                    // 确保音频上下文存在
-                    if (!audioContext) {
-                        audioContext = new (window.AudioContext || window.webkitAudioContext)({
-                            sampleRate: SAMPLE_RATE
-                        });
-                        log('创建音频上下文，采样率: ' + SAMPLE_RATE + 'Hz', 'debug');
-                    }
+            try {
+                // 确保音频上下文存在
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                        sampleRate: SAMPLE_RATE
+                    });
+                    log('创建音频上下文，采样率: ' + SAMPLE_RATE + 'Hz', 'debug');
+                }
 
-                    // 确保解码器已初始化
-                    if (!opusDecoder) {
-                        log('初始化Opus解码器...', 'info');
-                        try {
-                            opusDecoder = await initOpusDecoder();
-                            if (!opusDecoder) {
-                                throw new Error('解码器初始化失败');
-                            }
-                            log('Opus解码器初始化成功', 'success');
-                        } catch (error) {
-                            log('Opus解码器初始化失败: ' + error.message, 'error');
-                            isAudioPlaying = false;
-                            return;
+                // 确保解码器已初始化
+                if (!opusDecoder) {
+                    log('初始化Opus解码器...', 'info');
+                    try {
+                        opusDecoder = await initOpusDecoder();
+                        if (!opusDecoder) {
+                            throw new Error('解码器初始化失败');
                         }
+                        log('Opus解码器初始化成功', 'success');
+                    } catch (error) {
+                        log('Opus解码器初始化失败: ' + error.message, 'error');
+                        isAudioPlaying = false;
+                        return;
                     }
+                }
 
-                    // 创建流式播放上下文
-                    if (!streamingContext) {
-                        streamingContext = {
-                            queue: [],          // 已解码的PCM队列
-                            playing: false,     // 是否正在播放
-                            endOfStream: false, // 是否收到结束信号
-                            source: null,       // 当前音频源
-                            totalSamples: 0,    // 累积的总样本数
-                            lastPlayTime: 0,    // 上次播放的时间戳
+                // 创建流式播放上下文
+                if (!streamingContext) {
+                    streamingContext = {
+                        queue: [],          // 已解码的PCM队列。正在播放
+                        activeQueue: new BlockingQueue(), // 已解码的PCM队列。准备播放
+                        pendingAudioBufferQueue: [],  // 待处理的缓存队列
+                        audioBufferQueue: new BlockingQueue(),  // 缓存队列
+                        playing: false,     // 是否正在播放
+                        endOfStream: false, // 是否收到结束信号
+                        source: null,       // 当前音频源
+                        totalSamples: 0,    // 累积的总样本数
+                        lastPlayTime: 0,    // 上次播放的时间戳
 
-                            // 将Opus数据解码为PCM
-                            decodeOpusFrames: async function (opusFrames) {
-                                if (!opusDecoder) {
-                                    log('Opus解码器未初始化，无法解码', 'error');
-                                    return;
-                                }
 
+                        // 缓存音频数组
+                        pushAudioBuffer: function (item) {
+                            this.audioBufferQueue.enqueue(...item)
+                        },
+
+                        // 获取需要处理缓存队列，单线程：在audioBufferQueue一直更新的状态下不会出现安全问题
+                        getPendingAudioBufferQueue: async function () {
+                            // 原子交换 + 清空
+                            [this.pendingAudioBufferQueue, this.audioBufferQueue] = [await this.audioBufferQueue.dequeue(), new BlockingQueue()];
+
+                        },
+                        // 获取正在播放已解码的PCM队列，单线程：在activeQueue一直更新的状态下不会出现安全问题
+                        getQueue: async function (minSamples) {
+                            let TepArray = []
+                            const num = minSamples - this.queue.length > 0 ? minSamples - this.queue.length : 1;
+                            // 原子交换 + 清空
+                            [TepArray, this.activeQueue] = [await this.activeQueue.dequeue(num), new BlockingQueue()];
+                            this.queue.push(...TepArray)
+                        },
+                        // 将Opus数据解码为PCM
+                        decodeOpusFrames: async function () {
+                            if (!opusDecoder) {
+                                log('Opus解码器未初始化，无法解码', 'error');
+                                return;
+                            } else {
+                                log('Opus解码器启动', 'info');
+                            }
+
+                            while (true) {
                                 let decodedSamples = [];
-
-                                for (const frame of opusFrames) {
+                                for (const frame of this.pendingAudioBufferQueue) {
                                     try {
                                         // 使用Opus解码器解码
                                         const frameData = opusDecoder.decode(frame);
@@ -820,119 +397,73 @@
                                 if (decodedSamples.length > 0) {
                                     // 使用循环替代展开运算符
                                     for (let i = 0; i < decodedSamples.length; i++) {
-                                        this.queue.push(decodedSamples[i]);
+                                        this.activeQueue.enqueue(decodedSamples[i]);
                                     }
                                     this.totalSamples += decodedSamples.length;
-
-                                    // 如果累积了至少0.2秒的音频，开始播放
-                                    const minSamples = SAMPLE_RATE * MIN_AUDIO_DURATION;
-                                    if (!this.playing && this.queue.length >= minSamples) {
-                                        this.startPlaying();
-                                    }
                                 } else {
                                     log('没有成功解码的样本', 'warning');
                                 }
-                            },
-
-                            // 开始播放音频
-                            startPlaying: function () {
-                                if (this.playing || this.queue.length === 0) return;
-
-                                this.playing = true;
-
-                                // 创建新的音频缓冲区
-                                const minPlaySamples = Math.min(this.queue.length, SAMPLE_RATE); // 最多播放1秒
-                                const currentSamples = this.queue.splice(0, minPlaySamples);
-
-                                const audioBuffer = audioContext.createBuffer(CHANNELS, currentSamples.length, SAMPLE_RATE);
-                                audioBuffer.copyToChannel(new Float32Array(currentSamples), 0);
-
-                                // 创建音频源
-                                this.source = audioContext.createBufferSource();
-                                this.source.buffer = audioBuffer;
-
-                                // 创建增益节点用于平滑过渡
-                                const gainNode = audioContext.createGain();
-
-                                // 应用淡入淡出效果避免爆音
-                                const fadeDuration = 0.02; // 20毫秒
-                                gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-                                gainNode.gain.linearRampToValueAtTime(1, audioContext.currentTime + fadeDuration);
-
-                                const duration = audioBuffer.duration;
-                                if (duration > fadeDuration * 2) {
-                                    gainNode.gain.setValueAtTime(1, audioContext.currentTime + duration - fadeDuration);
-                                    gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + duration);
-                                }
-
-                                // 连接节点并开始播放
-                                this.source.connect(gainNode);
-                                gainNode.connect(audioContext.destination);
-
-                                this.lastPlayTime = audioContext.currentTime;
-                                log(`开始播放 ${currentSamples.length} 个样本，约 ${(currentSamples.length / SAMPLE_RATE).toFixed(2)} 秒`, 'info');
-
-                                // 播放结束后的处理
-                                this.source.onended = () => {
-                                    this.source = null;
-                                    this.playing = false;
-
-                                    // 使用setTimeout避免递归调用
-                                    setTimeout(() => {
-                                        // 如果队列中还有数据，继续播放
-                                        if (this.queue.length > 0) {
-                                            this.startPlaying();
-                                        } else if (audioBufferQueue.length > 0) {
-                                            // 缓冲区有新数据，进行解码
-                                            const frames = [...audioBufferQueue];
-                                            audioBufferQueue = [];
-                                            this.decodeOpusFrames(frames);
-                                        } else if (this.endOfStream) {
-                                            // 流已结束且没有更多数据
-                                            log("音频播放完成", 'info');
-                                            isAudioPlaying = false;
-                                            this.endOfStream = false;
-                                            streamingContext = null;
-                                        } else {
-                                            // 等待更多数据
-                                            setTimeout(() => {
-                                                // 如果仍然没有新数据，但有更多的包到达
-                                                if (this.queue.length === 0 && audioBufferQueue.length > 0) {
-                                                    const frames = [...audioBufferQueue];
-                                                    audioBufferQueue = [];
-                                                    this.decodeOpusFrames(frames);
-                                                } else if (this.queue.length === 0 && audioBufferQueue.length === 0) {
-                                                    // 真的没有更多数据了
-                                                    log("音频播放完成 (超时)", 'info');
-                                                    isAudioPlaying = false;
-                                                    streamingContext = null;
-                                                }
-                                            }, 500); // 500ms超时
-                                        }
-                                    }, 10); // 10ms延迟，避免立即递归
-                                };
-
-                                this.source.start();
+                                await this.getPendingAudioBufferQueue();
                             }
-                        };
-                    }
+                        },
 
-                    // 开始处理缓冲的数据
-                    const frames = [...audioBufferQueue];
-                    audioBufferQueue = []; // 清空缓冲队列
+                        // 开始播放音频
+                        startPlaying: async function () {
+                            while (true) {
+                                // 如果累积了至少0.3秒的音频，开始播放
+                                const minSamples = SAMPLE_RATE * MIN_AUDIO_DURATION * 3;
+                                if (!this.playing && this.queue.length < minSamples) {
+                                    await this.getQueue(minSamples)
+                                }
+                                this.playing = true;
+                                while (this.playing && this.queue.length) {
+                                    // 创建新的音频缓冲区
+                                    const minPlaySamples = Math.min(this.queue.length, SAMPLE_RATE);
+                                    const currentSamples = this.queue.splice(0, minPlaySamples);
 
-                    // 解码并播放
-                    await streamingContext.decodeOpusFrames(frames);
+                                    const audioBuffer = audioContext.createBuffer(CHANNELS, currentSamples.length, SAMPLE_RATE);
+                                    audioBuffer.copyToChannel(new Float32Array(currentSamples), 0);
 
-                } catch (error) {
-                    log(`播放已缓冲的音频出错: ${error.message}`, 'error');
-                    isAudioPlaying = false;
-                    streamingContext = null;
+                                    // 创建音频源
+                                    this.source = audioContext.createBufferSource();
+                                    this.source.buffer = audioBuffer;
+
+                                    // 创建增益节点用于平滑过渡
+                                    const gainNode = audioContext.createGain();
+
+                                    // 应用淡入淡出效果避免爆音
+                                    const fadeDuration = 0.02; // 20毫秒
+                                    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+                                    gainNode.gain.linearRampToValueAtTime(1, audioContext.currentTime + fadeDuration);
+
+                                    const duration = audioBuffer.duration;
+                                    if (duration > fadeDuration * 2) {
+                                        gainNode.gain.setValueAtTime(1, audioContext.currentTime + duration - fadeDuration);
+                                        gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + duration);
+                                    }
+
+                                    // 连接节点并开始播放
+                                    this.source.connect(gainNode);
+                                    gainNode.connect(audioContext.destination);
+
+                                    this.lastPlayTime = audioContext.currentTime;
+                                    log(`开始播放 ${currentSamples.length} 个样本，约 ${(currentSamples.length / SAMPLE_RATE).toFixed(2)} 秒`, 'info');
+                                    this.source.start();
+                                }
+                                await this.getQueue(minSamples)
+                            }
+                        }
+                    };
                 }
-            };
 
-            // 执行初始化和播放
-            initDecoderAndPlay();
+                streamingContext.decodeOpusFrames();
+                streamingContext.startPlaying();
+
+            } catch (error) {
+                log(`播放已缓冲的音频出错: ${error.message}`, 'error');
+                isAudioPlaying = false;
+                streamingContext = null;
+            }
         }
 
         // 将Int16音频数据转换为Float32音频数据
@@ -1302,102 +833,19 @@
         // 连接WebSocket服务器
         async function connectToServer() {
             const url = serverUrlInput.value.trim();
-            if (url === '') return;
+            const config = getConfig();
+            // 先检查OTA状态
+            log('正在检查OTA状态...', 'info');
+            const otaUrl = document.getElementById('otaUrl').value.trim();
+            localStorage.setItem('otaUrl', otaUrl);
+            localStorage.setItem('wsUrl', url);
 
             try {
-                // 获取并验证配置
-                const config = getConfig();
-                if (!validateConfig(config)) {
-                    return;
+                const ws = await webSocketConnect(otaUrl, url, config)
+                if (ws === undefined) {
+                    return
                 }
-
-                // 检查URL格式
-                if (!url.startsWith('ws://') && !url.startsWith('wss://')) {
-                    log('URL格式错误，必须以ws://或wss://开头', 'error');
-                    return;
-                }
-
-                // 先检查OTA状态
-                log('正在检查OTA状态...', 'info');
-                const otaUrl = document.getElementById('otaUrl').value.trim();
-                localStorage.setItem('otaUrl', otaUrl);
-                localStorage.setItem('wsUrl', url);
-                try {
-                    const otaResponse = await fetch(otaUrl, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Device-Id': config.deviceId,
-                            'Client-Id': config.clientId
-                        },
-                        body: JSON.stringify({
-                            "version": 0,
-                            "uuid": "",
-                            "application": {
-                                "name": "xiaozhi-web-test",
-                                "version": "1.0.0",
-                                "compile_time": "2025-04-16 10:00:00",
-                                "idf_version": "4.4.3",
-                                "elf_sha256": "1234567890abcdef1234567890abcdef1234567890abcdef"
-                            },
-                            "ota": {
-                                "label": "xiaozhi-web-test",
-                            },
-                            "board": {
-                                "type": "xiaozhi-web-test",
-                                "ssid": "xiaozhi-web-test",
-                                "rssi": 0,
-                                "channel": 0,
-                                "ip": "192.168.1.1",
-                                "mac": config.deviceMac
-                            },
-                            "flash_size": 0,
-                            "minimum_free_heap_size": 0,
-                            "mac_address": config.deviceMac,
-                            "chip_model_name": "",
-                            "chip_info": {
-                                "model": 0,
-                                "cores": 0,
-                                "revision": 0,
-                                "features": 0
-                            },
-                            "partition_table": [
-                                {
-                                    "label": "",
-                                    "type": 0,
-                                    "subtype": 0,
-                                    "address": 0,
-                                    "size": 0
-                                }
-                            ]
-                        })
-                    });
-
-                    if (!otaResponse.ok) {
-                        throw new Error(`OTA检查失败: ${otaResponse.status} ${otaResponse.statusText}`);
-                    }
-
-                    const otaResult = await otaResponse.json();
-                    log(`OTA检查结果: ${JSON.stringify(otaResult)}`, 'info');
-
-                    log('OTA检查通过，开始连接WebSocket...', 'success');
-                    document.getElementById('otaStatus').textContent = 'ota已连接';
-                    document.getElementById('otaStatus').style.color = 'green';
-                } catch (error) {
-                    log(`OTA检查错误: ${error.message}`, 'error');
-                    document.getElementById('otaStatus').textContent = 'ota未连接';
-                    document.getElementById('otaStatus').style.color = 'red';
-                }
-
-                // 使用自定义WebSocket实现以添加认证头信息
-                let connUrl = new URL(url);
-
-                // 添加认证参数
-                connUrl.searchParams.append('device-id', config.deviceId);
-                connUrl.searchParams.append('client-id', config.clientId);
-
-                log(`正在连接: ${connUrl.toString()}`, 'info');
-                websocket = new WebSocket(connUrl.toString());
+                websocket = ws
 
                 // 设置接收二进制数据的类型为ArrayBuffer
                 websocket.binaryType = 'arraybuffer';
@@ -1506,23 +954,77 @@
                                     // 同时检查单条消息
                                     checkAndExecuteROS2Command(message.text);
                                 }
-                            }else if (message.type === 'mcp') {
+                            } else if (message.type === 'mcp') {
                                 const payload = message.payload || {};
                                 log(`服务器下发: ${JSON.stringify(message)}`, 'info');
                                 if (payload) {
                                     // 模拟小智客户端行为
-                                    if(payload.method === 'tools/list'){
-                                        const replay_message = JSON.stringify({"session_id":"","type":"mcp","payload":{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"self.get_device_status","description":"Provides the real-time information of the device, including the current status of the audio speaker, screen, battery, network, etc.\nUse this tool for: \n1. Answering questions about current condition (e.g. what is the current volume of the audio speaker?)\n2. As the first step to control the device (e.g. turn up / down the volume of the audio speaker, etc.)","inputSchema":{"type":"object","properties":{}}},{"name":"self.audio_speaker.set_volume","description":"Set the volume of the audio speaker. If the current volume is unknown, you must call `self.get_device_status` tool first and then call this tool.","inputSchema":{"type":"object","properties":{"volume":{"type":"integer","minimum":0,"maximum":100}},"required":["volume"]}},{"name":"self.screen.set_brightness","description":"Set the brightness of the screen.","inputSchema":{"type":"object","properties":{"brightness":{"type":"integer","minimum":0,"maximum":100}},"required":["brightness"]}},{"name":"self.screen.set_theme","description":"Set the theme of the screen. The theme can be 'light' or 'dark'.","inputSchema":{"type":"object","properties":{"theme":{"type":"string"}},"required":["theme"]}}]}}})
+                                    if (payload.method === 'tools/list') {
+                                        const replay_message = JSON.stringify({
+                                            "session_id": "", "type": "mcp", "payload": {
+                                                "jsonrpc": "2.0", "id": 2, "result": {
+                                                    "tools": [{
+                                                        "name": "self.get_device_status",
+                                                        "description": "Provides the real-time information of the device, including the current status of the audio speaker, screen, battery, network, etc.\nUse this tool for: \n1. Answering questions about current condition (e.g. what is the current volume of the audio speaker?)\n2. As the first step to control the device (e.g. turn up / down the volume of the audio speaker, etc.)",
+                                                        "inputSchema": { "type": "object", "properties": {} }
+                                                    }, {
+                                                        "name": "self.audio_speaker.set_volume",
+                                                        "description": "Set the volume of the audio speaker. If the current volume is unknown, you must call `self.get_device_status` tool first and then call this tool.",
+                                                        "inputSchema": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "volume": {
+                                                                    "type": "integer",
+                                                                    "minimum": 0,
+                                                                    "maximum": 100
+                                                                }
+                                                            },
+                                                            "required": ["volume"]
+                                                        }
+                                                    }, {
+                                                        "name": "self.screen.set_brightness",
+                                                        "description": "Set the brightness of the screen.",
+                                                        "inputSchema": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "brightness": {
+                                                                    "type": "integer",
+                                                                    "minimum": 0,
+                                                                    "maximum": 100
+                                                                }
+                                                            },
+                                                            "required": ["brightness"]
+                                                        }
+                                                    }, {
+                                                        "name": "self.screen.set_theme",
+                                                        "description": "Set the theme of the screen. The theme can be 'light' or 'dark'.",
+                                                        "inputSchema": {
+                                                            "type": "object",
+                                                            "properties": { "theme": { "type": "string" } },
+                                                            "required": ["theme"]
+                                                        }
+                                                    }]
+                                                }
+                                            }
+                                        })
                                         websocket.send(replay_message);
                                         log(`回复MCP消息: ${replay_message}`, 'info');
-                                    } else if(payload.method === 'tools/call'){
+                                    } else if (payload.method === 'tools/call') {
                                         // 模拟回复
-                                        const replay_message = JSON.stringify({"session_id":"9f261599","type":"mcp","payload":{"jsonrpc":"2.0","id": payload.id,"result":{"content":[{"type":"text","text":"true"}],"isError":false}}})
+                                        const replay_message = JSON.stringify({
+                                            "session_id": "9f261599",
+                                            "type": "mcp",
+                                            "payload": {
+                                                "jsonrpc": "2.0",
+                                                "id": payload.id,
+                                                "result": { "content": [{ "type": "text", "text": "true" }], "isError": false }
+                                            }
+                                        })
                                         websocket.send(replay_message);
                                         log(`回复MCP消息: ${replay_message}`, 'info');
                                     }
                                 }
-                                
+
                             } else {
                                 // 未知消息类型
                                 log(`未知消息类型: ${message.type}`, 'info');
@@ -1616,9 +1118,6 @@
             const message = messageInput.value.trim();
             if (message === '' || !websocket || websocket.readyState !== WebSocket.OPEN) return;
 
-            audioBufferQueue = [];
-            isAudioBuffering = false;
-            isAudioPlaying = false;
 
             try {
                 // 直接发送listen消息，不需要重复发送hello
@@ -2072,147 +1571,8 @@
             return window.btoa(binary);
         }
 
-        // 使用libopus创建一个Opus编码器
-        let opusEncoder = null;
-        function initOpusEncoder() {
-            try {
-                if (opusEncoder) {
-                    return true; // 已经初始化过
-                }
-
-                if (!window.ModuleInstance) {
-                    log('无法创建Opus编码器：ModuleInstance不可用', 'error');
-                    return false;
-                }
-
-                // 初始化一个Opus编码器
-                const mod = window.ModuleInstance;
-                const sampleRate = 16000; // 16kHz采样率
-                const channels = 1;       // 单声道
-                const application = 2048; // OPUS_APPLICATION_VOIP = 2048
-
-                // 创建编码器
-                opusEncoder = {
-                    channels: channels,
-                    sampleRate: sampleRate,
-                    frameSize: 960, // 60ms @ 16kHz = 60 * 16 = 960 samples
-                    maxPacketSize: 4000, // 最大包大小
-                    module: mod,
-
-                    // 初始化编码器
-                    init: function () {
-                        try {
-                            // 获取编码器大小
-                            const encoderSize = mod._opus_encoder_get_size(this.channels);
-                            log(`Opus编码器大小: ${encoderSize}字节`, 'info');
-
-                            // 分配内存
-                            this.encoderPtr = mod._malloc(encoderSize);
-                            if (!this.encoderPtr) {
-                                throw new Error("无法分配编码器内存");
-                            }
-
-                            // 初始化编码器
-                            const err = mod._opus_encoder_init(
-                                this.encoderPtr,
-                                this.sampleRate,
-                                this.channels,
-                                application
-                            );
-
-                            if (err < 0) {
-                                throw new Error(`Opus编码器初始化失败: ${err}`);
-                            }
-
-                            // 设置位率 (16kbps)
-                            mod._opus_encoder_ctl(this.encoderPtr, 4002, 16000); // OPUS_SET_BITRATE
-
-                            // 设置复杂度 (0-10, 越高质量越好但CPU使用越多)
-                            mod._opus_encoder_ctl(this.encoderPtr, 4010, 5);     // OPUS_SET_COMPLEXITY
-
-                            // 设置使用DTX (不传输静音帧)
-                            mod._opus_encoder_ctl(this.encoderPtr, 4016, 1);     // OPUS_SET_DTX
-
-                            log("Opus编码器初始化成功", 'success');
-                            return true;
-                        } catch (error) {
-                            if (this.encoderPtr) {
-                                mod._free(this.encoderPtr);
-                                this.encoderPtr = null;
-                            }
-                            log(`Opus编码器初始化失败: ${error.message}`, 'error');
-                            return false;
-                        }
-                    },
-
-                    // 编码PCM数据为Opus
-                    encode: function (pcmData) {
-                        if (!this.encoderPtr) {
-                            if (!this.init()) {
-                                return null;
-                            }
-                        }
-
-                        try {
-                            const mod = this.module;
-
-                            // 为PCM数据分配内存
-                            const pcmPtr = mod._malloc(pcmData.length * 2); // 2字节/int16
-
-                            // 将PCM数据复制到HEAP
-                            for (let i = 0; i < pcmData.length; i++) {
-                                mod.HEAP16[(pcmPtr >> 1) + i] = pcmData[i];
-                            }
-
-                            // 为输出分配内存
-                            const outPtr = mod._malloc(this.maxPacketSize);
-
-                            // 进行编码
-                            const encodedLen = mod._opus_encode(
-                                this.encoderPtr,
-                                pcmPtr,
-                                this.frameSize,
-                                outPtr,
-                                this.maxPacketSize
-                            );
-
-                            if (encodedLen < 0) {
-                                throw new Error(`Opus编码失败: ${encodedLen}`);
-                            }
-
-                            // 复制编码后的数据
-                            const opusData = new Uint8Array(encodedLen);
-                            for (let i = 0; i < encodedLen; i++) {
-                                opusData[i] = mod.HEAPU8[outPtr + i];
-                            }
-
-                            // 释放内存
-                            mod._free(pcmPtr);
-                            mod._free(outPtr);
-
-                            return opusData;
-                        } catch (error) {
-                            log(`Opus编码出错: ${error.message}`, 'error');
-                            return null;
-                        }
-                    },
-
-                    // 销毁编码器
-                    destroy: function () {
-                        if (this.encoderPtr) {
-                            this.module._free(this.encoderPtr);
-                            this.encoderPtr = null;
-                        }
-                    }
-                };
-
-                const result = opusEncoder.init();
-                return result;
-            } catch (error) {
-                log(`创建Opus编码器失败: ${error.message}`, 'error');
-                return false;
-            }
-        }
+        // Opus编码器
+        let opusEncoder;
 
         // 初始化应用
         function initApp() {
@@ -2223,7 +1583,7 @@
             checkOpusLoaded();
 
             // 初始化Opus编码器
-            initOpusEncoder();
+            opusEncoder = initOpusEncoder();
 
             // 预加载Opus解码器
             log('预加载Opus解码器...', 'info');
@@ -2232,6 +1592,9 @@
             }).catch(error => {
                 log(`Opus解码器预加载失败: ${error.message}，将在需要时重试`, 'warning');
             });
+            playBufferedAudio()
+            startAudioBuffering()
+
         }
 
         // PCM录音处理器代码 - 会被注入到AudioWorklet中
@@ -2401,6 +1764,7 @@
 
         // 处理PCM缓冲数据
         let pcmDataBuffer = new Int16Array();
+
         function processPCMBuffer(buffer) {
             if (!isRecording) return;
 
@@ -2648,7 +2012,6 @@
         async function handleBinaryMessage(data) {
             try {
                 let arrayBuffer;
-
                 // 根据数据类型进行处理
                 if (data instanceof ArrayBuffer) {
                     arrayBuffer = data;
@@ -2661,26 +2024,13 @@
                     log(`收到未知类型的二进制数据: ${typeof data}`, 'warning');
                     return;
                 }
-
                 // 创建Uint8Array用于处理
                 const opusData = new Uint8Array(arrayBuffer);
-
                 if (opusData.length > 0) {
                     // 将数据添加到缓冲队列
-                    audioBufferQueue.push(opusData);
-
-                    // 如果收到的是第一个音频包，开始缓冲过程
-                    if (audioBufferQueue.length === 1 && !isAudioBuffering && !isAudioPlaying) {
-                        startAudioBuffering();
-                    }
+                    queue.enqueue(opusData);
                 } else {
                     log('收到空音频数据帧，可能是结束标志', 'warning');
-
-                    // 如果缓冲队列中有数据且没有在播放，立即开始播放
-                    if (audioBufferQueue.length > 0 && !isAudioPlaying) {
-                        playBufferedAudio();
-                    }
-
                     // 如果正在播放，发送结束信号
                     if (isAudioPlaying && streamingContext) {
                         streamingContext.endOfStream = true;
@@ -2701,19 +2051,6 @@
                 clientId: document.getElementById('clientId').value.trim(),
                 token: document.getElementById('token').value.trim()
             };
-        }
-
-        // 验证配置
-        function validateConfig(config) {
-            if (!config.deviceMac) {
-                log('设备MAC地址不能为空', 'error');
-                return false;
-            }
-            if (!config.clientId) {
-                log('客户端ID不能为空', 'error');
-                return false;
-            }
-            return true;
         }
 
         initApp();

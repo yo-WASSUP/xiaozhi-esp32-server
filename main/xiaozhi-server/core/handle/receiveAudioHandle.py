@@ -1,12 +1,12 @@
+import time
+import asyncio
+import json
 from core.handle.sendAudioHandle import send_stt_message
 from core.handle.intentHandler import handle_user_intent
 from core.utils.output_counter import check_device_output_limit
 from core.handle.abortHandle import handleAbortMessage
-import time
-import asyncio
-import json
 from core.handle.sendAudioHandle import SentenceType
-from core.utils.util import audio_to_data
+from core.utils.util import audio_to_data_stream
 
 TAG = __name__
 
@@ -42,7 +42,7 @@ async def startToChat(conn, text):
     # 检查输入是否是JSON格式（包含说话人信息）
     speaker_name = None
     actual_text = text
-    
+
     try:
         # 尝试解析JSON格式的输入
         if text.strip().startswith('{') and text.strip().endswith('}'):
@@ -51,13 +51,13 @@ async def startToChat(conn, text):
                 speaker_name = data['speaker']
                 actual_text = data['content']
                 conn.logger.bind(tag=TAG).info(f"解析到说话人信息: {speaker_name}")
-                
+
                 # 直接使用JSON格式的文本，不解析
                 actual_text = text
     except (json.JSONDecodeError, KeyError):
         # 如果解析失败，继续使用原始文本
         pass
-    
+
     # 保存说话人信息到连接对象
     if speaker_name:
         conn.current_speaker = speaker_name
@@ -121,8 +121,9 @@ async def max_out_size(conn):
     text = "不好意思，我现在有点事情要忙，明天这个时候我们再聊，约好了哦！明天不见不散，拜拜！"
     await send_stt_message(conn, text)
     file_path = "config/assets/max_output_size.wav"
-    opus_packets, _ = audio_to_data(file_path)
-    conn.tts.tts_audio_queue.put((SentenceType.LAST, opus_packets, text))
+    conn.tts.tts_audio_queue.put((SentenceType.FIRST, [], text))
+    play_audio_frames(conn, file_path)
+    conn.tts.tts_audio_queue.put((SentenceType.LAST, [], None))
     conn.close_after_chat = True
 
 
@@ -140,16 +141,15 @@ async def check_bind_device(conn):
 
         # 播放提示音
         music_path = "config/assets/bind_code.wav"
-        opus_packets, _ = audio_to_data(music_path)
-        conn.tts.tts_audio_queue.put((SentenceType.FIRST, opus_packets, text))
+        conn.tts.tts_audio_queue.put((SentenceType.FIRST, [], text))
+        play_audio_frames(conn, music_path)
 
         # 逐个播放数字
         for i in range(6):  # 确保只播放6位数字
             try:
                 digit = conn.bind_code[i]
                 num_path = f"config/assets/bind_code/{digit}.wav"
-                num_packets, _ = audio_to_data(num_path)
-                conn.tts.tts_audio_queue.put((SentenceType.MIDDLE, num_packets, None))
+                play_audio_frames(conn, num_path)
             except Exception as e:
                 conn.logger.bind(tag=TAG).error(f"播放数字音频失败: {e}")
                 continue
@@ -158,5 +158,18 @@ async def check_bind_device(conn):
         text = f"没有找到该设备的版本信息，请正确配置 OTA地址，然后重新编译固件。"
         await send_stt_message(conn, text)
         music_path = "config/assets/bind_not_found.wav"
-        opus_packets, _ = audio_to_data(music_path)
-        conn.tts.tts_audio_queue.put((SentenceType.LAST, opus_packets, text))
+        conn.tts.tts_audio_queue.put((SentenceType.FIRST, [], text))
+        play_audio_frames(conn, music_path)
+        conn.tts.tts_audio_queue.put((SentenceType.LAST, [], None))
+
+
+def play_audio_frames(conn, file_path):
+    """播放音频文件并处理发送帧数据"""
+    def handle_audio_frame(frame_data):
+        conn.tts.tts_audio_queue.put((SentenceType.MIDDLE, frame_data, None))
+
+    audio_to_data_stream(
+        file_path,
+        is_opus=True,
+        callback=handle_audio_frame
+    )

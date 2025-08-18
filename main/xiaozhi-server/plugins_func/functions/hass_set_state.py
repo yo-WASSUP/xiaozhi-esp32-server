@@ -50,7 +50,9 @@ hass_set_state_function_desc = {
 
 
 @register_function("hass_set_state", hass_set_state_function_desc, ToolType.SYSTEM_CTL)
-def hass_set_state(conn, entity_id="", state={}):
+def hass_set_state(conn, entity_id="", state=None):
+    if state is None:
+        state = {}
     try:
         future = asyncio.run_coroutine_threadsafe(
             handle_hass_set_state(conn, entity_id, state), conn.loop
@@ -157,7 +159,7 @@ async def handle_hass_set_state(conn, entity_id, state):
         if domain == "vacuum":
             action = "start"
     else:
-        return f"{domain} {state.type}功能尚未支持"
+        return f"{domain} {state['type']}功能尚未支持"
 
     if arg == "":
         data = {

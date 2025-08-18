@@ -341,6 +341,9 @@ public class AgentServiceImpl extends BaseServiceImpl<AgentDao, AgentEntity> imp
      * @return T 匹配 : F 不匹配
      */
     private boolean validateLLMIntentParams(String llmModelId, String intentModelId) {
+        if (StringUtils.isBlank(llmModelId)) {
+            return true;
+        }
         ModelConfigEntity llmModelData = modelConfigService.selectById(llmModelId);
         String type = llmModelData.getConfigJson().get("type").toString();
         // 如果查询大语言模型是openai或者ollama，意图识别选参数都可以

@@ -664,16 +664,14 @@ class ConnectionHandler:
         # 更新系统prompt至上下文
         self.dialogue.update_system_message(self.prompt)
 
-    def chat(self, query, tool_call=False, depth=0):
+    def chat(self, query, depth=0):
         self.logger.bind(tag=TAG).info(f"大模型收到用户消息: {query}")
         self.llm_finish_task = False
-
-        if not tool_call:
-            self.dialogue.put(Message(role="user", content=query))
 
         # 为最顶层时新建会话ID和发送FIRST请求
         if depth == 0:
             self.sentence_id = str(uuid.uuid4().hex)
+            self.dialogue.put(Message(role="user", content=query))
             self.tts.tts_text_queue.put(
                 TTSMessageDTO(
                     sentence_id=self.sentence_id,
@@ -878,7 +876,7 @@ class ConnectionHandler:
                         content=text,
                     )
                 )
-                self.chat(text, tool_call=True, depth=depth + 1)
+                self.chat(text, depth=depth + 1)
         elif result.action == Action.NOTFOUND or result.action == Action.ERROR:
             text = result.response if result.response else result.result
             self.tts.tts_one_sentence(self, ContentType.TEXT, content_detail=text)

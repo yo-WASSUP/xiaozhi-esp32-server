@@ -5,7 +5,6 @@ from core.handle.helloHandle import handleHelloMessage
 from core.providers.tools.device_mcp import handle_mcp_message
 from core.utils.util import remove_punctuation_and_length, filter_sensitive_info
 from core.handle.receiveAudioHandle import startToChat, handleAudioMessage
-from core.handle.sendAudioHandle import send_stt_message, send_tts_message
 from core.providers.tools.device_iot import handleIotDescriptors, handleIotStatus
 from core.handle.reportHandle import enqueue_asr_report
 import asyncio
@@ -51,23 +50,9 @@ async def handleTextMessage(conn, message):
                     filtered_len, filtered_text = remove_punctuation_and_length(
                         original_text
                     )
-
                     # 识别是否是唤醒词
                     is_wakeup_words = filtered_text in conn.config.get("wakeup_words")
-                    # 是否开启唤醒词回复
-                    enable_greeting = conn.config.get("enable_greeting", True)
-
-                    if is_wakeup_words and not enable_greeting:
-                        # 如果是唤醒词，且关闭了唤醒词回复，就不用回答
-                        await send_stt_message(conn, original_text)
-                        await send_tts_message(conn, "stop", None)
-                        conn.client_is_speaking = False
-                    elif is_wakeup_words:
-                        conn.just_woken_up = True
-                        # 上报纯文字数据（复用ASR上报功能，但不提供音频数据）
-                        enqueue_asr_report(conn, "嘿，你好呀", [])
-                        await startToChat(conn, "嘿，你好呀")
-                    else:
+                    if not is_wakeup_words:
                         # 上报纯文字数据（复用ASR上报功能，但不提供音频数据）
                         enqueue_asr_report(conn, original_text, [])
                         # 否则需要LLM对文字内容进行答复

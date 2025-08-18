@@ -5,7 +5,7 @@ from config.config_loader import load_config
 from config.settings import check_config_file
 from datetime import datetime
 
-SERVER_VERSION = "0.7.3"
+SERVER_VERSION = "0.7.5"
 _logger_initialized = False
 
 
@@ -58,8 +58,9 @@ def setup_logging():
         logger.configure(
             extra={
                 "selected_module": log_config.get("selected_module", "00000000000000"),
-            })
-        
+            }
+        )
+
         log_format = log_config.get(
             "log_format",
             "<green>{time:YYMMDD HH:mm:ss}</green>[{version}_{extra[selected_module]}][<light-blue>{extra[tag]}</light-blue>]-<level>{level}</level>-<light-green>{message}</light-green>",
@@ -111,4 +112,3 @@ def setup_logging():
 def create_connection_logger(selected_module_str):
     """为连接创建独立的日志器，绑定特定的模块字符串"""
     return logger.bind(selected_module=selected_module_str)
-

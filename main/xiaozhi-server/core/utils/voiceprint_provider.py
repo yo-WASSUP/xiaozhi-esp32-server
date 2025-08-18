@@ -1,10 +1,12 @@
 import asyncio
-import json
 import time
 import aiohttp
+import requests
 from urllib.parse import urlparse, parse_qs
 from typing import Optional, Dict
 from config.logger import setup_logging
+from core.utils.cache.manager import cache_manager
+from core.utils.cache.config import CacheType
 
 TAG = __name__
 logger = setup_logging()
@@ -57,8 +59,13 @@ class VoiceprintProvider:
                     logger.bind(tag=TAG).warning("未配置有效的说话人，声纹识别将被禁用")
                     self.enabled = False
                 else:
-                    self.enabled = True
-                    logger.bind(tag=TAG).info(f"声纹识别已配置: API={self.api_url}, 说话人={len(self.speaker_ids)}个")
+                    # 进行健康检查，验证服务器是否可用
+                    if self._check_server_health():
+                        self.enabled = True
+                        logger.bind(tag=TAG).info(f"声纹识别已启用: API={self.api_url}, 说话人={len(self.speaker_ids)}个")
+                    else:
+                        self.enabled = False
+                        logger.bind(tag=TAG).warning(f"声纹识别服务器不可用，声纹识别已禁用: {self.api_url}")
     
     def _parse_speakers(self) -> Dict[str, Dict[str, str]]:
         """解析说话人配置"""
@@ -75,6 +82,58 @@ class VoiceprintProvider:
             except Exception as e:
                 logger.bind(tag=TAG).warning(f"解析说话人配置失败: {speaker_str}, 错误: {e}")
         return speaker_map
+    
+    def _check_server_health(self) -> bool:
+        """检查声纹识别服务器健康状态"""
+        if not self.api_url or not self.api_key:
+            return False
+    
+        cache_key = f"{self.api_url}:{self.api_key}"
+        
+        # 检查缓存
+        cached_result = cache_manager.get(CacheType.VOICEPRINT_HEALTH, cache_key)
+        if cached_result is not None:
+            logger.bind(tag=TAG).debug(f"使用缓存的健康状态: {cached_result}")
+            return cached_result
+        
+        # 缓存过期或不存在
+        logger.bind(tag=TAG).info("执行声纹服务器健康检查")
+        
+        try:
+            # 健康检查URL
+            parsed_url = urlparse(self.api_url)
+            health_url = f"{parsed_url.scheme}://{parsed_url.netloc}/voiceprint/health?key={self.api_key}"
+            
+            # 发送健康检查请求
+            response = requests.get(health_url, timeout=3)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("status") == "healthy":
+                    logger.bind(tag=TAG).info("声纹识别服务器健康检查通过")
+                    is_healthy = True
+                else:
+                    logger.bind(tag=TAG).warning(f"声纹识别服务器状态异常: {result}")
+                    is_healthy = False
+            else:
+                logger.bind(tag=TAG).warning(f"声纹识别服务器健康检查失败: HTTP {response.status_code}")
+                is_healthy = False
+                
+        except requests.exceptions.ConnectTimeout:
+            logger.bind(tag=TAG).warning("声纹识别服务器连接超时")
+            is_healthy = False
+        except requests.exceptions.ConnectionError:
+            logger.bind(tag=TAG).warning("声纹识别服务器连接被拒绝")
+            is_healthy = False
+        except Exception as e:
+            logger.bind(tag=TAG).warning(f"声纹识别服务器健康检查异常: {e}")
+            is_healthy = False
+        
+        # 使用全局缓存管理器缓存结果
+        cache_manager.set(CacheType.VOICEPRINT_HEALTH, cache_key, is_healthy)
+        logger.bind(tag=TAG).info(f"健康检查结果已缓存: {is_healthy}")
+        
+        return is_healthy
     
     async def identify_speaker(self, audio_data: bytes, session_id: str) -> Optional[str]:
         """识别说话人"""
@@ -132,3 +191,4 @@ class VoiceprintProvider:
             elapsed = time.monotonic() - api_start_time
             logger.bind(tag=TAG).error(f"声纹识别失败: {e}")
             return None
+

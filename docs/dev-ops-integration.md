@@ -105,6 +105,8 @@ else
 fi
 
 nohup java -jar xiaozhi-esp32-api.jar --spring.profiles.active=dev &
+
+tail tail -f nohup.out
 ```
 
 保存好后执行赋权命令
@@ -134,8 +136,12 @@ else
   echo "已杀掉进程 $PID"
 fi
 cd main/xiaozhi-server
+# 初始化conda环境
+source ~/.bashrc
+conda activate xiaozhi-esp32-server
 pip install -r requirements.txt
 nohup python app.py >/dev/null &
+tail -f /home/system/xiaozhi/xiaozhi-esp32-server/main/xiaozhi-server/tmp/server.log
 ```
 
 保存好后执行赋权命令
@@ -149,8 +155,6 @@ chmod 777 update_8000.sh
 以上的脚本都建立好后，日常更新，我们只要依次执行以下命令就可以做到自动更新和启动
 
 ```
-# 进入pyhton环境
-conda activate xiaozhi-esp32-server
 cd /home/system/xiaozhi
 # 更新并启动Java程序
 ./update_8001.sh
@@ -158,9 +162,11 @@ cd /home/system/xiaozhi
 ./update_8002.sh
 # 更新并启动python程序
 ./update_8000.sh
-# 查看Java日志
+
+
+# 后期想查看java日志，执行以下命令
 tail -f nohup.out
-# 查看Python日志
+# 后期想查看python日志，执行以下命令
 tail -f /home/system/xiaozhi/xiaozhi-esp32-server/main/xiaozhi-server/tmp/server.log
 ```
 
