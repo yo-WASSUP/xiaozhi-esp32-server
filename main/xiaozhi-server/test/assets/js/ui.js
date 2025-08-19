@@ -132,17 +132,7 @@ function initEventListeners() {
         connectButton.addEventListener('click', window.websocketManager.connectToServer);
     }
     
-    // 认证测试按钮
-    const authTestButton = document.getElementById('authTestButton');
-    if (authTestButton) {
-        authTestButton.addEventListener('click', window.config.testAuthentication);
-    }
-    
-    // OTA测试按钮
-    const otaTestButton = document.getElementById('otaTestButton');
-    if (otaTestButton) {
-        otaTestButton.addEventListener('click', testOTAConnection);
-    }
+
     
     // 重置设备按钮
     const resetDeviceButton = document.getElementById('resetDeviceButton');
@@ -186,48 +176,10 @@ function initEventListeners() {
         });
     }
     
-    // NFC测试相关
-    const sendNfcButton = document.getElementById('sendNfcButton');
-    if (sendNfcButton) {
-        sendNfcButton.addEventListener('click', sendNfcCardMessage);
-    }
-    
-    const nfcCardIdInput = document.getElementById('nfcCardId');
-    if (nfcCardIdInput) {
-        nfcCardIdInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                sendNfcCardMessage();
-            }
-        });
-    }
+
 }
 
-// 发送NFC卡片消息
-function sendNfcCardMessage() {
-    const nfcCardIdInput = document.getElementById('nfcCardId');
-    const cardId = nfcCardIdInput.value.trim();
-    
-    if (cardId === '' || !window.websocketManager.isConnected()) {
-        utils.log('错误：请输入卡片ID且确保已连接服务器', 'error');
-        return;
-    }
 
-    try {
-        const nfcMessage = {
-            type: 'nfc',
-            card_id: cardId,
-            timestamp: Date.now()
-        };
-
-        utils.log(`发送NFC卡片: ${cardId}`, 'info');
-        window.websocketManager.sendBinaryData(JSON.stringify(nfcMessage));
-        
-        addMessage(`NFC卡片: ${cardId}`, true);
-        nfcCardIdInput.value = '';
-    } catch (error) {
-        utils.log(`发送NFC消息失败: ${error.message}`, 'error');
-    }
-}
 
 // 页面初始化
 function initializePage() {
@@ -255,22 +207,7 @@ function initializePage() {
     utils.log('页面初始化完成', 'success');
 }
 
-// 测试OTA连接
-async function testOTAConnection() {
-    try {
-        const config = window.config.getConfig();
-        if (!window.config.validateConfig(config)) {
-            return;
-        }
-        
-        utils.log('开始测试OTA连接...', 'info');
-        await window.websocketManager.checkOTAStatus(config);
-        utils.log('OTA连接测试完成', 'info');
-        
-    } catch (error) {
-        utils.log(`OTA测试失败: ${error.message}`, 'error');
-    }
-}
+
 
 // 重置设备配置
 function resetDevice() {
@@ -323,7 +260,5 @@ window.ui = {
     cleanupUI,
     initEventListeners,
     initializePage,
-    sendNfcCardMessage,
-    testOTAConnection,
     resetDevice
 };

@@ -61,8 +61,6 @@
                 <input type="text" id="serverUrl" value="ws://127.0.0.1:8000/xiaozhi/v1/"
                     placeholder="WebSocket服务器地址，如：ws://127.0.0.1:8000/xiaozhi/v1/" />
                 <button id="connectButton">连接</button>
-                <button id="authTestButton">测试认证</button>
-                <button id="otaTestButton">测试OTA</button>
                 <button id="resetDeviceButton" style="background-color: #f44336;">重置设备</button>
             </div>
         </div>
@@ -72,7 +70,6 @@
             <div class="tabs">
                 <button class="tab active" data-tab="text">文本消息</button>
                 <button class="tab" data-tab="voice">语音消息</button>
-                <button class="tab" data-tab="nfc">NFC测试</button>
             </div>
 
             <!-- 文本消息标签页 -->
@@ -92,13 +89,7 @@
                 <canvas id="audioVisualizer" class="audio-visualizer"></canvas>
             </div>
 
-            <!-- NFC测试标签页 -->
-            <div class="tab-content" id="nfcTab">
-                <div class="message-input">
-                    <input type="text" id="nfcCardId" placeholder="输入NFC卡片ID..." disabled>
-                    <button id="sendNfcButton" disabled>发送NFC</button>
-                </div>
-            </div>
+
         </div>
 
         <!-- 会话记录 -->

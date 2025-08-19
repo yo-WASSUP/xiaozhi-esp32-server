@@ -1,0 +1,13 @@
+{
+  "name": "ros2-executor",
+  "version": "1.0.0",
+  "description": "ROS2命令执行服务",
+  "main": "ros2_executor.js",
+  "scripts": {
+    "start": "node ros2_executor.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  }
+}

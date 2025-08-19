@@ -126,95 +126,7 @@ function initConfigPanel() {
     }
 }
 
-// 测试认证
-async function testAuthentication() {
-    const serverUrlInput = document.getElementById('serverUrl');
-    const serverUrl = serverUrlInput.value.trim();
-    
-    if (!serverUrl) {
-        utils.log('错误：请先填写服务器地址', 'error');
-        return;
-    }
 
-    utils.log('开始测试认证配置...', 'info');
-    utils.log('尝试不同认证参数的连接：', 'info');
-
-    // 测试1: 无参数连接
-    try {
-        utils.log('测试1: 尝试无参数连接...', 'info');
-        const ws1 = new WebSocket(serverUrl);
-
-        ws1.onopen = () => {
-            utils.log('测试1成功: 无参数可连接，服务器可能没有启用认证', 'success');
-            ws1.close();
-        };
-
-        ws1.onerror = (error) => {
-            utils.log('测试1失败: 无参数连接被拒绝，服务器可能启用了认证', 'error');
-        };
-
-        // 等待一段时间让连接尝试完成
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-    } catch (error) {
-        utils.log(`测试1异常: ${error.message}`, 'error');
-    }
-
-    // 测试2: 带token参数连接
-    try {
-        utils.log('测试2: 尝试带token参数连接...', 'info');
-        const config = getConfig();
-        
-        if (validateConfig(config)) {
-            let url = new URL(serverUrl);
-            url.searchParams.append('token', config.token);
-            url.searchParams.append('device_id', config.deviceId);
-            url.searchParams.append('device_mac', config.deviceMac);
-
-            const ws2 = new WebSocket(url.toString());
-
-            ws2.onopen = () => {
-                utils.log('测试2成功: 带token参数可连接', 'success');
-
-                // 尝试发送hello消息
-                const helloMsg = {
-                    type: 'hello',
-                    device_id: config.deviceId,
-                    device_mac: config.deviceMac,
-                    token: config.token
-                };
-
-                ws2.send(JSON.stringify(helloMsg));
-                utils.log('已发送hello消息，等待服务器回应...', 'info');
-            };
-
-            ws2.onmessage = (event) => {
-                try {
-                    const message = JSON.parse(event.data);
-                    if (message.type === 'hello') {
-                        utils.log('测试2成功: 服务器接受hello消息', 'success');
-                        utils.log(`服务器回应: ${JSON.stringify(message, null, 2)}`, 'success');
-                    }
-                } catch (e) {
-                    utils.log('服务器回应格式错误', 'warning');
-                }
-                ws2.close();
-            };
-
-            ws2.onerror = (error) => {
-                utils.log('测试2失败: 带token参数连接被拒绝', 'error');
-            };
-
-            ws2.onclose = () => {
-                utils.log('测试2连接已关闭', 'info');
-            };
-        }
-    } catch (error) {
-        utils.log(`测试2异常: ${error.message}`, 'error');
-    }
-
-    utils.log('认证测试完成', 'info');
-}
 
 // 初始化标签页
 function initTabs() {
@@ -317,7 +229,7 @@ window.config = {
     getConfig,
     validateConfig,
     initConfigPanel,
-    testAuthentication,
+
     initTabs,
     saveDeviceConfig,
     loadDeviceConfig,
