@@ -86,22 +86,67 @@ class TTSPerformanceTester:
             print("没有有效的TTS测试结果")
             return
 
-        table = []
+        headers = ["TTS模块", "平均耗时(秒)", "测试句子数", "状态"]
+        table_data = []
+
+        # 收集所有数据并分类
+        valid_results = []
+        error_results = []
+
         for name, data in self.results.items():
             if data["errors"] == 0:
-                table.append(
-                    [name, f"{data['avg_time']:.3f}秒/句", len(self.test_sentences[:3])]
-                )
+                # 正常结果
+                avg_time = f"{data['avg_time']:.3f}"
+                test_count = len(self.test_sentences[:3])
+                status = "✅ 正常"
+                
+                # 保存用于排序的值
+                valid_results.append({
+                    "name": name,
+                    "avg_time": avg_time,
+                    "test_count": test_count,
+                    "status": status,
+                    "sort_key": data['avg_time']
+                })
+            else:
+                # 错误结果
+                avg_time = "-"
+                test_count = "0/3"
+                
+                # 默认错误类型为网络错误
+                error_type = "网络错误"
+                status = f"❌ {error_type}"
+                
+                error_results.append([name, avg_time, test_count, status])
+
+        # 按平均耗时升序排序
+        valid_results.sort(key=lambda x: x["sort_key"])
+
+        # 将排序后的有效结果转换为表格数据
+        for result in valid_results:
+            table_data.append([
+                result["name"],
+                result["avg_time"],
+                result["test_count"],
+                result["status"]
+            ])
+
+        # 将错误结果添加到表格数据末尾
+        table_data.extend(error_results)
 
         print("\nTTS性能测试结果:")
         print(
             tabulate(
-                table,
-                headers=["TTS模块", "平均耗时", "测试句子数"],
-                tablefmt="github",
-                colalign=("left", "right", "right"),
+                table_data,
+                headers=headers,
+                tablefmt="grid",
+                colalign=("left", "right", "right", "left"),
             )
         )
+        print("\n测试说明:")
+        print("- 超时控制: 单个请求最大等待时间为10秒")
+        print("- 错误处理: 无法连接和超时的列为网络错误")
+        print("- 排序规则: 按平均耗时从快到慢排序")
 
     async def run(self):
         """执行测试"""
@@ -119,10 +164,9 @@ class TTSPerformanceTester:
         # 并发执行测试
         results = await asyncio.gather(*tasks)
 
-        # 保存有效结果
+        # 保存所有结果，包括错误
         for result in results:
-            if result["errors"] == 0:
-                self.results[result["name"]] = result
+            self.results[result["name"]] = result
 
         # 打印结果
         self._print_results()

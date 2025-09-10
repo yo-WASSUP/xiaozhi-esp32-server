@@ -28,6 +28,11 @@ const agentId = computed(() => pluginStore.currentAgentId)
 const mcpAddress = ref('')
 const mcpTools = ref<string[]>([])
 
+// 初始化时从本地存储加载MCP地址
+if (uni.getStorageSync('cachedMcpAddress_' + agentId.value)) {
+  mcpAddress.value = uni.getStorageSync('cachedMcpAddress_' + agentId.value)
+}
+
 // 参数编辑相关
 const showParamDialog = ref(false)
 const currentFunction = ref<any>(null)
@@ -56,12 +61,23 @@ async function mergeFunctions() {
   )
 
   if (agentId.value) {
-    const [address, tools] = await Promise.all([
-      getMcpAddress(agentId.value),
-      getMcpTools(agentId.value),
-    ])
-    mcpAddress.value = address
-    mcpTools.value = tools || []
+    // 优先获取并显示MCP地址
+    try {
+      const address = await getMcpAddress(agentId.value)
+      mcpAddress.value = address
+      // 缓存到本地存储，下次打开页面可以立即显示
+      uni.setStorageSync('cachedMcpAddress_' + agentId.value, address)
+    } catch (error) {
+      console.error('获取MCP地址失败:', error)
+    }
+    
+    // 异步获取MCP工具列表，不阻塞UI显示
+    try {
+      const tools = await getMcpTools(agentId.value)
+      mcpTools.value = tools || []
+    } catch (error) {
+      console.error('获取MCP工具列表失败:', error)
+    }
   }
 }
 

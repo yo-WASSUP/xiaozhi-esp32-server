@@ -79,10 +79,13 @@
                   </el-button>
                 </template>
               </el-table-column>
-              <el-table-column label="操作" align="center" width="150px">
+              <el-table-column label="操作" align="center" width="180px">
                 <template slot-scope="scope">
                   <el-button type="text" size="mini" @click="editModel(scope.row)" class="edit-btn">
                     修改
+                  </el-button>
+                  <el-button type="text" size="mini" @click="duplicateModel(scope.row)" class="edit-btn">
+                    创建副本
                   </el-button>
                   <el-button type="text" size="mini" @click="deleteModel(scope.row)" class="delete-btn">
                     删除
@@ -277,6 +280,11 @@ export default {
       this.editModelData = JSON.parse(JSON.stringify(model));
       this.editDialogVisible = true;
     },
+    duplicateModel(model) {
+      this.editModelData = JSON.parse(JSON.stringify(model));
+      this.editModelData.duplicateMode = true;
+      this.editDialogVisible = true;
+    },
     // 删除单个模型
     deleteModel(model) {
       this.$confirm('确定要删除该模型吗?', '提示', {
@@ -313,19 +321,34 @@ export default {
       const modelType = this.activeTab;
       const id = formData.id;
 
-      Api.model.updateModel(
-        { modelType, provideCode, id, formData },
+      if (this.editModelData.duplicateMode) {
+        Api.model.addModel({modelType, provideCode, formData},
         ({ data }) => {
           if (data.code === 0) {
-            this.$message.success('保存成功');
+            this.$message.success('创建副本成功');
             this.loadData();
             this.editDialogVisible = false;
           } else {
-            this.$message.error(data.msg || '保存失败');
+            this.$message.error(data.msg || '创建副本失败');
           }
           done && done(); // 调用done回调关闭加载状态
-        }
-      );
+        })
+      }
+      else {
+        Api.model.updateModel(
+          { modelType, provideCode, id, formData },
+          ({ data }) => {
+            if (data.code === 0) {
+              this.$message.success('保存成功');
+              this.loadData();
+              this.editDialogVisible = false;
+            } else {
+              this.$message.error(data.msg || '保存失败');
+            }
+            done && done(); // 调用done回调关闭加载状态
+          }
+        );
+      }
     },
     selectAll() {
       if (this.isAllSelected) {

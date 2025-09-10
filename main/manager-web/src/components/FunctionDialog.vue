@@ -698,15 +698,10 @@ export default {
   font-size: 14px;
   height: 36px;
   box-sizing: border-box;
-  background-color: #f5f5f5;
-}
 
-::v-deep .el-input__inner {
-  background-color: #f5f5f5;
-  padding-right: 80px;
-}
-
-.url-input {
+  ::v-deep .el-input__inner {
+    background-color: #f5f5f5 !important;
+  }
 
   ::v-deep .el-input__suffix {
     right: 0;

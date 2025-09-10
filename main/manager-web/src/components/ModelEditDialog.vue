@@ -3,7 +3,7 @@
     class="center-dialog" >
     <div style="margin: 0 18px; text-align: left; padding: 10px; border-radius: 10px;">
       <div style="font-size: 30px; color: #3d4566; margin-top: -10px; margin-bottom: 10px; text-align: center;">
-        修改模型
+        {{ modelData.duplicateMode ? '创建副本' : '修改模型' }}
       </div>
 
       <button class="custom-close-btn" @click="dialogVisible = false">
@@ -190,6 +190,11 @@ export default {
         Api.model.getModelConfig(this.modelData.id, ({ data }) => {
           if (data.code === 0 && data.data) {
             const model = data.data;
+
+            if (this.modelData.duplicateMode) {
+              model.modelName = this.modelData.modelName + '_副本';
+              model.modelCode = this.modelData.modelCode + '_副本';
+            }
             this.pendingProviderType = model.configJson.type;
             this.pendingModelData = model;
 

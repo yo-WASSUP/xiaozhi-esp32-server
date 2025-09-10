@@ -115,6 +115,15 @@ function generateUUID() {
   })
 }
 
+let skipReLaunch = false // 全局或组件作用域
+
+//跳转至服务端设置页面
+function goToServerSetting() {
+  uni.switchTab({
+    url: '/pages/settings/index',
+  })
+}
+
 // 获取验证码
 async function refreshCaptcha() {
   const uuid = generateUUID()
@@ -217,6 +226,15 @@ onMounted(async () => {
         </text>
       </view>
     </view>
+	
+	<!-- 右上角服务端设置按钮 -->
+	<view 
+	  class="server-btn" 
+	  :style="{ top: `${safeAreaInsets?.top + 10}px` }" 
+	  @click="goToServerSetting"
+	>
+	  <wd-icon name="setting" custom-class="server-icon" />
+	</view>
 
     <view class="form-container">
       <view class="form">
@@ -773,6 +791,34 @@ onMounted(async () => {
       font-size: 32rpx;
       font-weight: 600;
     }
+  }
+}
+.server-btn {
+  position: absolute;
+  right: 20rpx;          // 距离右边距
+  top: 40rpx;            // 顶部稍微下移，不贴状态栏
+  width: 48rpx;
+  height: 48rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.15); // 半透明背景，更好看
+  border-radius: 24rpx;                  // 圆形按钮
+  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.2); // 阴影
+
+  &:active {
+    transform: scale(0.95);
+  }
+
+  .server-icon {
+    font-size: 28rpx;
+    color: #FFFFFF; // 白色图标
+  }
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.25); // 悬停效果
   }
 }
 </style>

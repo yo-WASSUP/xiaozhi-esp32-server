@@ -7,11 +7,13 @@ docker镜像已支持x86架构、arm64架构的CPU，支持在国产操作系统
 
 如果您的电脑还没安装docker，可以按照这里的教程安装：[docker安装](https://www.runoob.com/docker/ubuntu-docker-install.html)
 
-docker 安装全模块有两种方式，你可以[1.1使用懒人脚本](#1.1 懒人脚本)（作者[@VanillaNahida](https://github.com/VanillaNahida)）自动帮你下载所需的文件和配置文件，你可以使用[1.2手动部署](#1.2 手动部署)从零搭建。
+docker 安装全模块有两种方式，你可以[使用懒人脚本](./Deployment_all.md#11-懒人脚本)（作者[@VanillaNahida](https://github.com/VanillaNahida)）  
+脚本会自动帮你下载所需的文件和配置文件，你也可以使用[手动部署](./Deployment_all.md#12-手动部署)从零搭建。
+
+
 
 ### 1.1 懒人脚本
-
-你可以使用以下命令一键安装全模块版小智服务端：  
+部署简便，可以参考[视频教程](https://www.bilibili.com/video/BV17bbvzHExd/) ，文字版教程如下：
 > [!NOTE]  
 > 暂且只支持Ubuntu服务器一键部署，其他系统未尝试，可能会有一些奇怪的bug
 
@@ -474,7 +476,8 @@ ws://你电脑局域网的ip:8000/xiaozhi/v1/
 4、[如何部署MCP接入点](./mcp-endpoint-enable.md)<br/>
 5、[如何接入MCP接入点](./mcp-endpoint-integration.md)<br/>
 6、[如何开启声纹识别](./voiceprint-integration.md)<br/>
-10、[新闻插件源配置指南](./newsnow_plugin_config.md)<br/>
+7、[新闻插件源配置指南](./newsnow_plugin_config.md)<br/>
+8、[天气插件使用指南](./weather-integration.md)<br/>
 ## 语音克隆、本地语音部署相关教程
 1、[如何部署集成index-tts本地语音](./index-stream-integration.md)<br/>
 2、[如何部署集成fish-speech本地语音](./fish-speech-integration.md)<br/>
