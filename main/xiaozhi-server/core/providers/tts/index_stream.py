@@ -174,6 +174,20 @@ class TTSProvider(TTSProviderBase):
             logger.bind(tag=TAG).error(f"TTS请求异常: {e}")
             self.tts_audio_queue.put((SentenceType.LAST, [], None))
 
+    def audio_to_pcm_data_stream(
+        self, audio_file_path, callback=None
+    ):
+        """音频文件转换为PCM编码，使用24kHz采样率"""
+        from core.utils.util import audio_to_data_stream
+        return audio_to_data_stream(audio_file_path, is_opus=False, callback=callback, sample_rate=24000, opus_encoder=None)
+
+    def audio_to_opus_data_stream(
+        self, audio_file_path, callback=None
+    ):
+        """音频文件转换为Opus编码，使用24kHz采样率和自己的编码器"""
+        from core.utils.util import audio_to_data_stream
+        return audio_to_data_stream(audio_file_path, is_opus=True, callback=callback, sample_rate=24000, opus_encoder=self.opus_encoder)
+
     async def close(self):
         """资源清理"""
         await super().close()
@@ -190,7 +204,7 @@ class TTSProvider(TTSProviderBase):
         start_time = time.time()
         text = MarkdownCleaner.clean_markdown(text)
 
-        payload = {"text": text, "character": self.character}
+        payload = {"text": text, "character": self.voice}
 
         try:
             with requests.post(self.api_url, json=payload, timeout=5) as response:

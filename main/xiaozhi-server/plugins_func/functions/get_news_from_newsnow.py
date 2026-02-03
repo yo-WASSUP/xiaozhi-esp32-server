@@ -120,10 +120,10 @@ def fetch_news_from_api(conn, source="thepaper"):
     """从API获取新闻列表"""
     try:
         api_url = f"https://newsnow.busiyi.world/api/s?id={source}"
-        if conn.config["plugins"].get("get_news_from_newsnow") and conn.config[
-            "plugins"
-        ]["get_news_from_newsnow"].get("url"):
-            api_url = conn.config["plugins"]["get_news_from_newsnow"]["url"] + source
+
+        news_config = conn.config.get("plugins", {}).get("get_news_from_newsnow", {})
+        if news_config.get("url"):
+            api_url = news_config["url"] + source
 
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(api_url, headers=headers, timeout=10)

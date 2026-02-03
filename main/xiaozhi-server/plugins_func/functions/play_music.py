@@ -118,8 +118,9 @@ def get_music_files(music_dir, music_ext):
 def initialize_music_handler(conn):
     global MUSIC_CACHE
     if MUSIC_CACHE == {}:
-        if "play_music" in conn.config["plugins"]:
-            MUSIC_CACHE["music_config"] = conn.config["plugins"]["play_music"]
+        plugins_config = conn.config.get("plugins", {})
+        if "play_music" in plugins_config:
+            MUSIC_CACHE["music_config"] = plugins_config["play_music"]
             MUSIC_CACHE["music_dir"] = os.path.abspath(
                 MUSIC_CACHE["music_config"].get("music_dir", "./music")  # 默认路径修改
             )

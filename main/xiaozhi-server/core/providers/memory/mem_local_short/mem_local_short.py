@@ -4,7 +4,8 @@ import json
 import os
 import yaml
 from config.config_loader import get_project_dir
-from config.manage_api_client import save_mem_local_short
+from config.manage_api_client import generate_and_save_chat_summary
+import asyncio
 from core.utils.util import check_model_key
 
 
@@ -74,18 +75,6 @@ short_term_memory_prompt = """
 ```
 """
 
-short_term_memory_prompt_only_content = """
-你是一个经验丰富的记忆总结者，擅长将对话内容进行总结摘要，遵循以下规则：
-1、总结user的重要信息，以便在未来的对话中提供更个性化的服务
-2、不要重复总结，不要遗忘之前记忆，除非原来的记忆超过了1800字内，否则不要遗忘、不要压缩用户的历史记忆
-3、用户操控的设备音量、播放音乐、天气、退出、不想对话等和用户本身无关的内容，这些信息不需要加入到总结中
-4、聊天内容中的今天的日期时间、今天的天气情况与用户事件无关的数据，这些信息如果当成记忆存储会影响后序对话，这些信息不需要加入到总结中
-5、不要把设备操控的成果结果和失败结果加入到总结中，也不要把用户的一些废话加入到总结中
-6、不要为了总结而总结，如果用户的聊天没有意义，请返回原来的历史记录也是可以的
-7、只需要返回总结摘要，严格控制在1800字内
-8、不要包含代码、xml，不需要解释、注释和说明，保存记忆时仅从对话提取信息，不要混入示例内容
-"""
-
 
 def extract_json_data(json_code):
     start = json_code.find("```json")
@@ -143,7 +132,7 @@ class MemoryProvider(MemoryProviderBase):
         with open(self.memory_path, "w", encoding="utf-8") as f:
             yaml.dump(all_memory, f, allow_unicode=True)
 
-    async def save_memory(self, msgs):
+    async def save_memory(self, msgs, session_id=None):
         # 打印使用的模型信息
         model_info = getattr(self.llm, "model_name", str(self.llm.__class__.__name__))
         logger.bind(tag=TAG).debug(f"使用记忆保存模型: {model_info}")
@@ -173,28 +162,26 @@ class MemoryProvider(MemoryProviderBase):
         msgStr += f"当前时间：{time_str}"
 
         if self.save_to_file:
-            result = self.llm.response_no_stream(
-                short_term_memory_prompt,
-                msgStr,
-                max_tokens=2000,
-                temperature=0.2,
-            )
-            json_str = extract_json_data(result)
             try:
+                result = self.llm.response_no_stream(
+                    short_term_memory_prompt,
+                    msgStr,
+                    max_tokens=2000,
+                    temperature=0.2,
+                )
+                json_str = extract_json_data(result)
                 json.loads(json_str)  # 检查json格式是否正确
                 self.short_memory = json_str
                 self.save_memory_to_file()
             except Exception as e:
-                print("Error:", e)
+                logger.bind(tag=TAG).error(f"Error in saving memory: {e}")
         else:
-            result = self.llm.response_no_stream(
-                short_term_memory_prompt_only_content,
-                msgStr,
-                max_tokens=2000,
-                temperature=0.2,
-            )
-            save_mem_local_short(self.role_id, result)
-        logger.bind(tag=TAG).info(f"Save memory successful - Role: {self.role_id}")
+            # 当save_to_file为False时，调用Java端的聊天记录总结接口
+            summary_id = session_id if session_id else self.role_id
+            await generate_and_save_chat_summary(summary_id)
+        logger.bind(tag=TAG).info(
+            f"Save memory successful - Role: {self.role_id}, Session: {session_id}"
+        )
 
         return self.short_memory
 

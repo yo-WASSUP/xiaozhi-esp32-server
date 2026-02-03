@@ -31,16 +31,16 @@ server:
   auth:
     # 是否启用认证
     enabled: false
-    # 设备的token，可以在编译固件的环节，写入你自己定义的token
-    # 固件上的token和以下的token如果能对应，才能连接本服务端
-    tokens:
-      - token: "your-token1" # 设备1的token
-        name: "your-device-name1"  # 设备1标识
-      - token: "your-token2"  # 设备2的token
-        name: "your-device-name2" # 设备2标识
-    # 可选:设备白名单，如果设置了白名单，那么白名单的机器无论是什么token都可以连接。
-    #allowed_devices:
-    #  - "24:0A:C4:1D:3B:F0"  # MAC地址列表
+    # 白名单设备ID列表
+    # 如果属于白名单内的设备，不校验token，直接放行
+    allowed_devices:
+      - "11:22:33:44:55:66"
+ # MQTT网关配置，用于通过OTA下发到设备，根据mqtt_gateway的.env文件配置，格式为host:port
+  mqtt_gateway: null
+  # MQTT签名密钥，用于生成MQTT连接密码，根据mqtt_gateway的.env文件配置
+  mqtt_signature_key: null
+  # UDP网关配置
+  udp_gateway: null
 log:
   # 设置控制台输出的日志格式，时间、日志级别、标签、消息
   log_format: "<green>{time:YYMMDD HH:mm:ss}</green>[{version}_{selected_module}][<light-blue>{extra[tag]}</light-blue>]-<level>{level}</level>-<light-green>{message}</light-green>"
@@ -69,6 +69,15 @@ enable_greeting: true
 enable_stop_tts_notify: false
 # 说完话是否开启提示音，音效地址
 stop_tts_notify_voice: "config/assets/tts_notify.mp3"
+# 是否启用WebSocket心跳保活机制
+enable_websocket_ping: false
+
+
+# TTS音频发送延迟配置
+# tts_audio_send_delay: 控制音频包发送间隔
+#   0: 使用精确时间控制，严格匹配音频帧率（默认，运行时按音频帧率计算）
+#   > 0: 使用固定延迟（毫秒）发送，例如: 60
+tts_audio_send_delay: 0
 
 exit_commands:
   - "退出"
@@ -80,7 +89,8 @@ xiaozhi:
   transport: websocket
   audio_params:
     format: opus
-    sample_rate: 16000
+    # Opus支持的采样率范围为[8000, 12000, 16000, 24000, 48000]
+    sample_rate: 24000
     channels: 1
     frame_duration: 60
 
@@ -107,6 +117,15 @@ wakeup_words:
 # MCP接入点地址，地址格式为：ws://你的mcp接入点ip或者域名:端口号/mcp/?token=你的token
 # 详细教程 https://github.com/xinnan-tech/xiaozhi-esp32-server/blob/main/docs/mcp-endpoint-integration.md
 mcp_endpoint: 你的接入点 websocket地址
+
+# 上下文源配置
+# 用于在系统提示词中注入动态数据，如健康数据、股票信息等
+# 可以添加多个上下文源
+context_providers:
+  - url: ""
+    headers:
+      Authorization: ""
+
 # 插件的基础配置
 plugins:
   # 获取天气插件的配置，这里填写你的api_key
@@ -141,7 +160,15 @@ plugins:
       - ".wav"
       - ".p3"
     refresh_time: 300 # 刷新音乐列表的时间间隔，单位为秒
-
+  search_from_ragflow:
+    # 知识库的描述信息，方便大语言模型知道什么时候调用
+    description: "当用户问xxx时，调用本方法，使用知识库中的信息回答问题"
+    # ragflow接口配置
+    base_url: "http://192.168.0.8"
+    # ragflow api访问令牌
+    api_key: "ragflow-xxx"
+    # ragflow知识库id
+    dataset_ids: ["123456789"]
 # 声纹识别配置
 voiceprint:
   # 声纹接口地址
@@ -172,6 +199,12 @@ prompt: |
   绝不：
   - 长篇大论，叽叽歪歪
   - 长时间严肃对话
+
+# 默认系统提示词模板文件
+prompt_template: agent-base-prompt.txt
+
+# 系统错误时的回复
+system_error_response: "主人，小智现在有点忙，我们稍后再试吧。"
 
 # 结束语prompt
 end_prompt:
@@ -231,6 +264,7 @@ Intent:
     functions:
       - change_role
       - get_weather
+      # - search_from_ragflow
       # - get_news_from_chinanews
       - get_news_from_newsnow
       # play_music是服务器自带的音乐播放，hass_play_music是通过home assistant控制的独立外部程序音乐播放
@@ -269,7 +303,7 @@ ASR:
     # 第一句：mkdir -p ./funasr-runtime-resources/models
     # 第二句：sudo docker run -p 10096:10095 -it --privileged=true -v $PWD/funasr-runtime-resources/models:/workspace/models registry.cn-hangzhou.aliyuncs.com/funasr_repo/funasr:funasr-runtime-sdk-online-cpu-0.1.12
     # 上一句话执行后会进入到容器，继续第三句：cd FunASR/runtime
-    # 不要退出容器，继续在容器中执行第四句：nohup bash run_server_2pass.sh --download-model-dir /workspace/models --vad-dir damo/speech_fsmn_vad_zh-cn-16k-common-onnx --model-dir damo/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-onnx  --online-model-dir damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-online-onnx  --punc-dir damo/punc_ct-transformer_zh-cn-common-vad_realtime-vocab272727-onnx --lm-dir damo/speech_ngram_lm_zh-cn-ai-wesp-fst --itn-dir thuduj12/fst_itn_zh --hotword /workspace/models/hotwords.txt > log.txt 2>&1 &
+    # 不要退出容器，继续在容器中执行第四句：nohup bash run_server_2pass.sh --download-model-dir /workspace/models --vad-dir damo/speech_fsmn_vad_zh-cn-16k-common-onnx --model-dir iic/SenseVoiceSmall-onnx  --online-model-dir damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-online-onnx  --punc-dir damo/punc_ct-transformer_zh-cn-common-vad_realtime-vocab272727-onnx --lm-dir damo/speech_ngram_lm_zh-cn-ai-wesp-fst --itn-dir thuduj12/fst_itn_zh --hotword /workspace/models/hotwords.txt > log.txt 2>&1 &
     # 上一句话执行后会进入到容器，继续第五句：tail -f log.txt
     # 第五句话执行完后，会看到模型下载日志，下载完后就可以连接使用了
     # 以上是使用CPU推理，如果有GPU，详细参考：https://github.com/modelscope/FunASR/blob/main/runtime/docs/SDK_advanced_guide_online_zh.md
@@ -319,6 +353,13 @@ ASR:
     # 热词、替换词使用流程：https://www.volcengine.com/docs/6561/155738
     boosting_table_name: （选填）你的热词文件名称
     correct_table_name: （选填）你的替换词文件名称
+    # 是否开启多语种识别模式
+    enable_multilingual: False
+    # 多语种识别当该键为空时，该模型支持中英文、上海话、闽南语，四川、陕西、粤语识别。当将其设置为特定键时，它可以识别指定语言。
+    # 详细语言列表参考 https://www.volcengine.com/docs/6561/1354869
+    # language: zh-cn
+    # 静音判定时长(ms)，默认200ms
+    end_window_size: 200
     output_dir: tmp/
   TencentASR:
     # token申请地址：https://console.cloud.tencent.com/cam/capi
@@ -430,8 +471,51 @@ ASR:
     enable_itn: true  # 逆文本归一化
     #language: "zh"  # 语种，支持zh、en、ja、ko等
     context: ""  # 上下文信息，用于提高识别准确率，不超过10000 Token
-
-  
+  XunfeiStreamASR:
+    # 讯飞流式语音识别服务
+    # 需要先在讯飞开放平台创建应用，获取以下认证信息
+    # 讯飞开放平台地址：https://www.xfyun.cn/
+    # 创建应用后，在"我的应用"中获取：
+    # - APPID
+    # - APISecret  
+    # - APIKey
+    type: xunfei_stream
+    # 必填参数 - 讯飞开放平台应用信息
+    app_id: 你的APPID
+    api_key: 你的APIKey
+    api_secret: 你的APISecret
+    # 识别参数配置
+    domain: slm # 识别领域，iat:日常用语，medical:医疗，finance:金融等
+    language: zh_cn # 语言，zh_cn:中文，en_us:英文
+    accent: mandarin # 方言，mandarin:普通话
+    # 调整音频处理参数以提高长语音识别质量
+    output_dir: tmp/
+  AliyunBLStreamASR:
+    # 阿里百炼Paraformer实时语音识别服务
+    # WebSocket实时流式语音识别，支持多语言、热词定制、语义断句等高级功能
+    # 平台地址：https://bailian.console.aliyun.com/
+    # API Key地址：https://bailian.console.aliyun.com/#/api-key
+    # 文档地址：https://help.aliyun.com/zh/model-studio/websocket-for-paraformer-real-time-service
+    # 支持模型：paraformer-realtime-v2(推荐), paraformer-realtime-8k-v2, paraformer-realtime-v1, paraformer-realtime-8k-v1
+    type: aliyunbl_stream
+    # 必填参数
+    api_key: 你的阿里云百炼API密钥
+    # 模型选择，推荐使用v2版本
+    model: paraformer-realtime-v2
+    # 音频格式和采样率
+    format: pcm
+    sample_rate: 16000  # v2支持任意采样率，v1仅支持16000，8k版本仅支持8000
+    # 可选参数
+    disfluency_removal_enabled: false  # 是否过滤语气词(如"嗯"、"啊"等)
+    semantic_punctuation_enabled: false  # 语义断句(true:会议场景,准确;false:VAD断句,交互场景,低延迟)
+    max_sentence_silence: 200  # VAD断句静音时长阈值(ms)，范围200-6000，仅VAD断句时生效
+    multi_threshold_mode_enabled: false  # 防止VAD断句切割过长，仅VAD断句时生效
+    punctuation_prediction_enabled: true  # 是否自动添加标点符号
+    inverse_text_normalization_enabled: true  # 是否开启ITN(中文数字转阿拉伯数字)
+    # 热词定制文档地址：https://help.aliyun.com/zh/model-studio/custom-hot-words?
+    # vocabulary_id: vocab-xxx-24ee19fa8cfb4d52902170a0xxxxxxxx  # 热词ID(可选)
+    # language_hints: ["zh", "en"]  # 指定语言(可选)，支持zh、en、ja、yue、ko、de、fr、ru
+    output_dir: tmp/  
 VAD:
   SileroVAD:
     type: silero
@@ -453,7 +537,6 @@ LLM:
     temperature: 0.7  # 温度值
     max_tokens: 500   # 最大生成token数
     top_p: 1
-    top_k: 50
     frequency_penalty: 0  # 频率惩罚
   AliAppLLM:
     # 定义LLM API类型
@@ -588,6 +671,16 @@ VLLM:
     url: https://dashscope.aliyuncs.com/compatible-mode/v1
     # 可在这里找到你的api key https://bailian.console.aliyun.com/?apiKey=1#/api-key
     api_key: 你的api_key
+  XunfeiSparkLLM:
+    # 定义LLM API类型
+    type: openai
+    # 先新建应用，在下面的地址
+    # 开通应用地址：https://console.xfyun.cn/app/myapp
+    # 有免费额度，但也要开通服务，才能获取api_key
+    # 每一个模型都需要单独开通，每一个模型的api_password都不同，例如Lite模型在https://console.xfyun.cn/services/cbm 开通
+    base_url: https://ark.cn-beijing.volces.com/api/v3
+    model_name: lite
+    api_key: 你的api_password
 TTS:
   # 当前支持的type为edge、doubao，可自行适配
   EdgeTTS:
@@ -626,9 +719,33 @@ TTS:
     access_token: 你的火山引擎语音合成服务access_token
     resource_id: volc.service_type.10029
     speaker: zh_female_wanwanxiaohe_moon_bigtts
-    speech_rate: 0
-    loudness_rate: 0
-    pitch: 0
+    # 开启WebSocket连接复用，默认复用（注意：复用后设备处于聆听状态时空闲链接会占并发数）
+    enable_ws_reuse: True
+    # 相关参数文档：https://www.volcengine.com/docs/6561/1329505
+    # 音频输出配置（audio_params）- 用户可自定义添加火山引擎支持的任何音频参数
+    audio_params:
+      speech_rate: 0  # 语速(-50~100)
+      loudness_rate: 0  # 音量(-50~100)
+      # 多情感音色参数，注意：当前仅部分音色支持设置情感。
+      # 相关音色列表：https://www.volcengine.com/docs/6561/1257544
+      # emotion: "neutral"  # 情感类型（仅部分音色支持）：neutral、happy、sad、angry、fearful、disgusted、surprised
+      # emotion_scale: 4  # 情感强度(1~5)
+    # 高级文本处理配置（additions）- 用户可自定义添加火山引擎支持的任何高级参数
+    additions:
+      post_process:
+        pitch: 0  # 音高(-12~12)
+      # aigc_metadata: {}  # AIGC元数据配置
+      # cache_config: {}  # 缓存配置
+    # 混音控制配置（mix_speaker）- 多音色混合（仅 TTS 1.0）
+    # 混音功能主要适用于豆包语音合成模型1.0的音色，使用时需要将req_params.speaker设置为custom_mix_bigtts
+    # mix_speaker:
+    #   speakers:
+    #     - source_speaker: zh_male_bvlazysheep
+    #       mix_factor: 0.3
+    #     - source_speaker: BV120_streaming
+    #       mix_factor: 0.3
+    #     - source_speaker: zh_male_ahu_conversation_wvae_bigtts
+    #       mix_factor: 0.4
   CosyVoiceSiliconflow:
     type: siliconflow
     # 硅基流动TTS
@@ -745,7 +862,6 @@ TTS:
     #       - "处理/(chu3)(li3)"
     #       - "危险/dangerous"
     # audio_setting:
-    #     sample_rate: 24000
     #     bitrate: 128000
     #     format: "mp3"
     #     channel: 1
@@ -773,7 +889,6 @@ TTS:
 
     # 以下可不用设置，使用默认设置
     # format: wav
-    # sample_rate: 16000
     # volume: 50
     # speech_rate: 0
     # pitch_rate: 0
@@ -797,7 +912,6 @@ TTS:
     host: nls-gateway-cn-beijing.aliyuncs.com
     # 以下可不用设置，使用默认设置
     # format: pcm  # 音频格式：pcm、wav、mp3
-    # sample_rate: 16000  # 采样率：8000、16000、24000
     # volume: 50  # 音量：0-100
     # speech_rate: 0  # 语速：-500到500
     # pitch_rate: 0  # 语调：-500到500
@@ -912,7 +1026,6 @@ TTS:
     protocol: websocket # protocol choices = ['websocket', 'http']
     url: ws://127.0.0.1:8092/paddlespeech/tts/streaming  # TTS 服务的 URL 地址，指向本地服务器 [websocket默认ws://127.0.0.1:8092/paddlespeech/tts/streaming，http默认http://127.0.0.1:8090/paddlespeech/tts]
     spk_id: 0  # 发音人 ID，0 通常表示默认的发音人
-    sample_rate: 24000  # 采样率 [websocket默认24000，http默认0 自动选择]
     speed: 1.0  # 语速，1.0 表示正常语速，>1 表示加快，<1 表示减慢
     volume: 1.0  # 音量，1.0 表示正常音量，>1 表示增大，<1 表示减小
     save_path:   # 保存路径
@@ -925,3 +1038,38 @@ TTS:
     # 默认音色，如需其他音色可到项目assets文件夹下注册
     voice: "jay_klee"
     output_dir: tmp/
+  AliBLTTS:
+    # 阿里百炼CosyVoice大模型流式文本语音合成
+    # 可在这里找到你的 api_key https://bailian.console.aliyun.com/?apiKey=1#/api-key
+    # cosyvoice-v3和部分音色需要申请开通
+    type: alibl_stream
+    api_key: 你的api_key
+    model: "cosyvoice-v2"
+    voice: "longcheng_v2"
+    output_dir: tmp/
+    # 以下可不用设置，使用默认设置
+    # format: pcm  # 音频格式：pcm、wav、mp3、opus
+    # volume: 50  # 音量：0-100
+    # rate: 1  # 语速：0.5~2
+    # pitch: 1  # 语调：0.5~2
+  XunFeiTTS:
+    # 讯飞TTS服务 官方网站：https://www.xfyun.cn/
+    # 登录讯飞语音技术平台 https://console.xfyun.cn/app/myapp 创建相关应用
+    # 选择需要的服务获取api相关配置 https://console.xfyun.cn/services/uts
+    # 为需要使用的应用(APPID)购买相关服务 例如：超拟人合成 https://console.xfyun.cn/services/uts
+    type: xunfei_stream
+    api_url: wss://cbm01.cn-huabei-1.xf-yun.com/v1/private/mcd9m97e6
+    app_id: 你的app_id
+    api_secret: 你的api_secret
+    api_key: 你的api_key
+    voice: x5_lingxiaoxuan_flow
+    output_dir: tmp/
+    # 以下可不用设置，使用默认设置，注意V5音色不支持口语化配置
+    # oral_level: mid  # 口语化等级：high, mid, low
+    # spark_assist: 1  # 是否通过大模型进行口语化 开启:1, 关闭:0
+    # stop_split: 0  # 关闭服务端拆句 不关闭：0，关闭：1
+    # remain: 0  # 是否保留原书面语的样子	保留:1, 不保留:0
+    # format: raw  # 音频格式：raw(PCM), lame(MP3), speex, opus, opus-wb, opus-swb, speex-wb
+    # volume: 50  # 音量：0-100
+    # speed: 50  # 语速：0-100
+    # pitch: 50  # 语调：0-100

@@ -1,3 +1,4 @@
+import random
 import uuid
 import json
 import hmac
@@ -98,10 +99,6 @@ class TTSProvider(TTSProviderBase):
         self.format = config.get("format", "pcm")
         self.audio_file_type = config.get("format", "pcm")
 
-        # 采样率配置
-        sample_rate = config.get("sample_rate", "16000")
-        self.sample_rate = int(sample_rate) if sample_rate else 16000
-
         # 音色配置 - CosyVoice大模型音色
         if config.get("private_voice"):
             self.voice = config.get("private_voice")
@@ -131,12 +128,7 @@ class TTSProvider(TTSProviderBase):
         self.last_active_time = None
 
         # 专属tts设置
-        self.message_id = ""
-
-        # 创建Opus编码器
-        self.opus_encoder = opus_encoder_utils.OpusEncoderUtils(
-            sample_rate=16000, channels=1, frame_size_ms=60
-        )
+        self.task_id = uuid.uuid4().hex
 
         # Token管理
         if self.access_key_id and self.access_key_secret:
@@ -185,9 +177,10 @@ class TTSProvider(TTSProviderBase):
             current_time = time.time()
             if self.ws and current_time - self.last_active_time < 10:
                 # 10秒内才可以复用链接进行连续对话
-                logger.bind(tag=TAG).info(f"使用已有链接...")
+                self.task_id = uuid.uuid4().hex
+                logger.bind(tag=TAG).info(f"使用已有链接..., task_id: {self.task_id}")
                 return self.ws
-            logger.bind(tag=TAG).info("开始建立新连接...")
+            logger.bind(tag=TAG).debug("开始建立新连接...")
 
             self.ws = await websockets.connect(
                 self.ws_url,
@@ -196,7 +189,8 @@ class TTSProvider(TTSProviderBase):
                 ping_timeout=10,
                 close_timeout=10,
             )
-            logger.bind(tag=TAG).info("WebSocket连接建立成功")
+            self.task_id = uuid.uuid4().hex
+            logger.bind(tag=TAG).debug(f"WebSocket连接建立成功, task_id: {self.task_id}")
             self.last_active_time = time.time()
             return self.ws
         except Exception as e:
@@ -224,23 +218,14 @@ class TTSProvider(TTSProviderBase):
                 if message.sentence_type == SentenceType.FIRST:
                     # 初始化参数
                     try:
-                        if not getattr(self.conn, "sentence_id", None):
-                            self.conn.sentence_id = uuid.uuid4().hex
-                            logger.bind(tag=TAG).info(
-                                f"自动生成新的 会话ID: {self.conn.sentence_id}"
-                            )
-
-                        # aliyunStream独有的参数生成
-                        self.message_id = str(uuid.uuid4().hex)
-
-                        logger.bind(tag=TAG).info("开始启动TTS会话...")
+                        logger.bind(tag=TAG).debug("开始启动TTS会话...")
                         future = asyncio.run_coroutine_threadsafe(
-                            self.start_session(self.conn.sentence_id),
+                            self.start_session(self.task_id),
                             loop=self.conn.loop,
                         )
                         future.result()
                         self.before_stop_play_files.clear()
-                        logger.bind(tag=TAG).info("TTS会话启动成功")
+                        logger.bind(tag=TAG).debug("TTS会话启动成功")
 
                     except Exception as e:
                         logger.bind(tag=TAG).error(f"启动TTS会话失败: {str(e)}")
@@ -271,9 +256,9 @@ class TTSProvider(TTSProviderBase):
                         self._process_audio_file_stream(message.content_file, callback=lambda audio_data: self.handle_audio_file(audio_data, message.content_detail))
                 if message.sentence_type == SentenceType.LAST:
                     try:
-                        logger.bind(tag=TAG).info("开始结束TTS会话...")
+                        logger.bind(tag=TAG).debug("开始结束TTS会话...")
                         future = asyncio.run_coroutine_threadsafe(
-                            self.finish_session(self.conn.sentence_id),
+                            self.finish_session(self.task_id),
                             loop=self.conn.loop,
                         )
                         future.result()
@@ -294,18 +279,19 @@ class TTSProvider(TTSProviderBase):
                 logger.bind(tag=TAG).warning(f"WebSocket连接不存在，终止发送文本")
                 return
             filtered_text = MarkdownCleaner.clean_markdown(text)
-            run_request = {
-                "header": {
-                    "message_id": self.message_id,
-                    "task_id": self.conn.sentence_id,
-                    "namespace": "FlowingSpeechSynthesizer",
-                    "name": "RunSynthesis",
-                    "appkey": self.appkey,
-                },
-                "payload": {"text": filtered_text},
-            }
-            await self.ws.send(json.dumps(run_request))
-            self.last_active_time = time.time()
+            if filtered_text:
+                run_request = {
+                    "header": {
+                        "message_id": uuid.uuid4().hex,
+                        "task_id": self.task_id,
+                        "namespace": "FlowingSpeechSynthesizer",
+                        "name": "RunSynthesis",
+                        "appkey": self.appkey,
+                    },
+                    "payload": {"text": filtered_text},
+                }
+                await self.ws.send(json.dumps(run_request))
+                self.last_active_time = time.time()
             return
 
         except Exception as e:
@@ -318,8 +304,8 @@ class TTSProvider(TTSProviderBase):
                 self.ws = None
             raise
 
-    async def start_session(self, session_id):
-        logger.bind(tag=TAG).info(f"开始会话～～{session_id}")
+    async def start_session(self, task_id):
+        logger.bind(tag=TAG).debug("开始会话～～")
         try:
             # 会话开始时检测上个会话的监听状态
             if (
@@ -340,8 +326,8 @@ class TTSProvider(TTSProviderBase):
 
             start_request = {
                 "header": {
-                    "message_id": self.message_id,
-                    "task_id": self.conn.sentence_id,
+                    "message_id": uuid.uuid4().hex,
+                    "task_id": self.task_id,
                     "namespace": "FlowingSpeechSynthesizer",
                     "name": "StartSynthesis",
                     "appkey": self.appkey,
@@ -349,7 +335,7 @@ class TTSProvider(TTSProviderBase):
                 "payload": {
                     "voice": self.voice,
                     "format": self.format,
-                    "sample_rate": self.sample_rate,
+                    "sample_rate": self.conn.sample_rate,
                     "volume": self.volume,
                     "speech_rate": self.speech_rate,
                     "pitch_rate": self.pitch_rate,
@@ -358,28 +344,28 @@ class TTSProvider(TTSProviderBase):
             }
             await self.ws.send(json.dumps(start_request))
             self.last_active_time = time.time()
-            logger.bind(tag=TAG).info("会话启动请求已发送")
+            logger.bind(tag=TAG).debug("会话启动请求已发送")
         except Exception as e:
             logger.bind(tag=TAG).error(f"启动会话失败: {str(e)}")
             # 确保清理资源
             await self.close()
             raise
 
-    async def finish_session(self, session_id):
-        logger.bind(tag=TAG).info(f"关闭会话～～{session_id}")
+    async def finish_session(self, task_id):
+        logger.bind(tag=TAG).debug(f"关闭会话～～{task_id}")
         try:
             if self.ws:
                 stop_request = {
                     "header": {
-                        "message_id": self.message_id,
-                        "task_id": self.conn.sentence_id,
+                        "message_id": uuid.uuid4().hex,
+                        "task_id": self.task_id,
                         "namespace": "FlowingSpeechSynthesizer",
                         "name": "StopSynthesis",
                         "appkey": self.appkey,
                     }
                 }
                 await self.ws.send(json.dumps(stop_request))
-                logger.bind(tag=TAG).info("会话结束请求已发送")
+                logger.bind(tag=TAG).debug("会话结束请求已发送")
                 self.last_active_time = time.time()
                 if self._monitor_task:
                     try:
@@ -457,7 +443,6 @@ class TTSProvider(TTSProviderBase):
                             logger.bind(tag=TAG).warning("收到无效的JSON消息")
                     # 二进制消息（音频数据）
                     elif isinstance(msg, (bytes, bytearray)):
-                        logger.bind(tag=TAG).debug(f"推送数据到队列里面～～")
                         self.opus_encoder.encode_pcm_to_opus_stream(msg, False, self.handle_opus)
                 except websockets.ConnectionClosed:
                     logger.bind(tag=TAG).warning("WebSocket连接已关闭")
@@ -485,8 +470,6 @@ class TTSProvider(TTSProviderBase):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
-            # 生成会话ID
-            session_id = uuid.uuid4().hex
             # 存储音频数据
             audio_data = []
 
@@ -505,11 +488,10 @@ class TTSProvider(TTSProviderBase):
                 )
                 try:
                     # 发送StartSynthesis请求
-                    start_message_id = str(uuid.uuid4().hex)
                     start_request = {
                         "header": {
-                            "message_id": start_message_id,
-                            "task_id": session_id,
+                            "message_id": uuid.uuid4().hex,
+                            "task_id": self.task_id,
                             "namespace": "FlowingSpeechSynthesizer",
                             "name": "StartSynthesis",
                             "appkey": self.appkey,
@@ -517,7 +499,7 @@ class TTSProvider(TTSProviderBase):
                         "payload": {
                             "voice": self.voice,
                             "format": self.format,
-                            "sample_rate": self.sample_rate,
+                            "sample_rate": self.conn.sample_rate,
                             "volume": self.volume,
                             "speech_rate": self.speech_rate,
                             "pitch_rate": self.pitch_rate,
@@ -550,11 +532,10 @@ class TTSProvider(TTSProviderBase):
 
                     # 发送文本合成请求
                     filtered_text = MarkdownCleaner.clean_markdown(text)
-                    run_message_id = str(uuid.uuid4().hex)
                     run_request = {
                         "header": {
-                            "message_id": run_message_id,
-                            "task_id": session_id,
+                            "message_id": uuid.uuid4().hex,
+                            "task_id": self.task_id,
                             "namespace": "FlowingSpeechSynthesizer",
                             "name": "RunSynthesis",
                             "appkey": self.appkey,
@@ -564,11 +545,10 @@ class TTSProvider(TTSProviderBase):
                     await ws.send(json.dumps(run_request))
 
                     # 发送停止合成请求
-                    stop_message_id = str(uuid.uuid4().hex)
                     stop_request = {
                         "header": {
-                            "message_id": stop_message_id,
-                            "task_id": session_id,
+                            "message_id": uuid.uuid4().hex,
+                            "task_id": self.task_id,
                             "namespace": "FlowingSpeechSynthesizer",
                             "name": "StopSynthesis",
                             "appkey": self.appkey,

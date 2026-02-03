@@ -147,6 +147,7 @@ public class AgentMcpAccessPointServiceImpl implements AgentMcpAccessPointServic
                                     List<String> result = toolsList.stream()
                                             .map(tool -> (String) tool.get("name"))
                                             .filter(name -> name != null)
+                                            .sorted()
                                             .collect(Collectors.toList());
                                     log.info("成功获取MCP工具列表，智能体ID: {}, 工具数量: {}", id, result.size());
                                     return result;

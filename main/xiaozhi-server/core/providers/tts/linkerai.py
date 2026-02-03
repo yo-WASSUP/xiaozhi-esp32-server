@@ -25,11 +25,6 @@ class TTSProvider(TTSProviderBase):
         self.audio_format = "pcm"
         self.before_stop_play_files = []
 
-        # 创建Opus编码器
-        self.opus_encoder = opus_encoder_utils.OpusEncoderUtils(
-            sample_rate=16000, channels=1, frame_size_ms=60
-        )
-
         # PCM缓冲区
         self.pcm_buffer = bytearray()
 
@@ -127,7 +122,7 @@ class TTSProvider(TTSProviderBase):
             "spk_id": self.voice,
             "frame_durition": 60,
             "stream": "true",
-            "target_sr": 16000,
+            "target_sr": self.conn.sample_rate,
             "audio_format": "pcm",
             "instruct_text": "请生成一段自然流畅的语音",
         }
@@ -136,7 +131,7 @@ class TTSProvider(TTSProviderBase):
             "Content-Type": "application/json",
         }
 
-        # 一帧 PCM 所需字节数：60 ms &times; 16 kHz &times; 1 ch &times; 2 B = 1 920
+        # 一帧 PCM 所需字节数：60 ms × sample_rate × 1 ch × 2 B
         frame_bytes = int(
             self.opus_encoder.sample_rate
             * self.opus_encoder.channels  # 1
@@ -213,7 +208,7 @@ class TTSProvider(TTSProviderBase):
             "spk_id": self.voice,
             "frame_duration": 60,
             "stream": False,
-            "target_sr": 16000,
+            "target_sr": self.conn.sample_rate,
             "audio_format": self.audio_format,
             "instruct_text": "请生成一段自然流畅的语音",
         }

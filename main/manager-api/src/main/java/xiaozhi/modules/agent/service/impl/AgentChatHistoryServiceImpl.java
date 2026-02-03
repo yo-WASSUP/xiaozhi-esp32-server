@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import cn.hutool.core.collection.ListUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +19,7 @@ import xiaozhi.common.constant.Constant;
 import xiaozhi.common.page.PageData;
 import xiaozhi.common.utils.ConvertUtils;
 import xiaozhi.common.utils.JsonUtils;
+import xiaozhi.common.utils.ToolUtil;
 import xiaozhi.modules.agent.Enums.AgentChatHistoryType;
 import xiaozhi.modules.agent.dao.AiAgentChatHistoryDao;
 import xiaozhi.modules.agent.dto.AgentChatHistoryDTO;
@@ -84,7 +86,15 @@ public class AgentChatHistoryServiceImpl extends ServiceImpl<AiAgentChatHistoryD
     @Transactional(rollbackFor = Exception.class)
     public void deleteByAgentId(String agentId, Boolean deleteAudio, Boolean deleteText) {
         if (deleteAudio) {
-            baseMapper.deleteAudioByAgentId(agentId);
+            // 分批删除音频,避免超时
+            List<String> audioIds = baseMapper.getAudioIdsByAgentId(agentId);
+            if (ToolUtil.isNotEmpty(audioIds)) {
+                // 每批删除1000条
+                List<List<String>> batch = ListUtil.split(audioIds, 1000);
+                batch.forEach(dataList->{
+                    baseMapper.deleteAudioByIds(dataList);
+                });
+            }
         }
         if (deleteAudio && !deleteText) {
             baseMapper.deleteAudioIdByAgentId(agentId);
@@ -107,7 +117,7 @@ public class AgentChatHistoryServiceImpl extends ServiceImpl<AiAgentChatHistoryD
                 // 添加此行，确保查询结果按照创建时间降序排列
                 // 使用id的原因：数据形式，id越大的创建时间就越晚，所以使用id的结果和创建时间降序排列结果一样
                 // id作为降序排列的优势，性能高，有主键索引，不用在排序的时候重新进行排除扫描比较
-                .orderByDesc(AgentChatHistoryEntity::getId); 
+                .orderByDesc(AgentChatHistoryEntity::getId);
 
         // 构建分页查询，查询前50页数据
         Page<AgentChatHistoryEntity> pageParam = new Page<>(0, 50);

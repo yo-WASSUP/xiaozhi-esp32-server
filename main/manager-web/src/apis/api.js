@@ -7,6 +7,11 @@ import model from './module/model.js'
 import ota from './module/ota.js'
 import timbre from "./module/timbre.js"
 import user from './module/user.js'
+import voiceClone from './module/voiceClone.js'
+import voiceResource from './module/voiceResource.js'
+import knowledgeBase from './module/knowledgeBase.js'
+
+
 
 /**
  * 接口地址
@@ -33,5 +38,8 @@ export default {
     model,
     timbre,
     ota,
-    dict
-}
+    dict,
+    voiceResource,
+    voiceClone,
+    knowledgeBase
+  }

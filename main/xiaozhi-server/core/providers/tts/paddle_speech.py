@@ -25,10 +25,7 @@ class TTSProvider(TTSProviderBase):
             self.spk_id = int(config.get("private_voice"))
         else:
             self.spk_id = int(config.get("spk_id", "0"))
-            
-        sample_rate = config.get("sample_rate", 24000)
-        self.sample_rate = float(sample_rate) if sample_rate else 24000
-        
+
         speed = config.get("speed", 1.0)
         self.speed = float(speed) if speed else 1.0
         

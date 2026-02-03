@@ -1,6 +1,7 @@
 package xiaozhi.modules.device.controller;
 
 import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.shiro.authz.annotation.RequiresPermissions;
@@ -16,28 +17,34 @@ import org.springframework.web.bind.annotation.RestController;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import lombok.AllArgsConstructor;
 import xiaozhi.common.exception.ErrorCode;
 import xiaozhi.common.redis.RedisKeys;
 import xiaozhi.common.redis.RedisUtils;
 import xiaozhi.common.user.UserDetail;
 import xiaozhi.common.utils.Result;
+import xiaozhi.modules.device.dto.DeviceManualAddDTO;
 import xiaozhi.modules.device.dto.DeviceRegisterDTO;
+import xiaozhi.modules.device.dto.DeviceToolsCallReqDTO;
 import xiaozhi.modules.device.dto.DeviceUnBindDTO;
 import xiaozhi.modules.device.dto.DeviceUpdateDTO;
-import xiaozhi.modules.device.dto.DeviceManualAddDTO;
 import xiaozhi.modules.device.entity.DeviceEntity;
 import xiaozhi.modules.device.service.DeviceService;
 import xiaozhi.modules.security.user.SecurityUser;
+import xiaozhi.modules.sys.service.SysParamsService;
 
 @Tag(name = "设备管理")
-@AllArgsConstructor
 @RestController
 @RequestMapping("/device")
 public class DeviceController {
     private final DeviceService deviceService;
-
     private final RedisUtils redisUtils;
+    private final SysParamsService sysParamsService;
+
+    public DeviceController(DeviceService deviceService, RedisUtils redisUtils, SysParamsService sysParamsService) {
+        this.deviceService = deviceService;
+        this.redisUtils = redisUtils;
+        this.sysParamsService = sysParamsService;
+    }
 
     @PostMapping("/bind/{agentId}/{deviceCode}")
     @Operation(summary = "绑定设备")
@@ -52,13 +59,15 @@ public class DeviceController {
     public Result<String> registerDevice(@RequestBody DeviceRegisterDTO deviceRegisterDTO) {
         String macAddress = deviceRegisterDTO.getMacAddress();
         if (StringUtils.isBlank(macAddress)) {
-            return new Result<String>().error(ErrorCode.NOT_NULL, "mac地址不能为空");
+            return new Result<String>().error(ErrorCode.MCA_NOT_NULL);
         }
         // 生成六位验证码
-        String code = String.valueOf(Math.random()).substring(2, 8);
-        String key = RedisKeys.getDeviceCaptchaKey(code);
+        String code;
+        String key;
         String existsMac = null;
         do {
+            code = String.valueOf(Math.random()).substring(2, 8);
+            key = RedisKeys.getDeviceCaptchaKey(code);
             existsMac = (String) redisUtils.get(key);
         } while (StringUtils.isNotBlank(existsMac));
 
@@ -73,6 +82,17 @@ public class DeviceController {
         UserDetail user = SecurityUser.getUser();
         List<DeviceEntity> devices = deviceService.getUserDevices(user.getId(), agentId);
         return new Result<List<DeviceEntity>>().ok(devices);
+    }
+
+    @PostMapping("/bind/{agentId}")
+    @Operation(summary = "设备在线接口")
+    @RequiresPermissions("sys:role:normal")
+    public Result<String> forwardToMqttGateway(@PathVariable String agentId, @RequestBody String requestBody) {
+        try {
+            return new Result<String>().ok(deviceService.getDeviceOnlineData(agentId));
+        } catch (Exception e) {
+            return new Result<String>().error("转发请求失败: " + e.getMessage());
+        }
     }
 
     @PostMapping("/unbind")
@@ -108,5 +128,35 @@ public class DeviceController {
         UserDetail user = SecurityUser.getUser();
         deviceService.manualAddDevice(user.getId(), dto);
         return new Result<>();
+    }
+
+    @PostMapping("/tools/list/{deviceId}")
+    @Operation(summary = "获取设备工具列表")
+    @RequiresPermissions("sys:role:normal")
+    public Result<Object> getDeviceTools(@PathVariable String deviceId) {
+        Object toolsData = deviceService.getDeviceTools(deviceId);
+        if (toolsData == null) {
+            return new Result<Object>().error(ErrorCode.DEVICE_NOT_EXIST);
+        }
+
+        return new Result<Object>().ok(toolsData);
+    }
+
+    @PostMapping("/tools/call/{deviceId}")
+    @Operation(summary = "调用设备工具")
+    @RequiresPermissions("sys:role:normal")
+    public Result<Object> callDeviceTool(@PathVariable String deviceId,
+            @Valid @RequestBody DeviceToolsCallReqDTO request) {
+        String toolName = request.getName();
+        Map<String, Object> arguments = request.getArguments();
+
+        Object result = deviceService.callDeviceTool(deviceId, toolName, arguments);
+        if (result == null) {
+            return new Result<Object>().error(ErrorCode.DEVICE_NOT_EXIST);
+        }
+
+        Result<Object> response = new Result<Object>();
+        response.setMsg("Tools called successfully");
+        return response.ok(result);
     }
 }

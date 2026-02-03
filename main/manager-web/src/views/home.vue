@@ -8,20 +8,17 @@
         <div class="add-device">
           <div class="add-device-bg">
             <div class="hellow-text" style="margin-top: 30px;">
-              你好，小智
+              {{ $t('home.greeting') }}
             </div>
             <div class="hellow-text">
-              让我们度过
-              <div style="display: inline-block;color: #5778FF;">
-                美好的一天！
-              </div>
+              {{ $t('home.wish') }}
             </div>
             <div class="hi-hint">
-              Hello, Let's have a wonderful day!
+              let's have a wonderful day!
             </div>
             <div class="add-device-btn">
               <div class="left-add" @click="showAddDialog">
-                添加智能体
+                {{ $t('home.addAgent') }}
               </div>
               <div style="width: 23px;height: 13px;background: #5778ff;margin-left: -10px;" />
               <div class="right-add">
@@ -42,8 +39,9 @@
           </template>
 
           <template v-else>
-            <DeviceItem v-for="(item, index) in devices" :key="index" :device="item" @configure="goToRoleConfig"
-              @deviceManage="handleDeviceManage" @delete="handleDeleteAgent" @chat-history="handleShowChatHistory" />
+            <DeviceItem v-for="(item, index) in devices" :key="index" :device="item" :feature-status="featureStatus" 
+              @configure="goToRoleConfig" @deviceManage="handleDeviceManage" @delete="handleDeleteAgent" 
+              @chat-history="handleShowChatHistory" />
           </template>
         </div>
       </div>
@@ -64,6 +62,7 @@ import ChatHistoryDialog from '@/components/ChatHistoryDialog.vue';
 import DeviceItem from '@/components/DeviceItem.vue';
 import HeaderBar from '@/components/HeaderBar.vue';
 import VersionFooter from '@/components/VersionFooter.vue';
+import featureManager from '@/utils/featureManager';
 
 export default {
   name: 'HomePage',
@@ -79,15 +78,33 @@ export default {
       skeletonCount: localStorage.getItem('skeletonCount') || 8,
       showChatHistory: false,
       currentAgentId: '',
-      currentAgentName: ''
+      currentAgentName: '',
+      // 功能状态
+      featureStatus: {
+        voiceprintRecognition: false,
+        voiceClone: false,
+        knowledgeBase: false
+      }
     }
   },
 
-  mounted() {
+  async mounted() {
     this.fetchAgentList();
+    await this.loadFeatureStatus();
   },
 
   methods: {
+    // 加载功能状态
+    async loadFeatureStatus() {
+      await featureManager.waitForInitialization();
+      const config = featureManager.getConfig();
+      this.featureStatus = {
+        voiceprintRecognition: config.voiceprintRecognition,
+        voiceClone: config.voiceClone,
+        knowledgeBase: config.knowledgeBase
+      };
+    },
+    
     showAddDialog() {
       this.addDeviceDialogVisible = true
     },
@@ -102,26 +119,32 @@ export default {
     handleDeviceManage() {
       this.$router.push('/device-management');
     },
-    handleSearch(regex) {
+    handleSearch(keyword) {
       this.isSearching = true;
-      this.searchRegex = regex;
-      this.applySearchFilter();
+      this.isLoading = true;
+      // 检测MAC地址格式：包含4个冒号
+      const isMac = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/.test(keyword)
+      const searchType = isMac ? 'mac' : 'name';
+      Api.agent.searchAgent(keyword, searchType, ({ data }) => {
+        if (data?.data) {
+          this.devices = data.data.map(item => ({
+            ...item,
+            agentId: item.id
+          }));
+        }
+        this.isLoading = false;
+      }, (error) => {
+        console.error('搜索智能体失败:', error);
+        this.isLoading = false;
+        this.$message.error(this.$t('message.searchFailed'));
+      });
     },
     handleSearchReset() {
       this.isSearching = false;
-      this.searchRegex = null;
+      // 直接将原始设备列表赋值给显示设备列表，避免重新加载数据
       this.devices = [...this.originalDevices];
     },
-    applySearchFilter() {
-      if (!this.isSearching || !this.searchRegex) {
-        this.devices = [...this.originalDevices];
-        return;
-      }
 
-      this.devices = this.originalDevices.filter(device => {
-        return this.searchRegex.test(device.agentName);
-      });
-    },
     // 搜索更新智能体列表
     handleSearchResult(filteredList) {
       this.devices = filteredList; // 更新设备列表
@@ -152,21 +175,21 @@ export default {
     },
     // 删除智能体
     handleDeleteAgent(agentId) {
-      this.$confirm('确定要删除该智能体吗？', '提示', {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
+      this.$confirm(this.$t('home.confirmDeleteAgent'), '提示', {
+        confirmButtonText: this.$t('button.ok'),
+        cancelButtonText: this.$t('button.cancel'),
         type: 'warning'
       }).then(() => {
         Api.agent.deleteAgent(agentId, (res) => {
           if (res.data.code === 0) {
             this.$message.success({
-              message: '删除成功',
+              message: this.$t('home.deleteSuccess'),
               showClose: true
             });
             this.fetchAgentList(); // 刷新列表
           } else {
             this.$message.error({
-              message: res.data.msg || '删除失败',
+              message: res.data.msg || this.$t('home.deleteFailed'),
               showClose: true
             });
           }

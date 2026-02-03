@@ -1,6 +1,9 @@
 package xiaozhi.modules.agent.dao;
 
+import java.util.List;
+
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 
@@ -15,12 +18,6 @@ import xiaozhi.modules.agent.entity.AgentChatHistoryEntity;
  */
 @Mapper
 public interface AiAgentChatHistoryDao extends BaseMapper<AgentChatHistoryEntity> {
-    /**
-     * 根据智能体ID删除音频
-     *
-     * @param agentId 智能体ID
-     */
-    void deleteAudioByAgentId(String agentId);
 
     /**
      * 根据智能体ID删除聊天历史记录
@@ -35,4 +32,19 @@ public interface AiAgentChatHistoryDao extends BaseMapper<AgentChatHistoryEntity
      * @param agentId 智能体ID
      */
     void deleteAudioIdByAgentId(String agentId);
+
+    /**
+     * 根据智能体ID获取所有音频ID列表
+     *
+     * @param agentId 智能体ID
+     * @return 音频ID列表
+     */
+    List<String> getAudioIdsByAgentId(String agentId);
+
+    /**
+     * 批量删除音频
+     *
+     * @param audioIds 音频ID列表
+     */
+    void deleteAudioByIds(@Param("audioIds") List<String> audioIds);
 }

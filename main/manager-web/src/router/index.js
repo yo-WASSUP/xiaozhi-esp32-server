@@ -18,7 +18,7 @@ const routes = [
       return import('../views/roleConfig.vue')
     }
   },
-   {
+  {
     path: '/voice-print',
     name: 'VoicePrint',
     component: function () {
@@ -87,6 +87,28 @@ const routes = [
       title: '参数管理'
     }
   },
+  {
+    path: '/knowledge-base-management',
+    name: 'KnowledgeBaseManagement',
+    component: function () {
+      return import('../views/KnowledgeBaseManagement.vue')
+    },
+    meta: {
+      requiresAuth: true,
+      title: '知识库管理'
+    }
+  },
+  {
+    path: '/knowledge-file-upload',
+    name: 'KnowledgeFileUpload',
+    component: function () {
+      return import('../views/KnowledgeFileUpload.vue')
+    },
+    meta: {
+      requiresAuth: true,
+      title: '文档上传管理'
+    }
+  },
 
   {
     path: '/server-side-management',
@@ -111,6 +133,28 @@ const routes = [
     }
   },
   {
+    path: '/voice-resource-management',
+    name: 'VoiceResourceManagement',
+    component: function () {
+      return import('../views/VoiceResourceManagement.vue')
+    },
+    meta: {
+      requiresAuth: true,
+      title: '音色资源开通'
+    }
+  },
+  {
+    path: '/voice-clone-management',
+    name: 'VoiceCloneManagement',
+    component: function () {
+      return import('../views/VoiceCloneManagement.vue')
+    },
+    meta: {
+      requiresAuth: true,
+      title: '音色克隆管理'
+    }
+  },
+  {
     path: '/dict-management',
     name: 'DictManagement',
     component: function () {
@@ -122,6 +166,34 @@ const routes = [
     name: 'ProviderManagement',
     component: function () {
       return import('../views/ProviderManagement.vue')
+    }
+  },
+  // 添加默认角色管理路由
+  {
+    path: '/agent-template-management',
+    name: 'AgentTemplateManagement',
+    component: function () {
+      return import('../views/AgentTemplateManagement.vue')
+    }
+  },
+  // 添加模板快速配置路由
+  {
+    path: '/template-quick-config',
+    name: 'TemplateQuickConfig',
+    component: function () {
+      return import('../views/TemplateQuickConfig.vue')
+    }
+  },
+  // 功能配置页面路由
+  {
+    path: '/feature-management',
+    name: 'FeatureManagement',
+    component: function () {
+      return import('../views/FeatureManagement.vue')
+    },
+    meta: {
+      requiresAuth: true,
+      title: '功能配置'
     }
   },
 ]
@@ -145,7 +217,7 @@ VueRouter.prototype.push = function push(location) {
 }
 
 // 需要登录才能访问的路由
-const protectedRoutes = ['home', 'RoleConfig', 'DeviceManagement', 'UserManagement', 'ModelConfig']
+const protectedRoutes = ['home', 'RoleConfig', 'DeviceManagement', 'UserManagement', 'ModelConfig', 'KnowledgeBaseManagement', 'KnowledgeFileUpload']
 
 // 路由守卫
 router.beforeEach((to, from, next) => {

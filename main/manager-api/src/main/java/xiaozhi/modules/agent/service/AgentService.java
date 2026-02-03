@@ -54,9 +54,11 @@ public interface AgentService extends BaseService<AgentEntity> {
      * 获取用户智能体列表
      *
      * @param userId 用户ID
+     * @param keyword 搜索关键词
+     * @param searchType 搜索类型（name - 按名称搜索，mac - 按MAC地址搜索）
      * @return 智能体列表
      */
-    List<AgentDTO> getUserAgents(Long userId);
+    List<AgentDTO> getUserAgents(Long userId, String keyword, String searchType);
 
     /**
      * 根据智能体ID获取设备数量
@@ -98,4 +100,6 @@ public interface AgentService extends BaseService<AgentEntity> {
      * @return 创建的智能体ID
      */
     String createAgent(AgentCreateDTO dto);
+
+
 }

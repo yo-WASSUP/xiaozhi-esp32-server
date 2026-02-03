@@ -16,11 +16,14 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import cn.hutool.json.JSONArray;
 import lombok.AllArgsConstructor;
 import xiaozhi.common.constant.Constant;
+import xiaozhi.common.exception.ErrorCode;
 import xiaozhi.common.exception.RenException;
 import xiaozhi.common.page.PageData;
 import xiaozhi.common.service.impl.BaseServiceImpl;
 import xiaozhi.common.user.UserDetail;
 import xiaozhi.common.utils.ConvertUtils;
+import xiaozhi.modules.knowledge.dao.KnowledgeBaseDao;
+import xiaozhi.modules.knowledge.entity.KnowledgeBaseEntity;
 import xiaozhi.modules.model.dao.ModelProviderDao;
 import xiaozhi.modules.model.dto.ModelProviderDTO;
 import xiaozhi.modules.model.entity.ModelProviderEntity;
@@ -33,13 +36,43 @@ public class ModelProviderServiceImpl extends BaseServiceImpl<ModelProviderDao, 
         implements ModelProviderService {
 
     private final ModelProviderDao modelProviderDao;
+    private final KnowledgeBaseDao knowledgeBaseDao;
 
     @Override
     public List<ModelProviderDTO> getPluginList() {
+        // 1. 获取插件列表
         LambdaQueryWrapper<ModelProviderEntity> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(ModelProviderEntity::getModelType, "Plugin");
         List<ModelProviderEntity> providerEntities = modelProviderDao.selectList(queryWrapper);
-        return ConvertUtils.sourceToTarget(providerEntities, ModelProviderDTO.class);
+        List<ModelProviderDTO> resultList = ConvertUtils.sourceToTarget(providerEntities, ModelProviderDTO.class);
+
+        // 2. 获取当前用户的知识库列表并追加到结果中
+        UserDetail userDetail = SecurityUser.getUser();
+        if (userDetail != null && userDetail.getId() != null) {
+            // 查询当前用户的知识库
+            LambdaQueryWrapper<KnowledgeBaseEntity> kbQueryWrapper = new LambdaQueryWrapper<>();
+            kbQueryWrapper.eq(KnowledgeBaseEntity::getCreator, userDetail.getId());
+            kbQueryWrapper.eq(KnowledgeBaseEntity::getStatus, 1); // 只获取启用状态的知识库
+            List<KnowledgeBaseEntity> knowledgeBases = knowledgeBaseDao.selectList(kbQueryWrapper);
+
+            // 将知识库转换为ModelProviderDTO格式并添加到结果列表
+            for (KnowledgeBaseEntity kb : knowledgeBases) {
+                ModelProviderDTO dto = new ModelProviderDTO();
+                dto.setId(kb.getId());
+                dto.setModelType("Rag");
+                dto.setName("[知识库]" + kb.getName());
+                dto.setProviderCode("ragflow"); // 假设所有RAG都使用ragflow
+                dto.setFields("[]");
+                dto.setSort(0);
+                dto.setCreateDate(kb.getCreatedAt());
+                dto.setUpdateDate(kb.getUpdatedAt());
+                dto.setCreator(0L);
+                dto.setUpdater(0L);
+                resultList.add(dto);
+            }
+        }
+
+        return resultList;
     }
 
     @Override
@@ -91,12 +124,6 @@ public class ModelProviderServiceImpl extends BaseServiceImpl<ModelProviderDao, 
         return getPageData(modelProviderDao.selectPage(pageParam, wrapper), ModelProviderDTO.class);
     }
 
-    public static void main(String[] args) {
-        String jsonString = "\"[]\"";
-        JSONArray jsonArray = new JSONArray(jsonString);
-        System.out.println("字符串转 JSONArray: " + jsonArray.toString());
-    }
-
     @Override
     public ModelProviderDTO add(ModelProviderDTO modelProviderDTO) {
         UserDetail user = SecurityUser.getUser();
@@ -109,7 +136,7 @@ public class ModelProviderServiceImpl extends BaseServiceImpl<ModelProviderDao, 
         modelProviderDTO.setFields(modelProviderDTO.getFields());
         ModelProviderEntity entity = ConvertUtils.sourceToTarget(modelProviderDTO, ModelProviderEntity.class);
         if (modelProviderDao.insert(entity) == 0) {
-            throw new RenException("新增数据失败");
+            throw new RenException(ErrorCode.ADD_DATA_FAILED);
         }
 
         return ConvertUtils.sourceToTarget(modelProviderDTO, ModelProviderDTO.class);
@@ -120,9 +147,8 @@ public class ModelProviderServiceImpl extends BaseServiceImpl<ModelProviderDao, 
         UserDetail user = SecurityUser.getUser();
         modelProviderDTO.setUpdater(user.getId());
         modelProviderDTO.setUpdateDate(new Date());
-        if (modelProviderDao
-                .updateById(ConvertUtils.sourceToTarget(modelProviderDTO, ModelProviderEntity.class)) == 0) {
-            throw new RenException("修改数据失败");
+        if (modelProviderDao.updateById(ConvertUtils.sourceToTarget(modelProviderDTO, ModelProviderEntity.class)) == 0) {
+            throw new RenException(ErrorCode.UPDATE_DATA_FAILED);
         }
         return ConvertUtils.sourceToTarget(modelProviderDTO, ModelProviderDTO.class);
     }
@@ -130,14 +156,14 @@ public class ModelProviderServiceImpl extends BaseServiceImpl<ModelProviderDao, 
     @Override
     public void delete(String id) {
         if (modelProviderDao.deleteById(id) == 0) {
-            throw new RenException("删除数据失败");
+            throw new RenException(ErrorCode.DELETE_DATA_FAILED);
         }
     }
 
     @Override
     public void delete(List<String> ids) {
         if (modelProviderDao.deleteBatchIds(ids) == 0) {
-            throw new RenException("删除数据失败");
+            throw new RenException(ErrorCode.DELETE_DATA_FAILED);
         }
     }
 

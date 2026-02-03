@@ -1,12 +1,13 @@
-from typing import Optional, Tuple, List
-from core.providers.asr.base import ASRProviderBase
-from core.providers.asr.dto.dto import InterfaceType
 import ssl
 import json
-import websockets
-from config.logger import setup_logging
 import asyncio
-import re
+import websockets
+
+from config.logger import setup_logging
+from typing import Optional, Tuple, List
+from core.providers.asr.base import ASRProviderBase
+from core.providers.asr.utils import lang_tag_filter
+from core.providers.asr.dto.dto import InterfaceType
 
 TAG = __name__
 logger = setup_logging()
@@ -100,7 +101,7 @@ class ASRProvider(ASRProviderBase):
         logger.bind(tag=TAG).debug(f"Sent end message: {end_message}")
 
     async def speech_to_text(
-        self, opus_data: List[bytes], session_id: str, audio_format="opus"
+        self, opus_data: List[bytes], session_id: str, audio_format="opus", artifacts=None
     ) -> Tuple[Optional[str], Optional[str]]:
         """
         Convert speech data to text using FunASR.
@@ -108,18 +109,9 @@ class ASRProvider(ASRProviderBase):
         :param session_id: Unique session identifier.
         :return: Tuple containing recognized text and optional timestamp.
         """
-        file_path = None
-        if audio_format == "pcm":
-            pcm_data = opus_data
-        else:
-            pcm_data = self.decode_opus(opus_data)
-        combined_pcm_data = b"".join(pcm_data)
-
-        # 判断是否保存为WAV文件
-        if self.delete_audio_file:
-            pass
-        else:
-            file_path = self.save_audio_to_file(pcm_data, session_id)
+        
+        if artifacts is None:
+            return "", None
         auth_header = {"Authorization": "Bearer; {}".format(self.api_key)}
         async with websockets.connect(
             self.uri,
@@ -131,7 +123,7 @@ class ASRProvider(ASRProviderBase):
             try:
                 # Use asyncio to handle WebSocket communication
                 send_task = asyncio.create_task(
-                    self._send_data(ws, combined_pcm_data, session_id)
+                    self._send_data(ws, artifacts.pcm_bytes, session_id)
                 )
                 receive_task = asyncio.create_task(self._receive_responses(ws))
 
@@ -151,19 +143,23 @@ class ASRProvider(ASRProviderBase):
 
                 # Get the result from the receive task
                 result = receive_task.result()
-                match = re.match(r"<\|(.*?)\|><\|(.*?)\|><\|(.*?)\|>(.*)", result)
-                if match:
-                    result = match.group(4).strip()
+                
+                # match = re.match(r"<\|(.*?)\|><\|(.*?)\|><\|(.*?)\|>(.*)", result)
+                # if match:
+                #     result = match.group(4).strip()
+
+                # Handle tags
+                result = lang_tag_filter(result)
                 return (
                     result,
-                    file_path,
+                    artifacts.file_path,
                 )  # Return the recognized text and timestamp (if any)
 
             except websockets.exceptions.ConnectionClosed as e:
                 logger.bind(tag=TAG).error(f"WebSocket connection closed: {e}")
-                return "", file_path
+                return "", artifacts.file_path
             except Exception as e:
                 logger.bind(tag=TAG).error(
                     f"Error during speech-to-text conversion: {e}", exc_info=True
                 )
-                return "", file_path
+                return "", artifacts.file_path

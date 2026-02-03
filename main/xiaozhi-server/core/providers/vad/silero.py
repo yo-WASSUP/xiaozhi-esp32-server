@@ -36,7 +36,18 @@ class VADProvider(VADProviderBase):
         # 至少要多少帧才算有语音
         self.frame_window_threshold = 3
 
+    def __del__(self):
+        if hasattr(self, 'decoder') and self.decoder is not None:
+            try:
+                del self.decoder
+            except Exception:
+                pass
+
     def is_vad(self, conn, opus_packet):
+        # 手动模式：直接返回True，不进行实时VAD检测，所有音频都缓存
+        if conn.client_listen_mode == "manual":
+            return True
+            
         try:
             pcm_frame = self.decoder.decode(opus_packet, 960)
             conn.client_audio_buffer.extend(pcm_frame)  # 将新数据加入缓冲区
@@ -70,7 +81,9 @@ class VADProvider(VADProviderBase):
 
                 # 更新滑动窗口
                 conn.client_voice_window.append(is_voice)
-                client_have_voice = (conn.client_voice_window.count(True) >= self.frame_window_threshold)
+                client_have_voice = (
+                    conn.client_voice_window.count(True) >= self.frame_window_threshold
+                )
 
                 # 如果之前有声音，但本次没有声音，且与上次有声音的时间差已经超过了静默阈值，则认为已经说完一句话
                 if conn.client_have_voice and not client_have_voice:

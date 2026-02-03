@@ -106,14 +106,14 @@ async def send_mcp_message(conn, payload: dict):
 
     try:
         await conn.websocket.send(message)
-        logger.bind(tag=TAG).info(f"成功发送MCP消息: {message}")
+        logger.bind(tag=TAG).debug(f"成功发送MCP消息: {message}")
     except Exception as e:
         logger.bind(tag=TAG).error(f"发送MCP消息失败: {e}")
 
 
 async def handle_mcp_message(conn, mcp_client: MCPClient, payload: dict):
     """处理MCP消息,包括初始化、工具列表和工具调用响应等"""
-    logger.bind(tag=TAG).info(f"处理MCP消息: {str(payload)[:100]}")
+    logger.bind(tag=TAG).debug(f"处理MCP消息: {str(payload)[:100]}")
 
     if not isinstance(payload, dict):
         logger.bind(tag=TAG).error("MCP消息缺少payload字段或格式错误")
@@ -138,9 +138,14 @@ async def handle_mcp_message(conn, mcp_client: MCPClient, payload: dict):
             if isinstance(server_info, dict):
                 name = server_info.get("name")
                 version = server_info.get("version")
-                logger.bind(tag=TAG).info(
+                logger.bind(tag=TAG).debug(
                     f"客户端MCP服务器信息: name={name}, version={version}"
                 )
+
+            await asyncio.sleep(1)
+            logger.bind(tag=TAG).debug("初始化完成，开始请求MCP工具列表")
+            await send_mcp_tools_list_request(conn)
+
             return
 
         elif msg_id == 2:  # mcpToolsListID
@@ -195,11 +200,11 @@ async def handle_mcp_message(conn, mcp_client: MCPClient, payload: dict):
 
                 next_cursor = result.get("nextCursor", "")
                 if next_cursor:
-                    logger.bind(tag=TAG).info(f"有更多工具，nextCursor: {next_cursor}")
+                    logger.bind(tag=TAG).debug(f"有更多工具，nextCursor: {next_cursor}")
                     await send_mcp_tools_list_continue_request(conn, next_cursor)
                 else:
                     await mcp_client.set_ready(True)
-                    logger.bind(tag=TAG).info("所有工具已获取，MCP客户端准备就绪")
+                    logger.bind(tag=TAG).debug("所有工具已获取，MCP客户端准备就绪")
 
                     # 刷新工具缓存，确保MCP工具被包含在函数列表中
                     if hasattr(conn, "func_handler") and conn.func_handler:
@@ -255,7 +260,7 @@ async def send_mcp_initialize_message(conn):
             },
         },
     }
-    logger.bind(tag=TAG).info("发送MCP初始化消息")
+    logger.bind(tag=TAG).debug("发送MCP初始化消息")
     await send_mcp_message(conn, payload)
 
 

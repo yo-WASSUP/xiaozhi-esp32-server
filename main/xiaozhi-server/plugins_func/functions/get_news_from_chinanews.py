@@ -195,7 +195,7 @@ def get_news_from_chinanews(
 
         # 否则，获取新闻列表并随机选择一条
         # 从配置中获取RSS URL
-        rss_config = conn.config["plugins"]["get_news_from_chinanews"]
+        rss_config = conn.config.get("plugins", {}).get("get_news_from_chinanews", {})
         default_rss_url = rss_config.get(
             "default_rss_url", "https://www.chinanews.com.cn/rss/society.xml"
         )

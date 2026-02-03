@@ -102,6 +102,9 @@ class OpusEncoderUtils:
     def _encode(self, frame: np.ndarray) -> Optional[bytes]:
         """编码一帧音频数据"""
         try:
+            # 编码器已释放，跳过编码
+            if not hasattr(self, 'encoder') or self.encoder is None:
+                return None
             # 将numpy数组转换为bytes
             frame_bytes = frame.tobytes()
             # opuslib要求输入字节数必须是channels*2的倍数
@@ -128,5 +131,9 @@ class OpusEncoderUtils:
 
     def close(self):
         """关闭编码器并释放资源"""
-        # opuslib没有明确的关闭方法，Python的垃圾回收会处理
-        pass
+        if hasattr(self, 'encoder') and self.encoder:
+            try:
+                del self.encoder
+                self.encoder = None
+            except Exception as e:
+                logging.error(f"Error releasing Opus encoder: {e}")

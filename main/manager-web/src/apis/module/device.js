@@ -85,4 +85,24 @@ export default {
                 });
             }).send();
     },
+    // 获取设备状态
+    getDeviceStatus(agentId, callback) {
+        RequestService.sendRequest()
+            .url(`${getServiceUrl()}/device/bind/${agentId}`)
+            .method('POST')
+            .data({}) // 发送空对象作为请求体
+            .success((res) => {
+                RequestService.clearRequestTime();
+                callback(res);
+            })
+            .fail((res) => {
+                callback(res);
+            })
+            .networkFail((err) => {
+                console.error('获取设备状态失败:', err);
+                RequestService.reAjaxFun(() => {
+                    this.getDeviceStatus(agentId, callback);
+                });
+            }).send();
+    },
 }

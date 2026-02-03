@@ -28,7 +28,7 @@ public class AgentMcpAccessPointController {
     /**
      * 获取智能体的Mcp接入点地址
      * 
-     * @param audioId 智能体id
+     * @param agentId 智能体id
      * @return 返回错误提醒或者Mcp接入点地址
      */
     @Operation(summary = "获取智能体的Mcp接入点地址")

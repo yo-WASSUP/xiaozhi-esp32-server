@@ -3,7 +3,7 @@
     custom-class="custom-dialog" :show-close="false" class="center-dialog">
     <div style="margin: 0 18px; text-align: left; padding: 10px; border-radius: 10px;">
       <div style="font-size: 30px; color: #3d4566; margin-top: -10px; margin-bottom: 10px; text-align: center;">
-        添加模型
+        {{ $t('modelConfigDialog.addModel') }}
       </div>
 
       <button class="custom-close-btn" @click="handleClose">
@@ -12,14 +12,14 @@
 
       <!-- 模型信息部分 -->
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-        <div style="font-size: 20px; font-weight: bold; color: #3d4566;">模型信息</div>
+        <div style="font-size: 20px; font-weight: bold; color: #3d4566;">{{ $t('modelConfigDialog.modelInfo') }}</div>
         <div style="display: flex; align-items: center; gap: 20px;">
           <div style="display: flex; align-items: center;">
-            <span style="margin-right: 8px;">是否启用</span>
+            <span style="margin-right: 8px;">{{ $t('modelConfigDialog.enable') }}</span>
             <el-switch v-model="formData.isEnabled" class="custom-switch"></el-switch>
           </div>
           <div style="display: none; align-items: center;">
-            <span style="margin-right: 8px;">设为默认</span>
+            <span style="margin-right: 8px;">{{ $t('modelConfigDialog.setDefault') }}</span>
             <el-switch v-model="formData.isDefault" class="custom-switch"></el-switch>
           </div>
         </div>
@@ -28,62 +28,67 @@
       <div style="height: 2px; background: #e9e9e9; margin-bottom: 22px;"></div>
       <el-form :model="formData" label-width="100px" label-position="left" class="custom-form">
         <div style="display: flex; gap: 20px; margin-bottom: 0;">
-          <el-form-item label="模型名称" prop="modelName" style="flex: 1;">
-            <el-input v-model="formData.modelName" placeholder="请输入模型名称" class="custom-input-bg"></el-input>
+          <el-form-item :label="$t('modelConfigDialog.modelId')" prop="id" style="flex: 1;">
+            <el-input v-model="formData.id" :placeholder="$t('modelConfigDialog.enterModelId')" class="custom-input-bg"
+              maxlength="32"></el-input>
           </el-form-item>
-          <el-form-item label="模型编码" prop="modelCode" style="flex: 1;">
-            <el-input v-model="formData.modelCode" placeholder="请输入模型编码" class="custom-input-bg"></el-input>
+        </div>
+        <div style="display: flex; gap: 20px; margin-bottom: 0;">
+          <el-form-item :label="$t('modelConfigDialog.modelName')" prop="modelName" style="flex: 1;">
+            <el-input v-model="formData.modelName" :placeholder="$t('modelConfigDialog.enterModelName')"
+              class="custom-input-bg"></el-input>
+          </el-form-item>
+          <el-form-item :label="$t('modelConfigDialog.modelCode')" prop="modelCode" style="flex: 1;">
+            <el-input v-model="formData.modelCode" :placeholder="$t('modelConfigDialog.enterModelCode')"
+              class="custom-input-bg"></el-input>
           </el-form-item>
         </div>
 
         <div style="display: flex; gap: 20px; margin-bottom: 0;">
-          <el-form-item label="供应器" prop="supplier" style="flex: 1;">
-            <el-select v-model="formData.supplier" placeholder="请选择" class="custom-select custom-input-bg"
-              style="width: 100%;" @focus="loadProviders" filterable>
+          <el-form-item :label="$t('modelConfigDialog.supplier')" prop="supplier" style="flex: 1;">
+            <el-select v-model="formData.supplier" :placeholder="$t('modelConfigDialog.selectSupplier')"
+              class="custom-select custom-input-bg" style="width: 100%;" @focus="loadProviders" filterable>
               <el-option v-for="item in providers" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </el-form-item>
-          <el-form-item label="排序号" prop="sortOrder" style="flex: 1;">
-            <el-input v-model="formData.sort" type="number" placeholder="请输入排序号" class="custom-input-bg"></el-input>
+          <el-form-item :label="$t('modelConfigDialog.sortOrder')" prop="sortOrder" style="flex: 1;">
+            <el-input v-model="formData.sort" type="number" :placeholder="$t('modelConfigDialog.enterSortOrder')"
+              class="custom-input-bg"></el-input>
           </el-form-item>
         </div>
 
 
-        <el-form-item label="文档地址" prop="docLink" style="margin-bottom: 27px;">
-          <el-input v-model="formData.docLink" placeholder="请输入文档地址" class="custom-input-bg"></el-input>
+        <el-form-item :label="$t('modelConfigDialog.docLink')" prop="docLink" style="margin-bottom: 27px;">
+          <el-input v-model="formData.docLink" :placeholder="$t('modelConfigDialog.enterDocLink')"
+            class="custom-input-bg"></el-input>
         </el-form-item>
 
-        <el-form-item label="备注" prop="remark" class="prop-remark">
-          <el-input v-model="formData.remark" type="textarea" :rows="3" placeholder="请输入模型备注" :autosize="{ minRows: 3, maxRows: 5 }"
+        <el-form-item :label="$t('modelConfigDialog.remark')" prop="remark" class="prop-remark">
+          <el-input v-model="formData.remark" type="textarea" :rows="3"
+            :placeholder="$t('modelConfigDialog.enterRemark')" :autosize="{ minRows: 3, maxRows: 5 }"
             class="custom-input-bg"></el-input>
         </el-form-item>
       </el-form>
 
-      <div style="font-size: 20px; font-weight: bold; color: #3d4566; margin-bottom: 15px;">调用信息</div>
+      <div style="font-size: 20px; font-weight: bold; color: #3d4566; margin-bottom: 15px;">{{
+        $t('modelConfigDialog.callInfo') }}</div>
       <div style="height: 2px; background: #e9e9e9; margin-bottom: 22px;"></div>
 
       <el-form :model="formData.configJson" label-width="auto" label-position="left" class="custom-form">
-        <template v-for="(row, rowIndex) in chunkedCallInfoFields">
-          <div :key="rowIndex" style="display: flex; gap: 20px; margin-bottom: 0;">
-            <el-form-item v-for="field in row" :key="field.prop" :label="field.label" :prop="field.prop"
-              style="flex: 1;">
-              <el-input v-model="formData.configJson[field.prop]" :placeholder="field.placeholder"
-                :type="field.type || 'text'" class="custom-input-bg" :show-password="field.type === 'password'">
-              </el-input>
-            </el-form-item>
-          </div>
-        </template>
+        <div v-for="(row, rowIndex) in chunkedCallInfoFields" :key="rowIndex"
+          style="display: flex; gap: 20px; margin-bottom: 0;">
+          <el-form-item v-for="field in row" :key="field.prop" :label="field.label" :prop="field.prop" style="flex: 1;">
+            <el-input v-model="formData.configJson[field.prop]" :placeholder="field.placeholder"
+              :type="field.type || 'text'" class="custom-input-bg" :show-password="field.type === 'password'">
+            </el-input>
+          </el-form-item>
+        </div>
       </el-form>
     </div>
 
     <div style="display: flex;justify-content: center;">
-      <el-button
-        type="primary"
-        @click="confirm"
-        class="save-btn"
-        :loading="saving"
-        :disabled="saving">
-        保存
+      <el-button type="primary" @click="confirm" class="save-btn" :loading="saving" :disabled="saving">
+        {{ $t('modelConfigDialog.save') }}
       </el-button>
     </div>
   </el-dialog>
@@ -106,6 +111,7 @@ export default {
       providerFields: [],
       currentProvider: null,
       formData: {
+        id: '',
         modelName: '',
         modelCode: '',
         supplier: '',
@@ -159,7 +165,7 @@ export default {
             label: f.label,
             prop: f.key,
             type: f.type === 'password' ? 'password' : 'text',
-            placeholder: `请输入${f.label}`
+            placeholder: `请输入${f.key}`
           }))
         }))
         this.providersLoaded = true
@@ -194,13 +200,21 @@ export default {
     confirm() {
       this.saving = true;
 
+      // 校验模型ID不能为纯文字或空格
+      if (this.formData.id && !this.validateModelId(this.formData.id)) {
+        this.$message.error(this.$t('modelConfigDialog.invalidModelId'));
+        this.saving = false;
+        return;
+      }
+
       if (!this.formData.supplier) {
-        this.$message.error('请选择供应器');
+        this.$message.error(this.$t('addModelDialog.requiredSupplier'));
         this.saving = false;
         return;
       }
 
       const submitData = {
+        id: this.formData.id || '',
         modelName: this.formData.modelName || '',
         modelCode: this.formData.modelCode || '',
         supplier: this.formData.supplier,
@@ -229,6 +243,7 @@ export default {
     resetForm() {
       this.saving = false;
       this.formData = {
+        id: '',
         modelName: '',
         modelCode: '',
         supplier: '',
@@ -246,6 +261,38 @@ export default {
       this.providerFields = [];
       this.currentProvider = null;
     },
+    
+    // 校验模型ID：不能为纯文字或空格
+    validateModelId(modelId) {
+      if (!modelId || typeof modelId !== 'string') {
+        return false;
+      }
+      
+      // 去除首尾空格
+      const trimmedId = modelId.trim();
+      
+      // 检查是否为空或纯空格
+      if (trimmedId === '') {
+        return false;
+      }
+      
+      // 检查是否只包含字母（纯文字）
+      if (/^[a-zA-Z]+$/.test(trimmedId)) {
+        return false;
+      }
+      
+      // 检查是否包含空格
+      if (/\s/.test(trimmedId)) {
+        return false;
+      }
+      
+      // 允许字母、数字、下划线、连字符
+      if (!/^[a-zA-Z0-9_-]+$/.test(trimmedId)) {
+        return false;
+      }
+      
+      return true;
+    }
   }
 }
 </script>
@@ -357,7 +404,7 @@ export default {
 
 .custom-input-bg .el-input__inner,
 .custom-input-bg .el-textarea__inner {
-  background-color: #f6f8fc;
+  background-color: #ffffff;
 }
 
 

@@ -7,7 +7,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.apache.commons.lang3.StringUtils;
@@ -36,6 +38,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import xiaozhi.common.constant.Constant;
+import xiaozhi.common.exception.ErrorCode;
 import xiaozhi.common.page.PageData;
 import xiaozhi.common.redis.RedisKeys;
 import xiaozhi.common.redis.RedisUtils;
@@ -43,8 +46,11 @@ import xiaozhi.common.utils.Result;
 import xiaozhi.common.validator.ValidatorUtils;
 import xiaozhi.modules.device.entity.OtaEntity;
 import xiaozhi.modules.device.service.OtaService;
+import xiaozhi.modules.security.user.SecurityUser;
+import xiaozhi.modules.sys.enums.SuperAdminEnum;
+import xiaozhi.modules.sys.service.SysParamsService;
 
-@Tag(name = "设备管理", description = "OTA 相关接口")
+@Tag(name = "固件升级管理", description = "OTA 相关接口")
 @Slf4j
 @RestController
 @RequiredArgsConstructor
@@ -53,6 +59,7 @@ public class OTAMagController {
     private static final Logger logger = LoggerFactory.getLogger(OTAController.class);
     private final OtaService otaService;
     private final RedisUtils redisUtils;
+    private final SysParamsService sysParamsService;
 
     @GetMapping
     @Operation(summary = "分页查询 OTA 固件信息")
@@ -145,15 +152,11 @@ public class OTAMagController {
 
         // 检查下载次数
         String downloadCountKey = RedisKeys.getOtaDownloadCountKey(uuid);
-        Integer downloadCount = (Integer) redisUtils.get(downloadCountKey);
-        if (downloadCount == null) {
-            downloadCount = 0;
-        }
+        Integer downloadCount = (Integer) Optional.ofNullable(redisUtils.get(downloadCountKey)).orElse(0);
 
         // 如果下载次数超过3次，返回404
         if (downloadCount >= 3) {
-            redisUtils.delete(downloadCountKey);
-            redisUtils.delete(RedisKeys.getOtaIdKey(uuid));
+            redisUtils.delete(List.of(downloadCountKey, RedisKeys.getOtaIdKey(uuid)));
             logger.warn("Download limit exceeded for UUID: {}", uuid);
             return ResponseEntity.notFound().build();
         }
@@ -162,7 +165,17 @@ public class OTAMagController {
 
         try {
             // 获取固件信息
-            OtaEntity otaEntity = otaService.selectById(id);
+            OtaEntity otaEntity = null;
+            if (id.indexOf("file:") == 0) {
+                id = id.substring(5);
+                otaEntity = new OtaEntity();
+                otaEntity.setFirmwarePath(id);
+                otaEntity.setType("assets");
+                otaEntity.setVersion("1.0.0");
+            } else {
+                otaEntity = otaService.selectById(id);
+            }
+
             if (otaEntity == null || StringUtils.isBlank(otaEntity.getFirmwarePath())) {
                 logger.warn("Firmware not found or path is empty for ID: {}", id);
                 return ResponseEntity.notFound().build();
@@ -170,6 +183,7 @@ public class OTAMagController {
 
             // 获取文件路径 - 确保路径是绝对路径或正确的相对路径
             String firmwarePath = otaEntity.getFirmwarePath();
+            String originalFilename = otaEntity.getType() + "_" + otaEntity.getVersion();
             Path path;
 
             // 检查是否是绝对路径
@@ -203,7 +217,7 @@ public class OTAMagController {
             byte[] fileContent = Files.readAllBytes(path);
 
             // 设置响应头
-            String originalFilename = otaEntity.getType() + "_" + otaEntity.getVersion();
+
             if (firmwarePath.contains(".")) {
                 String extension = firmwarePath.substring(firmwarePath.lastIndexOf("."));
                 originalFilename += extension;
@@ -277,6 +291,42 @@ public class OTAMagController {
         } catch (IOException | NoSuchAlgorithmException e) {
             return new Result<String>().error("文件上传失败：" + e.getMessage());
         }
+    }
+
+    @PostMapping("/uploadAssetsBin")
+    @Operation(summary = "上传资源固件文件")
+    @RequiresPermissions("sys:role:normal")
+    public Result<String> uploadAssetsBin(@RequestParam("file") MultipartFile file) {
+        String otaUrl = sysParamsService.getValue(Constant.SERVER_OTA, true);
+        if (StringUtils.isBlank(otaUrl) || otaUrl.equals("null")) {
+            return new Result<String>().error(ErrorCode.OTA_URL_EMPTY);
+        }
+        logger.info("username:{},uploadAssetsBin size: {}", SecurityUser.getUser().getUsername(), file.getSize());
+        // 验证文件大小 (资源固件最大20MB)
+        if (file.getSize() > 20 * 1024 * 1024) {
+            return new Result<String>().error(ErrorCode.VOICE_CLONE_AUDIO_TOO_LARGE);
+        }
+        // 普通用户只能每天上传50次
+        if (SecurityUser.getUser().getSuperAdmin() == SuperAdminEnum.NO.value()) {
+            String uploadCountKey = RedisKeys.getOtaUploadCountKey(SecurityUser.getUser().getId());
+            Integer uploadCount = (Integer) Optional.ofNullable(redisUtils.get(uploadCountKey)).orElse(0);
+            if (uploadCount >= 50) {
+                return new Result<String>().error(ErrorCode.OTA_UPLOAD_COUNT_EXCEED);
+            }
+            // 增加上传次数
+            redisUtils.increment(RedisKeys.getOtaUploadCountKey(SecurityUser.getUser().getId()),
+                    RedisUtils.DEFAULT_EXPIRE);
+        }
+        Result<String> result = uploadFirmware(file);
+
+        // 生成资源文件路径
+        if (StringUtils.isNotBlank(result.getData())) {
+            String uuid = UUID.randomUUID().toString();
+            redisUtils.set(RedisKeys.getOtaIdKey(uuid), "file:" + result.getData());
+            String downloadUrl = otaUrl.replace("/ota/", "/otaMag/download/") + uuid;
+            result.setData(downloadUrl);
+        }
+        return result;
     }
 
     private String calculateMD5(MultipartFile file) throws IOException, NoSuchAlgorithmException {

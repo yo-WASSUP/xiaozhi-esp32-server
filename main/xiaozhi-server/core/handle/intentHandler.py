@@ -91,6 +91,30 @@ async def process_intent_result(conn, intent_result, original_text):
             if function_name == "continue_chat":
                 return False
 
+            if function_name == "result_for_context":
+                await send_stt_message(conn, original_text)
+                conn.client_abort = False
+                
+                def process_context_result():
+                    conn.dialogue.put(Message(role="user", content=original_text))
+                    
+                    from core.utils.current_time import get_current_time_info
+
+                    current_time, today_date, today_weekday, lunar_date = get_current_time_info()
+                    
+                    # 构建带上下文的基础提示
+                    context_prompt = f"""当前时间：{current_time}
+                                        今天日期：{today_date} ({today_weekday})
+                                        今天农历：{lunar_date}
+
+                                        请根据以上信息回答用户的问题：{original_text}"""
+                    
+                    response = conn.intent.replyResult(context_prompt, original_text)
+                    speak_txt(conn, response)
+                
+                conn.executor.submit(process_context_result)
+                return True
+
             function_args = {}
             if "arguments" in intent_data["function_call"]:
                 function_args = intent_data["function_call"]["arguments"]
@@ -165,6 +189,9 @@ async def process_intent_result(conn, intent_result, original_text):
 
 
 def speak_txt(conn, text):
+    # 记录文本
+    conn.tts_MessageText = text
+
     conn.tts.tts_text_queue.put(
         TTSMessageDTO(
             sentence_id=conn.sentence_id,

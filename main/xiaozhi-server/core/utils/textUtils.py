@@ -2,7 +2,7 @@ import json
 
 TAG = __name__
 EMOJI_MAP = {
-    "😂": "laughing",
+    "😂": "funny",
     "😭": "crying",
     "😠": "angry",
     "😔": "sad",

@@ -43,7 +43,7 @@ public class SwaggerConfig {
     public GroupedOpenApi oatApi() {
         return GroupedOpenApi.builder()
                 .group("ota")
-                .pathsToMatch("/ota/**")
+                .pathsToMatch("/ota/**", "/otaMag/**")
                 .build();
     }
 

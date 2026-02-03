@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -17,12 +18,15 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import xiaozhi.common.constant.Constant;
 import xiaozhi.common.exception.ErrorCode;
 import xiaozhi.common.exception.RenException;
 import xiaozhi.common.page.TokenDTO;
 import xiaozhi.common.user.UserDetail;
+import xiaozhi.common.utils.JsonUtils;
 import xiaozhi.common.utils.Result;
+import xiaozhi.common.utils.Sm2DecryptUtil;
 import xiaozhi.common.validator.AssertUtils;
 import xiaozhi.common.validator.ValidatorUtils;
 import xiaozhi.modules.security.dto.LoginDTO;
@@ -42,6 +46,7 @@ import xiaozhi.modules.sys.vo.SysDictDataItem;
 /**
  * 登录控制层
  */
+@Slf4j
 @AllArgsConstructor
 @RestController
 @RequestMapping("/user")
@@ -66,14 +71,15 @@ public class LoginController {
     @Operation(summary = "短信验证码")
     public Result<Void> smsVerification(@RequestBody SmsVerificationDTO dto) {
         // 验证图形验证码
-        boolean validate = captchaService.validate(dto.getCaptchaId(), dto.getCaptcha(), true);
+        boolean validate = captchaService.validate(dto.getCaptchaId(), dto.getCaptcha(), false);
         if (!validate) {
-            throw new RenException("图形验证码错误");
+            throw new RenException(ErrorCode.SMS_CAPTCHA_ERROR);
         }
+
         Boolean isMobileRegister = sysParamsService
                 .getValueObject(Constant.SysMSMParam.SERVER_ENABLE_MOBILE_REGISTER.getValue(), Boolean.class);
         if (!isMobileRegister) {
-            throw new RenException("没有开启手机注册，没法使用短信验证码功能");
+            throw new RenException(ErrorCode.MOBILE_REGISTER_DISABLED);
         }
         // 发送短信验证码
         captchaService.sendSMSValidateCode(dto.getPhone());
@@ -83,20 +89,23 @@ public class LoginController {
     @PostMapping("/login")
     @Operation(summary = "登录")
     public Result<TokenDTO> login(@RequestBody LoginDTO login) {
-        // 验证是否正确输入验证码
-        boolean validate = captchaService.validate(login.getCaptchaId(), login.getCaptcha(), true);
-        if (!validate) {
-            throw new RenException("图形验证码错误，请重新获取");
-        }
+        String password = login.getPassword();
+
+        // 使用工具类解密并验证验证码
+        String actualPassword = Sm2DecryptUtil.decryptAndValidateCaptcha(
+                password, login.getCaptchaId(), captchaService, sysParamsService);
+
+        login.setPassword(actualPassword);
+
         // 按照用户名获取用户
         SysUserDTO userDTO = sysUserService.getByUsername(login.getUsername());
         // 判断用户是否存在
         if (userDTO == null) {
-            throw new RenException("请检测用户和密码是否输入错误");
+            throw new RenException(ErrorCode.ACCOUNT_PASSWORD_ERROR);
         }
         // 判断密码是否正确，不一样则进入if
         if (!PasswordUtils.matches(login.getPassword(), userDTO.getPassword())) {
-            throw new RenException("请检测用户和密码是否输入错误");
+            throw new RenException(ErrorCode.ACCOUNT_PASSWORD_ERROR);
         }
         return sysUserTokenService.createToken(userDTO.getId());
     }
@@ -105,8 +114,17 @@ public class LoginController {
     @Operation(summary = "注册")
     public Result<Void> register(@RequestBody LoginDTO login) {
         if (!sysUserService.getAllowUserRegister()) {
-            throw new RenException("当前不允许普通用户注册");
+            throw new RenException(ErrorCode.USER_REGISTER_DISABLED);
         }
+
+        String password = login.getPassword();
+
+        // 使用工具类解密并验证验证码
+        String actualPassword = Sm2DecryptUtil.decryptAndValidateCaptcha(
+                password, login.getCaptchaId(), captchaService, sysParamsService);
+
+        login.setPassword(actualPassword);
+
         // 是否开启手机注册
         Boolean isMobileRegister = sysParamsService
                 .getValueObject(Constant.SysMSMParam.SERVER_ENABLE_MOBILE_REGISTER.getValue(), Boolean.class);
@@ -115,25 +133,19 @@ public class LoginController {
             // 验证用户是否是手机号码
             boolean validPhone = ValidatorUtils.isValidPhone(login.getUsername());
             if (!validPhone) {
-                throw new RenException("用户名不是手机号码，请重新输入");
+                throw new RenException(ErrorCode.USERNAME_NOT_PHONE);
             }
             // 验证短信验证码是否正常
             validate = captchaService.validateSMSValidateCode(login.getUsername(), login.getMobileCaptcha(), false);
             if (!validate) {
-                throw new RenException("手机验证码错误，请重新获取");
-            }
-        } else {
-            // 验证是否正确输入验证码
-            validate = captchaService.validate(login.getCaptchaId(), login.getCaptcha(), true);
-            if (!validate) {
-                throw new RenException("图形验证码错误，请重新获取");
+                throw new RenException(ErrorCode.SMS_CODE_ERROR);
             }
         }
 
         // 按照用户名获取用户
         SysUserDTO userDTO = sysUserService.getByUsername(login.getUsername());
         if (userDTO != null) {
-            throw new RenException("此手机号码已经注册过");
+            throw new RenException(ErrorCode.PHONE_ALREADY_REGISTERED);
         }
         userDTO = new SysUserDTO();
         userDTO.setUsername(login.getUsername());
@@ -168,27 +180,35 @@ public class LoginController {
         Boolean isMobileRegister = sysParamsService
                 .getValueObject(Constant.SysMSMParam.SERVER_ENABLE_MOBILE_REGISTER.getValue(), Boolean.class);
         if (!isMobileRegister) {
-            throw new RenException("没有开启手机注册，没法使用找回密码功能");
+            throw new RenException(ErrorCode.RETRIEVE_PASSWORD_DISABLED);
         }
         // 判断非空
         ValidatorUtils.validateEntity(dto);
         // 验证用户是否是手机号码
         boolean validPhone = ValidatorUtils.isValidPhone(dto.getPhone());
         if (!validPhone) {
-            throw new RenException("输入的手机号码格式不正确");
+            throw new RenException(ErrorCode.PHONE_FORMAT_ERROR);
         }
 
         // 按照用户名获取用户
         SysUserDTO userDTO = sysUserService.getByUsername(dto.getPhone());
         if (userDTO == null) {
-            throw new RenException("输入的手机号码未注册");
+            throw new RenException(ErrorCode.PHONE_NOT_REGISTERED);
         }
         // 验证短信验证码是否正常
         boolean validate = captchaService.validateSMSValidateCode(dto.getPhone(), dto.getCode(), false);
         // 判断是否通过验证
         if (!validate) {
-            throw new RenException("输入的手机验证码错误");
+            throw new RenException(ErrorCode.SMS_CODE_ERROR);
         }
+
+        String password = dto.getPassword();
+
+        // 使用工具类解密并验证验证码
+        String actualPassword = Sm2DecryptUtil.decryptAndValidateCaptcha(
+                password, dto.getCaptchaId(), captchaService, sysParamsService);
+
+        dto.setPassword(actualPassword);
 
         sysUserService.changePasswordDirectly(userDTO.getId(), dto.getPassword());
         return new Result<>();
@@ -208,6 +228,19 @@ public class LoginController {
         config.put("beianIcpNum", sysParamsService.getValue(Constant.SysBaseParam.BEIAN_ICP_NUM.getValue(), true));
         config.put("beianGaNum", sysParamsService.getValue(Constant.SysBaseParam.BEIAN_GA_NUM.getValue(), true));
         config.put("name", sysParamsService.getValue(Constant.SysBaseParam.SERVER_NAME.getValue(), true));
+
+        // SM2公钥
+        String publicKey = sysParamsService.getValue(Constant.SM2_PUBLIC_KEY, true);
+        if (StringUtils.isBlank(publicKey)) {
+            throw new RenException(ErrorCode.SM2_KEY_NOT_CONFIGURED);
+        }
+        config.put("sm2PublicKey", publicKey);
+
+        // 获取system-web.menu参数配置
+        String menuConfig = sysParamsService.getValue("system-web.menu", true);
+        if (StringUtils.isNotBlank(menuConfig)) {
+            config.put("systemWebMenu", JsonUtils.parseObject(menuConfig, Object.class));
+        }
 
         return new Result<Map<String, Object>>().ok(config);
     }

@@ -15,4 +15,23 @@
         FROM sys_dict_type
         WHERE id = #{dictTypeId}
     </select>
+
+    <select id="getDictTypesByIdList" resultType="java.lang.String">
+        SELECT
+            dict_type
+        FROM
+            sys_dict_type
+        WHERE
+            id IN (
+                SELECT
+                    dict_type_id
+                FROM
+                    sys_dict_data
+                WHERE
+                    id IN
+                <foreach collection="dictDataIdList" item="id" open="(" separator="," close=")">
+                    #{id}
+                </foreach>
+                )
+    </select>
 </mapper>

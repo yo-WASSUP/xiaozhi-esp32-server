@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.apache.ibatis.annotations.Mapper;
 
+import org.apache.ibatis.annotations.Param;
 import xiaozhi.common.dao.BaseDao;
 import xiaozhi.modules.sys.entity.SysDictDataEntity;
 import xiaozhi.modules.sys.vo.SysDictDataItem;
@@ -23,4 +24,9 @@ public interface SysDictDataDao extends BaseDao<SysDictDataEntity> {
      * @return 字典类型编码
      */
     String getTypeByTypeId(Long dictTypeId);
+
+    /**
+     * 根据字典数据ID集合获取字典类型编码集合
+     */
+    List<String> getDictTypesByIdList(@Param("dictDataIdList") List<Long> dictDataIdList);
 }

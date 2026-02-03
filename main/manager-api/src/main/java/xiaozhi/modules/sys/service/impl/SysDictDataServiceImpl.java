@@ -1,9 +1,6 @@
 package xiaozhi.modules.sys.service.impl;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -17,11 +14,13 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 
 import lombok.AllArgsConstructor;
 import xiaozhi.common.exception.RenException;
+import xiaozhi.common.exception.ErrorCode;
 import xiaozhi.common.page.PageData;
 import xiaozhi.common.redis.RedisKeys;
 import xiaozhi.common.redis.RedisUtils;
 import xiaozhi.common.service.impl.BaseServiceImpl;
 import xiaozhi.common.utils.ConvertUtils;
+import xiaozhi.common.utils.ToolUtil;
 import xiaozhi.modules.sys.dao.SysDictDataDao;
 import xiaozhi.modules.sys.dao.SysUserDao;
 import xiaozhi.modules.sys.dto.SysDictDataDTO;
@@ -103,13 +102,19 @@ public class SysDictDataServiceImpl extends BaseServiceImpl<SysDictDataDao, SysD
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long[] ids) {
-        for (Long id : ids) {
-            SysDictDataEntity entity = baseDao.selectById(id);
-            // 删除Redis缓存
-            String dictType = baseDao.getTypeByTypeId(entity.getDictTypeId());
-            redisUtils.delete(RedisKeys.getDictDataByTypeKey(dictType));
-            // 删除
-            deleteById(id);
+        List<Long> idList = Arrays.asList(ids);
+        if (ToolUtil.isNotEmpty(idList)) {
+            //批量删除redis字典
+            List<String> redisKeyList = new ArrayList<>();
+            //批量获取字典类型
+            List<String> dictTypeList = Optional.ofNullable(baseDao.getDictTypesByIdList(idList)).orElseGet(ArrayList::new);
+            dictTypeList.forEach(dictType -> redisKeyList.add(RedisKeys.getDictDataByTypeKey(dictType)));
+            if (ToolUtil.isNotEmpty(redisKeyList)) {
+                //清除缓存
+                redisUtils.delete(redisKeyList);
+            }
+            //批量删除字典数据
+            deleteBatchIds(Arrays.asList(ids));
         }
     }
 
@@ -153,7 +158,7 @@ public class SysDictDataServiceImpl extends BaseServiceImpl<SysDictDataDao, SysD
         }
         boolean exists = baseDao.exists(queryWrapper);
         if (exists) {
-            throw new RenException("字典标签重复");
+            throw new RenException(ErrorCode.DICT_LABEL_DUPLICATE);
         }
     }
 
