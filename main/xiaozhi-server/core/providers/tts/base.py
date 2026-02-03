@@ -77,8 +77,12 @@ class TTSProviderBase(ABC):
         )
 
     def handle_opus(self, opus_data: bytes):
-        logger.bind(tag=TAG).debug(f"推送数据到队列里面帧数～～ {len(opus_data)}")
-        self.tts_audio_queue.put((SentenceType.MIDDLE, opus_data, None))
+        # logger.bind(tag=TAG).debug(
+        #     f"推送数据到队列里面帧数～～ {len(opus_data)}"
+        # )
+        self.tts_audio_queue.put(
+            (SentenceType.MIDDLE, opus_data, None)
+        )
 
     def handle_audio_file(self, file_audio: bytes, text):
         self.before_stop_play_files.append((file_audio, text))
@@ -287,6 +291,11 @@ class TTSProviderBase(ABC):
                     logger.bind(tag=TAG).info("收到打断信息，终止TTS文本处理线程")
                     continue
                 if message.sentence_type == SentenceType.FIRST:
+                    # 记录从文本触发到首包音频就绪的起始时间
+                    try:
+                        self._tts_first_audio_start_ts = time.time()
+                    except Exception:
+                        self._tts_first_audio_start_ts = None
                     # 初始化参数
                     self.tts_stop_request = False
                     self.processed_chars = 0
@@ -348,8 +357,20 @@ class TTSProviderBase(ABC):
                     enqueue_audio = []
                     enqueue_text = text
 
-                # 收集上报音频数据
-                if isinstance(audio_datas, bytes) and enqueue_audio is not None:
+                    # 首包就绪耗时（当收到FIRST时记录）
+                    if sentence_type == SentenceType.FIRST and getattr(self, "_tts_first_audio_start_ts", None):
+                        try:
+                            first_ms = (time.time() - self._tts_first_audio_start_ts) * 1000
+                            preview = (text or "")[:10]
+                            logger.bind(tag=TAG).debug(
+                                f"TTS首包就绪: {first_ms:.2f}ms - 文本: {preview}..."
+                            )
+                        except Exception:
+                            pass
+
+                # 计算音频数据的帧数
+                if isinstance(audio_datas, bytes):
+                    frame_count = 1  # 单个字节流作为一帧
                     enqueue_audio.append(audio_datas)
 
                 # 发送音频

@@ -839,6 +839,10 @@ class ConnectionHandler:
         response_message = []
 
         try:
+            # LLM 调用性能日志（普通聊天）
+            model_info = getattr(self.llm, "model_name", self.llm.__class__.__name__)
+            llm_total_start = time.time()
+            self.logger.bind(tag=TAG).debug(f"开始LLM对话调用, 模型: {model_info}")
             # 使用带记忆的对话
             memory_str = None
             if self.memory is not None:
@@ -874,6 +878,19 @@ class ConnectionHandler:
         content_arguments = ""
         self.client_abort = False
         emotion_flag = True
+        first_token_ms = None
+        for response in llm_responses:
+            if first_token_ms is None:
+                first_token_ms = (time.time() - llm_total_start) * 1000
+            if self.client_abort:
+                break
+            if self.intent_type == "function_call" and functions is not None:
+                content, tools_call = response
+                if "content" in response:
+                    content = response["content"]
+                    tools_call = None
+                if content is not None and len(content) > 0:
+                    content_arguments += content
         try:
             for response in llm_responses:
                 if self.client_abort:
@@ -1006,6 +1023,18 @@ class ConnectionHandler:
             text_buff = "".join(response_message)
             self.tts_MessageText = text_buff
             self.dialogue.put(Message(role="assistant", content=text_buff))
+        # LLM 调用总耗时日志
+        llm_total_ms = (time.time() - llm_total_start) * 1000
+        try:
+            preview = (query or "")[:20]
+        except Exception:
+            preview = ""
+        if first_token_ms is None:
+            # 无流数据也记录总耗时
+            first_token_ms = llm_total_ms
+        self.logger.bind(tag=TAG).debug(
+            f"【LLM聊天性能】模型: {model_info}, 首包: {first_token_ms:.2f}ms, 总耗时: {llm_total_ms:.2f}ms, 输入: '{preview}...'"
+        )
         if depth == 0:
             self.tts.tts_text_queue.put(
                 TTSMessageDTO(

@@ -3,7 +3,11 @@
 from typing import Dict, Any
 from ..base import ToolType, ToolDefinition, ToolExecutor
 from plugins_func.register import all_function_registry, Action, ActionResponse
+from config.logger import setup_logging
 
+TAG = __name__
+logger = setup_logging()
+logger.bind(tag=TAG)
 
 class ServerPluginExecutor(ToolExecutor):
     """服务端插件工具执行器"""
@@ -59,12 +63,8 @@ class ServerPluginExecutor(ToolExecutor):
         config_functions = intent_config.get("functions", [])
         
         # 添加调试日志
-        from config.logger import setup_logging
-        logger = setup_logging()
-        logger.info(f"DEBUG: 当前Intent模块: {selected_intent_module}")
-        logger.info(f"DEBUG: Intent配置: {intent_config}")
-        logger.info(f"DEBUG: 配置的函数列表: {config_functions}")
-        logger.info(f"DEBUG: ros2_robot_move是否在列表中: {'ros2_robot_move' in config_functions}")
+        logger.debug(f"DEBUG: 当前Intent模块: {selected_intent_module}")
+        logger.debug(f"DEBUG: Intent配置: {intent_config}")
 
         # 转换为列表
         if not isinstance(config_functions, list):
