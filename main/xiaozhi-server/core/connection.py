@@ -853,19 +853,31 @@ class ConnectionHandler:
 
             if self.intent_type == "function_call" and functions is not None:
                 # 使用支持functions的streaming接口
+                dialogue_data = self.dialogue.get_llm_dialogue_with_memory(
+                    memory_str, self.config.get("voiceprint", {})
+                )
+                # 计算输入文字长度
+                import json
+                dialogue_chars = sum(len(str(msg.get("content", ""))) for msg in dialogue_data)
+                functions_chars = len(json.dumps(functions, ensure_ascii=False))
+                self.logger.bind(tag=TAG).info(
+                    f"【性能】LLM输入 - 对话: {dialogue_chars}字, 函数定义: {functions_chars}字, "
+                    f"函数数量: {len(functions)}, 总计: {dialogue_chars + functions_chars}字"
+                )
                 llm_responses = self.llm.response_with_functions(
                     self.session_id,
-                    self.dialogue.get_llm_dialogue_with_memory(
-                        memory_str, self.config.get("voiceprint", {})
-                    ),
+                    dialogue_data,
                     functions=functions,
                 )
             else:
+                dialogue_data = self.dialogue.get_llm_dialogue_with_memory(
+                    memory_str, self.config.get("voiceprint", {})
+                )
+                dialogue_chars = sum(len(str(msg.get("content", ""))) for msg in dialogue_data)
+                self.logger.bind(tag=TAG).info(f"【性能】LLM输入 - 对话: {dialogue_chars}字")
                 llm_responses = self.llm.response(
                     self.session_id,
-                    self.dialogue.get_llm_dialogue_with_memory(
-                        memory_str, self.config.get("voiceprint", {})
-                    ),
+                    dialogue_data,
                 )
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"LLM 处理出错 {query}: {e}")
@@ -879,20 +891,12 @@ class ConnectionHandler:
         self.client_abort = False
         emotion_flag = True
         first_token_ms = None
-        for response in llm_responses:
-            if first_token_ms is None:
-                first_token_ms = (time.time() - llm_total_start) * 1000
-            if self.client_abort:
-                break
-            if self.intent_type == "function_call" and functions is not None:
-                content, tools_call = response
-                if "content" in response:
-                    content = response["content"]
-                    tools_call = None
-                if content is not None and len(content) > 0:
-                    content_arguments += content
+        self.llm_first_token_time = None  # 用于TTS延迟计算
         try:
             for response in llm_responses:
+                if first_token_ms is None:
+                    first_token_ms = (time.time() - llm_total_start) * 1000
+                    self.llm_first_token_time = time.time()  # 记录LLM首包绝对时间
                 if self.client_abort:
                     break
                 if self.intent_type == "function_call" and functions is not None:

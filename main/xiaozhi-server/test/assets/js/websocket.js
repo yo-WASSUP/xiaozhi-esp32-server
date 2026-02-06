@@ -2,6 +2,8 @@
 
 // 全局WebSocket变量
 let websocket = null;
+// OTA返回的token
+let otaToken = null;
 
 // 连接状态管理
 const connectionStatus = {
@@ -51,10 +53,14 @@ async function connectToServer() {
 
         // 创建URL对象用于添加参数
         const connUrl = new URL(url);
-        
+
         // 添加认证参数
         connUrl.searchParams.append('device-id', config.deviceId);
         connUrl.searchParams.append('client-id', config.clientId);
+        // 添加authorization参数（使用OTA token）
+        if (otaToken) {
+            connUrl.searchParams.append('authorization', `Bearer ${otaToken}`);
+        }
 
         utils.log(`正在连接: ${connUrl.toString()}`, 'info');
         websocket = new WebSocket(connUrl.toString());
@@ -310,6 +316,9 @@ async function sendHelloMessage() {
     try {
         const config = window.config.getConfig();
 
+        // 使用OTA返回的token，如果没有则使用配置中的token
+        const tokenToUse = otaToken || config.token;
+
         // 设置设备信息
         const helloMessage = {
             type: 'hello',
@@ -317,7 +326,7 @@ async function sendHelloMessage() {
             device_name: config.deviceName,
             device_mac: config.deviceMac,
             client_id: config.clientId,
-            token: config.token,
+            token: tokenToUse,
             version: "0.0.1",
             capabilities: {
                 audio: true,
@@ -452,6 +461,18 @@ async function checkOTAStatus(config) {
 
         const otaResult = await otaResponse.json();
         utils.log(`OTA检查结果: ${JSON.stringify(otaResult)}`, 'info');
+
+        // 保存OTA返回的token
+        if (otaResult.websocket && otaResult.websocket.token) {
+            otaToken = otaResult.websocket.token;
+            utils.log(`已获取OTA token: ${otaToken}`, 'success');
+        }
+
+        // 更新WebSocket URL（如果OTA返回了）
+        if (otaResult.websocket && otaResult.websocket.url) {
+            const serverUrlInput = document.getElementById('serverUrl');
+            serverUrlInput.value = otaResult.websocket.url;
+        }
 
         utils.log('OTA检查通过', 'success');
         connectionStatus.updateOTA('ota已连接', 'green');

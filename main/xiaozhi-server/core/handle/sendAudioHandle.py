@@ -15,6 +15,10 @@ PRE_BUFFER_COUNT = 5
 
 async def sendAudioMessage(conn, sentenceType, audios, text):
     if conn.tts.tts_audio_first_sentence:
+        # 计算从LLM首包到TTS首音的耗时
+        if hasattr(conn, 'llm_first_token_time') and conn.llm_first_token_time:
+            tts_latency = (time.time() - conn.llm_first_token_time) * 1000
+            conn.logger.bind(tag=TAG).info(f"【性能】TTS首音延迟: {tts_latency:.0f}ms (从LLM首包到TTS播放)")
         conn.logger.bind(tag=TAG).info(f"发送第一段语音: {text}")
         conn.tts.tts_audio_first_sentence = False
         await send_tts_message(conn, "start", None)

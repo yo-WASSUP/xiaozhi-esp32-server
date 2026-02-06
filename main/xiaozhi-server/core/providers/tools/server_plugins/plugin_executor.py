@@ -54,8 +54,9 @@ class ServerPluginExecutor(ToolExecutor):
         """获取所有注册的服务端插件工具"""
         tools = {}
 
-        # 获取必要的函数
-        necessary_functions = ["handle_exit_intent", "get_lunar"]
+        # 获取必要的函数 (精简模式：移除默认函数以减少LLM延迟)
+        # necessary_functions = ["handle_exit_intent", "get_lunar"]
+        necessary_functions = []
 
         # 获取配置中的函数
         selected_intent_module = self.config["selected_module"]["Intent"]

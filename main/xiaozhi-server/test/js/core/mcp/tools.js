@@ -398,6 +398,12 @@ export function executeMcpTool(toolName, toolArgs) {
         log(`未找到工具: ${toolName}`, 'error');
         return { success: false, error: `未知工具: ${toolName}` };
     }
+
+    // 特殊处理 ROS2 执行工具
+    if (toolName === 'ros2_execute') {
+        return executeRos2Command(toolArgs);
+    }
+
     // 如果有模拟返回结果，使用它
     if (tool.mockResponse) {
         // 替换模板变量
@@ -421,6 +427,65 @@ export function executeMcpTool(toolName, toolArgs) {
     // 没有模拟返回结果，返回默认成功消息
     log(`工具 ${toolName} 执行成功，返回默认结果`, 'success');
     return { success: true, message: `工具 ${toolName} 执行成功`, tool: toolName, arguments: toolArgs };
+}
+
+/**
+ * 执行 ROS2 机器人控制命令
+ */
+function executeRos2Command(args) {
+    const ROS2_EXECUTOR_URL = 'http://localhost:3001';
+    const { direction, speed = 0.5, duration = 2 } = args || {};
+
+    if (!direction) {
+        log('ROS2 命令缺少 direction 参数', 'error');
+        return { action: 'RESPONSE', response: '缺少方向参数' };
+    }
+
+    // 根据方向计算速度
+    let linear_x = 0.0, angular_z = 0.0;
+    switch (direction) {
+        case '前进': linear_x = speed; break;
+        case '后退': linear_x = -speed; break;
+        case '左转': angular_z = speed; break;
+        case '右转': angular_z = -speed; break;
+        case '停止': break;
+        default:
+            log(`不支持的方向: ${direction}`, 'error');
+            return { action: 'RESPONSE', response: `不支持的方向: ${direction}` };
+    }
+
+    // 构建 ROS2 命令
+    const twist_msg = {
+        linear: { x: linear_x, y: 0.0, z: 0.0 },
+        angular: { x: 0.0, y: 0.0, z: angular_z }
+    };
+    const command = `ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist '${JSON.stringify(twist_msg)}'`;
+
+    log(`执行 ROS2 命令: ${command}`, 'info');
+
+    // 异步调用 ROS2 执行服务
+    fetch(`${ROS2_EXECUTOR_URL}/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            log(`ROS2 命令执行成功: 机器人${direction}`, 'success');
+        } else {
+            log(`ROS2 命令执行失败: ${result.error}`, 'error');
+        }
+    })
+    .catch(error => {
+        log(`ROS2 执行服务连接失败: ${error.message}`, 'error');
+    });
+
+    // 同步返回确认消息
+    return {
+        action: 'RESPONSE',
+        response: direction === '停止' ? '好的，机器人已停止' : `好的，机器人正在${direction}`
+    };
 }
 
 // 暴露全局方法供 HTML 内联事件调用

@@ -184,3 +184,8 @@ uploadfile
 !main/manager-mobile/**/.env*
 !main/manager-mobile/**/*.json
 !main/xiaozhi-server/**/*.json
+
+
+# Ignore ros2_server specific files
+main/xiaozhi-server/test/ros2_server/node_modules/
+main/xiaozhi-server/test/ros2_server/package-lock.json

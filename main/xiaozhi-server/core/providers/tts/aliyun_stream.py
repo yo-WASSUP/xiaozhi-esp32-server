@@ -74,14 +74,27 @@ class AccessToken:
 
         import requests
 
-        response = requests.get(full_url)
-        if response.ok:
-            root_obj = response.json()
-            key = "Token"
-            if key in root_obj:
-                token = root_obj[key]["Id"]
-                expire_time = root_obj[key]["ExpireTime"]
-                return token, expire_time
+        try:
+            response = requests.get(full_url, timeout=10)
+            logger.bind(tag=TAG).debug(f"Token请求状态码: {response.status_code}")
+
+            if response.ok:
+                root_obj = response.json()
+                key = "Token"
+                if key in root_obj:
+                    token = root_obj[key]["Id"]
+                    expire_time = root_obj[key]["ExpireTime"]
+                    return token, expire_time
+                else:
+                    # 可能是错误响应
+                    logger.bind(tag=TAG).error(f"Token响应缺少Token字段: {root_obj}")
+            else:
+                logger.bind(tag=TAG).error(f"Token请求失败: HTTP {response.status_code}, 响应: {response.text}")
+        except requests.exceptions.RequestException as e:
+            logger.bind(tag=TAG).error(f"Token请求异常: {str(e)}")
+        except Exception as e:
+            logger.bind(tag=TAG).error(f"Token解析异常: {str(e)}")
+
         return None, None
 
 

@@ -36,6 +36,9 @@ class ToolManager:
         for tool_type, executor in self.executors.items():
             try:
                 tools = executor.get_tools()
+                tool_names = list(tools.keys())
+                if tool_names:
+                    self.logger.info(f"【工具来源】{tool_type.value}: {len(tools)}个 - {tool_names}")
                 for name, definition in tools.items():
                     if name in all_tools:
                         self.logger.warning(f"工具名称冲突: {name}")
