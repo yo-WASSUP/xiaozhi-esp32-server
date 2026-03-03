@@ -24,8 +24,12 @@ except ImportError:
     dashscope = None
 
 class BaseASRTester:
+    _shared_config = None
+
     def __init__(self, config_key: str):
-        self.config = load_config()
+        if BaseASRTester._shared_config is None:
+            BaseASRTester._shared_config = load_config()
+        self.config = BaseASRTester._shared_config
         self.config_key = config_key
         self.asr_config = self.config.get("ASR", {}).get(config_key, {})
         self.test_audio_files = self._load_test_audio_files()
@@ -484,10 +488,26 @@ async def main():
     suite = ASRPerformanceSuite()
     suite.register_tester(DoubaoStreamASRTester)
     suite.register_tester(QwenASRFlashTester)
-    suite.register_tester(XunfeiStreamASRTester)
+    # suite.register_tester(XunfeiStreamASRTester)
 
     await suite.run(args.count)
 
 
 if __name__ == "__main__":
+    import yaml
+    # 在事件循环启动前加载配置，避免嵌套 asyncio.run() 死锁
+    BaseASRTester._shared_config = load_config()
+    # 从本地 data/.config.yaml 补充 ASR 配置（API模式下可能缺少性能测试用的ASR配置）
+    local_config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", ".config.yaml")
+    if os.path.exists(local_config_path):
+        with open(local_config_path, 'r', encoding='utf-8') as f:
+            local_config = yaml.safe_load(f) or {}
+        local_asr = local_config.get("ASR", {})
+        if local_asr:
+            api_asr = BaseASRTester._shared_config.setdefault("ASR", {})
+            for key, value in local_asr.items():
+                if key not in api_asr:
+                    api_asr[key] = value
+    asr_cfg = BaseASRTester._shared_config.get("ASR", {})
+    print(f"已加载的ASR配置项: {list(asr_cfg.keys())}")
     asyncio.run(main())

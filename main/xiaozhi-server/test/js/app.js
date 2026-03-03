@@ -24,18 +24,23 @@ class App {
         checkOpusLoaded();
         // 初始化Opus编码器
         initOpusEncoder();
-        // 初始化音频播放器
-        this.audioPlayer = getAudioPlayer();
-        await this.audioPlayer.start();
-        // 初始化MCP工具
-        initMcpTools();
-        // 检查麦克风可用性
-        await this.checkMicrophoneAvailability();
-        // 初始化Live2D
-        await this.initLive2D();
-        // 关闭加载loading
-        this.setModelLoadingStatus(false);
-        log('应用初始化完成', 'success');
+        try {
+            // 初始化音频播放器
+            this.audioPlayer = getAudioPlayer();
+            await this.audioPlayer.start();
+            // 初始化MCP工具
+            initMcpTools();
+            // 检查麦克风可用性
+            await this.checkMicrophoneAvailability();
+            // 初始化Live2D
+            await this.initLive2D();
+            log('应用初始化完成', 'success');
+        } catch (error) {
+            log(`初始化过程出错: ${error.message}`, 'error');
+        } finally {
+            // 无论成功失败都关闭loading
+            this.setModelLoadingStatus(false);
+        }
     }
 
     // 初始化Live2D
