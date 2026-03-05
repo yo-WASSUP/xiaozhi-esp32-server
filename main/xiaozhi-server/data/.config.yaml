@@ -1,0 +1,63 @@
+# 纯本地配置，不依赖智控台（manager-api）
+# 只需要修改下面你实际使用的模块配置即可
+
+server:
+  ip: 0.0.0.0
+  port: 8000
+  http_port: 8003
+
+# ========== 选择各模块的实现 ==========
+# 改这里的名字就能切换不同的服务提供商
+# 名字对应下面各模块配置段的 key
+selected_module:
+  VAD: SileroVAD
+  ASR: FunASR
+  LLM: OllamaLLM        # 本地 Ollama，延迟最低
+  # LLM: ChatGLMLLM      # 智谱 GLM-4-Flash，免费
+  # LLM: DeepSeekLLM     # DeepSeek
+  TTS: EdgeTTS            # 微软 Edge TTS，免费
+  Memory: nomem
+  Intent: function_call
+
+# ========== 系统提示词 ==========
+prompt: |
+  你是小智，一个智能语音助手。说话简洁活泼，回复不超过50字。
+
+# ========== LLM 配置 ==========
+LLM:
+  OllamaLLM:
+    type: ollama
+    base_url: http://localhost:11434
+    model_name: qwen3:8b
+
+  ChatGLMLLM:
+    type: openai
+    model_name: glm-4-flash
+    url: https://open.bigmodel.cn/api/paas/v4/
+    api_key: 你的智谱API密钥
+
+  DeepSeekLLM:
+    type: openai
+    model_name: deepseek-chat
+    url: https://api.deepseek.com
+    api_key: 你的DeepSeek密钥
+
+# ========== ASR 配置 ==========
+ASR:
+  FunASR:
+    type: fun_local
+    model_dir: models/SenseVoiceSmall
+    output_dir: tmp/
+
+# ========== TTS 配置 ==========
+TTS:
+  EdgeTTS:
+    type: edge
+    voice: zh-CN-XiaoxiaoNeural
+    output_dir: tmp/
+
+# ========== Intent 配置 ==========
+Intent:
+  function_call:
+    type: function_call
+    functions: []

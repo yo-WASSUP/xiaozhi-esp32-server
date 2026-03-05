@@ -145,10 +145,10 @@ cython_debug/
 tmp
 .history
 .DS_Store
-main/xiaozhi-server/data
+
 
 main/manager-web/node_modules
-.config.yaml
+config.yaml
 .secrets.yaml
 .private_config.yaml
 .env.development
