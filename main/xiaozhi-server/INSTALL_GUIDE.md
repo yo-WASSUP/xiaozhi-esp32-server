@@ -63,6 +63,9 @@ cp data/.config.yaml.example data/.config.yaml
 FunASR 和 SileroVAD 的模型会在首次运行时自动下载到 `models/` 目录。
 如果网络不好，可以手动下载放到对应目录。
 
+
+conda install -c conda-forge ffmpeg -y
+ffmpeg -version
 ## 7. 启动
 
 ```bash
