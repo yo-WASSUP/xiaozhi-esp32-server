@@ -21,8 +21,9 @@ class Message:
 
 
 class Dialogue:
-    def __init__(self):
+    def __init__(self, max_rounds: int = 0):
         self.dialogue: List[Message] = []
+        self.max_rounds = max_rounds  # 0 表示不限制
         # 获取当前时间
         self.current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -110,9 +111,14 @@ class Dialogue:
                 )
             dialogue.append({"role": "system", "content": enhanced_system_prompt})
 
-        # 添加用户和助手的对话
-        for m in self.dialogue:
-            if m.role != "system":  # 跳过原始的系统消息
-                self.getMessages(m, dialogue)
+        # 添加用户和助手的对话（按 max_rounds 截断）
+        non_system = [m for m in self.dialogue if m.role != "system"]
+        if self.max_rounds > 0:
+            # 一轮 = 一对 user+assistant，保留最近 max_rounds 轮
+            # 从后往前找，保留最近 max_rounds * 2 条消息
+            keep_count = self.max_rounds * 2
+            non_system = non_system[-keep_count:]
+        for m in non_system:
+            self.getMessages(m, dialogue)
 
         return dialogue

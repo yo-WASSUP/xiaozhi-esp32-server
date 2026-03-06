@@ -11,6 +11,17 @@ from tabulate import tabulate
 from core.utils.llm import create_instance as create_llm_instance
 from config.settings import load_config
 
+# From New Zealand LLM 性能测试结果
+# ==================================================
+# +--------------------+-------------+---------------+-------+--------+
+# | 模型名称               | 平均响应时间(s)   | 首Token时间(s)   | 成功率   | 状态     |
+# +====================+=============+===============+=======+========+
+# | DeepSeekLLM        | 2.476       | 1.479         | 3/3   | ✅ 正常   |
+# +--------------------+-------------+---------------+-------+--------+
+# | AliLLM             | 2.825       | 2.587         | 3/3   | ✅ 正常   |
+# +--------------------+-------------+---------------+-------+--------+
+# | DoubaoLLM          | 4.219       | 2.753         | 3/3   | ✅ 正常   |
+
 # 设置全局日志级别为 WARNING，抑制 INFO 级别日志
 logging.basicConfig(level=logging.WARNING)
 

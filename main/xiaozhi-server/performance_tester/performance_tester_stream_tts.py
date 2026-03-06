@@ -12,6 +12,18 @@ from urllib.parse import urlparse, urlencode
 from tabulate import tabulate
 from config.settings import load_config
 
+# From New zealand 流式TTS首词延迟测试结果
+# ============================================================
+# 测试文本: 你好，这是一句话。
+# 测试次数: 每个TTS服务测试 5 次
+# +-----------------+-----------+-------------+
+# | TTS服务           |   首词延迟(秒) | 状态          |
+# +=================+===========+=============+
+# | 火山引擎TTS         |     1.836 | 成功（5/5次有效）  |
+# +-----------------+-----------+-------------+
+# | LinkeraiTTS     |     2.723 | 成功（5/5次有效）  |
+# +-----------------+-----------+-------------+
+
 description = "流式TTS语音合成首词耗时测试"
 class StreamTTSPerformanceTester:
     def __init__(self):

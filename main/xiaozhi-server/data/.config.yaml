@@ -12,42 +12,95 @@ server:
 selected_module:
   VAD: SileroVAD
   ASR: FunASR
-  LLM: OllamaLLM        # 本地 Ollama，延迟最低
-  # LLM: ChatGLMLLM      # 智谱 GLM-4-Flash，免费
-  # LLM: DeepSeekLLM     # DeepSeek
-  TTS: EdgeTTS            # 微软 Edge TTS，免费
+  LLM: DeepSeekLLM
+  TTS: HuoshanDoubleStreamTTS
   Memory: nomem
   Intent: function_call
 
 # ========== 系统提示词 ==========
 prompt: |
-  你是小智，一个智能语音助手。说话简洁活泼，回复不超过50字。
+  你是javis，一个智能语音助手。说话简洁活泼，回复不超过50字。
 
-# ========== LLM 配置 ==========
 LLM:
-  OllamaLLM:
-    type: ollama
-    base_url: http://localhost:11434
-    model_name: qwen3:8b
-
-  ChatGLMLLM:
+  DoubaoLLM:
+    # 定义LLM API类型
     type: openai
-    model_name: glm-4-flash
-    url: https://open.bigmodel.cn/api/paas/v4/
-    api_key: 你的智谱API密钥
-
+    # 先开通服务，打开以下网址，开通的服务搜索Doubao-1.5-pro，开通它
+    # 开通地址：https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?LLM=%7B%7D&OpenTokenDrawer=false
+    # 免费额度500000token
+    # 开通后，进入这里获取密钥：https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey?apikey=%7B%7D
+    base_url: https://ark.cn-beijing.volces.com/api/v3
+    model_name: doubao-1-5-pro-32k-250115
+    api_key: 04cccd81-ab84-4e86-b313-82dcdb363c96
+  AliLLM:
+    # 定义LLM API类型
+    type: openai
+    # 可在这里找到你的 api_key https://bailian.console.aliyun.com/?apiKey=1#/api-key
+    base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+    model_name: qwen-turbo
+    api_key: sk-645b09df224e4acc9546a8e2fff39120
+    temperature: 0.7  # 温度值
+    max_tokens: 500   # 最大生成token数
+    top_p: 1
+    frequency_penalty: 0  # 频率惩罚
   DeepSeekLLM:
+    # 定义LLM API类型
     type: openai
+    # 可在这里找到你的api key https://platform.deepseek.com/
     model_name: deepseek-chat
     url: https://api.deepseek.com
-    api_key: 你的DeepSeek密钥
+    api_key: sk-127a1262f6ad41379fa3f95a51576955
 
-# ========== ASR 配置 ==========
+
+VAD:
+  SileroVAD:
+    type: silero
+    threshold: 0.5
+    threshold_low: 0.3
+    model_dir: models/snakers4_silero-vad
+    min_silence_duration_ms: 200  # 如果说话停顿比较长，可以把这个值设置大一些
+
 ASR:
   FunASR:
     type: fun_local
     model_dir: models/SenseVoiceSmall
     output_dir: tmp/
+    device: cuda:0
+  DoubaoASR:
+    # 可以在这里申请相关Key等信息
+    # https://console.volcengine.com/speech/app
+    # DoubaoASR和DoubaoStreamASR的区别是：DoubaoASR是按次收费，DoubaoStreamASR是按时收费
+    # 一般来说按次收费的更便宜，但是DoubaoStreamASR使用了大模型技术，效果更好
+    type: doubao
+    appid: 2705156243
+    access_token: G3YqcRoIW1QzV_wykhec-y-tJVTknJnG
+    cluster: volcengine_input_common
+    # 热词、替换词使用流程：https://www.volcengine.com/docs/6561/155738
+    boosting_table_name: 
+    correct_table_name: 
+    output_dir: tmp/
+  DoubaoStreamASR:
+    # 可以在这里申请相关Key等信息
+    # https://console.volcengine.com/speech/app
+    # DoubaoASR和DoubaoStreamASR的区别是：DoubaoASR是按次收费，DoubaoStreamASR是按时收费
+    # 开通地址https://console.volcengine.com/speech/service/10011
+    # 一般来说按次收费的更便宜，但是DoubaoStreamASR使用了大模型技术，效果更好
+    type: doubao_stream
+    appid: 2705156243
+    access_token: G3YqcRoIW1QzV_wykhec-y-tJVTknJnG
+    cluster: volcengine_input_common
+    # 热词、替换词使用流程：https://www.volcengine.com/docs/6561/155738
+    boosting_table_name: 
+    correct_table_name: 
+    # 是否开启多语种识别模式
+    enable_multilingual: False
+    # 多语种识别当该键为空时，该模型支持中英文、上海话、闽南语，四川、陕西、粤语识别。当将其设置为特定键时，它可以识别指定语言。
+    # 详细语言列表参考 https://www.volcengine.com/docs/6561/1354869
+    # language: zh-cn
+    # 静音判定时长(ms)，默认200ms
+    end_window_size: 200
+    output_dir: tmp/
+  
 
 # ========== TTS 配置 ==========
 TTS:
@@ -56,8 +109,87 @@ TTS:
     voice: zh-CN-XiaoxiaoNeural
     output_dir: tmp/
 
+  DoubaoTTS:
+    # 定义TTS API类型
+    type: doubao
+    # 火山引擎语音合成服务，需要先在火山引擎控制台创建应用并获取appid和access_token
+    # 山引擎语音一定要购买花钱，起步价30元，就有100并发了。如果用免费的只有2个并发，会经常报tts错误
+    # 购买服务后，购买免费的音色后，可能要等半小时左右，才能使用。
+    # 普通音色在这里开通：https://console.volcengine.com/speech/service/8
+    # 湾湾小何音色在这里开通：https://console.volcengine.com/speech/service/10007，开通后将下面的voice设置成zh_female_wanwanxiaohe_moon_bigtts
+    api_url: https://openspeech.bytedance.com/api/v1/tts
+    voice: BV001_streaming
+    output_dir: tmp/
+    authorization: "Bearer;"
+    appid: 2705156243
+    access_token: G3YqcRoIW1QzV_wykhec-y-tJVTknJnG
+    cluster: volcano_tts
+    speed_ratio: 1.0
+    volume_ratio: 1.0
+    pitch_ratio: 1.0
+
+  #火山tts，支持双向流式tts
+  HuoshanDoubleStreamTTS:
+    type: huoshan_double_stream
+    # 访问 https://console.volcengine.com/speech/service/10007 开通语音合成大模型，购买音色
+    # 在页面底部获取appid和access_token
+    # 资源ID固定为：volc.service_type.10029（大模型语音合成及混音）
+    # 如果是机智云，把接口地址换成wss://bytedance.gizwitsapi.com/api/v3/tts/bidirection
+    # 机智云不需要天填 appid
+    ws_url: wss://openspeech.bytedance.com/api/v3/tts/bidirection
+    appid: 2705156243
+    access_token: G3YqcRoIW1QzV_wykhec-y-tJVTknJnG
+    resource_id: volc.service_type.10029
+    speaker: zh_female_wanwanxiaohe_moon_bigtts
+    # 开启WebSocket连接复用，默认复用（注意：复用后设备处于聆听状态时空闲链接会占并发数）
+    enable_ws_reuse: True
+    # 相关参数文档：https://www.volcengine.com/docs/6561/1329505
+    # 音频输出配置（audio_params）- 用户可自定义添加火山引擎支持的任何音频参数
+    audio_params:
+      speech_rate: 0  # 语速(-50~100)
+      loudness_rate: 0  # 音量(-50~100)
+      # 多情感音色参数，注意：当前仅部分音色支持设置情感。
+      # 相关音色列表：https://www.volcengine.com/docs/6561/1257544
+      # emotion: "neutral"  # 情感类型（仅部分音色支持）：neutral、happy、sad、angry、fearful、disgusted、surprised
+      # emotion_scale: 4  # 情感强度(1~5)
+    # 高级文本处理配置（additions）- 用户可自定义添加火山引擎支持的任何高级参数
+    additions:
+      post_process:
+        pitch: 0  # 音高(-12~12)
+      # aigc_metadata: {}  # AIGC元数据配置
+      # cache_config: {}  # 缓存配置
+    # 混音控制配置（mix_speaker）- 多音色混合（仅 TTS 1.0）
+    # 混音功能主要适用于豆包语音合成模型1.0的音色，使用时需要将req_params.speaker设置为custom_mix_bigtts
+    # mix_speaker:
+    #   speakers:
+    #     - source_speaker: zh_male_bvlazysheep
+    #       mix_factor: 0.3
+    #     - source_speaker: BV120_streaming
+    #       mix_factor: 0.3
+    #     - source_speaker: zh_male_ahu_conversation_wvae_bigtts
+    #       mix_factor: 0.4
+
+  LinkeraiTTS:
+    type: linkerai
+    api_url: https://tts.linkerai.cn/tts
+    audio_format: "pcm"
+    # 默认的access_token供大家测试时免费使用的，此access_token请勿用于商业用途
+    # 如果效果不错，可自行申请token，申请地址：https://linkerai.cn
+    # 各参数意义见开发文档：https://tts.linkerai.cn/docs
+    # 支持声音克隆，可自行上传音频，填入voice参数，voice参数为空时，使用默认声音
+    access_token: "U4YdYXVfpwWnk2t5Gp822zWPCuORyeJL"
+    voice: "OUeAo1mhq6IBExi"
+    output_dir: tmp/.
+
+
 # ========== Intent 配置 ==========
 Intent:
   function_call:
     type: function_call
     functions: []
+
+# 对话轮数限制，0为不限制，建议5-10轮
+max_dialogue_rounds: 10
+
+log:
+  log_level: DEBUG

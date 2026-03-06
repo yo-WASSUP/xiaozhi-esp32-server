@@ -126,6 +126,7 @@ class ConnectionHandler:
         self.first_activity_time = 0.0  # 记录首次活动的时间（毫秒）
         self.last_activity_time = 0.0  # 统一的活动时间戳（毫秒）
         self.client_voice_stop = False
+        self.client_voice_stop_time = 0.0  # 用户说完话的时间戳
         self.last_is_voice = False
 
         # asr相关变量
@@ -137,7 +138,7 @@ class ConnectionHandler:
         self.current_language_tag = None  # 存储当前ASR识别的语言标签
 
         # llm相关变量
-        self.dialogue = Dialogue()
+        self.dialogue = Dialogue(max_rounds=config.get("max_dialogue_rounds", 0))
 
         # tts相关变量
         self.sentence_id = None

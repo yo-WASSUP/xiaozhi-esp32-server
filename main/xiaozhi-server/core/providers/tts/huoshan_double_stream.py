@@ -3,6 +3,7 @@ import uuid
 import json
 import queue
 import asyncio
+import time
 import traceback
 import websockets
 
@@ -184,6 +185,8 @@ class TTSProvider(TTSProviderBase):
         enable_ws_reuse_value = config.get("enable_ws_reuse", True)
         self.enable_ws_reuse = False if str(enable_ws_reuse_value).lower() == 'false' else True
         self.tts_text = ""
+        self._session_start_time = None
+        self._first_audio_received = False
 
         model_key_msg = check_model_key("TTS", self.access_token)
         if model_key_msg:
@@ -255,9 +258,6 @@ class TTSProvider(TTSProviderBase):
         while not self.conn.stop_event.is_set():
             try:
                 message = self.tts_text_queue.get(timeout=1)
-                logger.bind(tag=TAG).debug(
-                    f"收到TTS任务｜{message.sentence_type.name} ｜ {message.content_type.name} | 会话ID: {self.conn.sentence_id}"
-                )
 
                 if message.sentence_type == SentenceType.FIRST:
                     self.conn.client_abort = False
@@ -287,14 +287,15 @@ class TTSProvider(TTSProviderBase):
                             self.conn.sentence_id = uuid.uuid4().hex
                             logger.bind(tag=TAG).debug(f"自动生成新的 会话ID: {self.conn.sentence_id}")
 
-                        logger.bind(tag=TAG).debug("开始启动TTS会话...")
+                        self._first_audio_received = False
+                        self._session_start_time = None
                         future = asyncio.run_coroutine_threadsafe(
                             self.start_session(self.conn.sentence_id),
                             loop=self.conn.loop,
                         )
                         future.result()
                         self.before_stop_play_files.clear()
-                        logger.bind(tag=TAG).debug("TTS会话启动成功")
+                        logger.bind(tag=TAG).debug(f"TTS会话启动成功 | 会话ID: {self.conn.sentence_id}")
                     except Exception as e:
                         logger.bind(tag=TAG).error(f"启动TTS会话失败: {str(e)}")
                         continue
@@ -302,15 +303,13 @@ class TTSProvider(TTSProviderBase):
                 elif ContentType.TEXT == message.content_type:
                     if message.content_detail:
                         try:
-                            logger.bind(tag=TAG).debug(
-                                f"开始发送TTS文本: {message.content_detail}"
-                            )
+                            if not self._session_start_time:
+                                self._session_start_time = time.time()
                             future = asyncio.run_coroutine_threadsafe(
                                 self.text_to_speak(message.content_detail, None),
                                 loop=self.conn.loop,
                             )
                             future.result()
-                            logger.bind(tag=TAG).debug("TTS文本发送成功")
                         except Exception as e:
                             logger.bind(tag=TAG).error(f"发送TTS文本失败: {str(e)}")
                             continue
@@ -478,7 +477,7 @@ class TTSProvider(TTSProviderBase):
                     # 确保 `recv()` 运行在同一个 event loop
                     msg = await self.ws.recv()
                     res = self.parser_response(msg)
-                    self.print_response(res, "send_text res:")
+                    # self.print_response(res, "send_text res:")
 
                     # 优先处理连接级别事件
                     if res.optional.event == EVENT_ConnectionFinished:
@@ -507,6 +506,12 @@ class TTSProvider(TTSProviderBase):
                         res.optional.event == EVENT_TTSResponse
                         and res.header.message_type == AUDIO_ONLY_RESPONSE
                     ):
+                        if not self._first_audio_received and self._session_start_time:
+                            self._first_audio_received = True
+                            now = time.time()
+                            tts_latency_ms = (now - self._session_start_time) * 1000
+                            e2e_latency_ms = (now - self.conn.client_voice_stop_time) * 1000 if self.conn.client_voice_stop_time else 0
+                            logger.bind(tag=TAG).info(f"TTS首包耗时: {tts_latency_ms:.0f}ms | 端到端延迟(说完话→首音频): {e2e_latency_ms:.0f}ms")
                         self.wav_to_opus_data_audio_raw_stream(res.payload, callback=self.handle_opus)
                     elif res.optional.event == EVENT_TTSSentenceEnd:
                         logger.bind(tag=TAG).info(f"句子语音生成成功：{self.tts_text}")
