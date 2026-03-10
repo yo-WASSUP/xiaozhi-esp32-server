@@ -1061,6 +1061,22 @@ class ConnectionHandler:
         need_llm_tools = []
 
         for result, tool_call_data in tool_results:
+            # 通知客户端工具调用信息
+            try:
+                tool_info = {
+                    "type": "tool_call",
+                    "function": tool_call_data.get("name", ""),
+                    "arguments": tool_call_data.get("arguments", "{}"),
+                    "result": result.response or result.result or "",
+                    "action": result.action.name if result.action else "",
+                }
+                asyncio.run_coroutine_threadsafe(
+                    self.websocket.send(json.dumps(tool_info, ensure_ascii=False)),
+                    self.loop,
+                )
+            except Exception as e:
+                self.logger.bind(tag=TAG).debug(f"发送工具调用信息失败: {e}")
+
             if result.action in [
                 Action.RESPONSE,
                 Action.NOTFOUND,

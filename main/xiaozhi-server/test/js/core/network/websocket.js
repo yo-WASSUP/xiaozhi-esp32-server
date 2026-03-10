@@ -113,6 +113,15 @@ export class WebSocketHandler {
             if (textWithoutEmoji && this.onChatMessage) {
                 this.onChatMessage(message.text, false);
             }
+        } else if (message.type === 'tool_call') {
+            // 显示服务端函数调用信息
+            let args = message.arguments;
+            try { args = JSON.stringify(JSON.parse(args), null, 0); } catch(e) {}
+            const toolText = `[Tool] ${message.function}(${args}) => ${message.result}`;
+            log(toolText, 'info');
+            if (this.onChatMessage) {
+                this.onChatMessage(toolText, false);
+            }
         } else if (message.type === 'mcp') {
             this.handleMCPMessage(message);
         } else {
