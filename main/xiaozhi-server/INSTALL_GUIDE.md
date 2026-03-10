@@ -42,13 +42,6 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```bash
 python -c "import torch; print('PyTorch:', torch.__version__); print('CUDA:', torch.cuda.is_available())"
 ```
-
-应该输出：
-```
-PyTorch: 2.2.2
-CUDA: True    # GPU版显示True，CPU版显示False
-```
-
 ## 5. 配置
 
 复制并修改配置文件：
@@ -60,28 +53,15 @@ cp data/.config.yaml.example data/.config.yaml
 
 ## 6. 下载模型
 
-FunASR 和 SileroVAD 的模型会在首次运行时自动下载到 `models/` 目录。
-如果网络不好，可以手动下载放到对应目录。
+手动下载FunASR 和 SileroVAD 的模型
 
+## 7. 安装ffmpeg
 
 conda install -c conda-forge ffmpeg -y
 ffmpeg -version
-## 7. 启动
+
+## 8. 启动
 
 ```bash
 python app.py
 ```
-
-## 常见问题
-
-### PyTorch 报 "Torch not compiled with CUDA enabled"
-装的是 CPU 版 PyTorch。按第 2 步重新装 GPU 版：
-```bash
-pip install torch==2.2.2 torchvision==0.17.2 torchaudio==2.2.2 --index-url https://download.pytorch.org/whl/cu121
-```
-
-### pip install 报错 "Microsoft Visual C++ 14.0 or greater is required"
-安装 [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)，勾选 "C++ build tools"。
-
-### funasr 安装失败
-先单独装：`pip install funasr==1.2.7`，看具体报错信息。
