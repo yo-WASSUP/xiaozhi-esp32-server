@@ -10,11 +10,22 @@ from funasr import AutoModel
 from funasr.utils.postprocess_utils import rich_transcription_postprocess
 
 MODEL_DIR = "models/SenseVoiceSmall"
-TEST_AUDIO = f"{MODEL_DIR}/example/zh.mp3"
+TEST_AUDIO = f"{MODEL_DIR}/example/chafang.mp3"
+# 各位注意，现在开始查房。我是黎建国，赵雨萱昨晚有点发烧，请核实一下。
+# 十二号床王晓明的CT结果出来了吗？张志远家属问手术方案的事，
+# 跟他说张玮教授下午会过来跟他们谈。
+
 
 # === 自定义热词列表 ===
-# 在这里填入你想要优化识别的专有名词、人名等
-HOTWORD_LIST = ["小智", "张三", "李四", "量子计算", "区块链"]
+HOTWORD_LIST = [
+    # --- 容易混淆的两字人名 ---
+    "张玮",       # zhāng wěi / wēi / wěi
+    # --- 容易混淆的三字人名 ---
+    "王晓明", # wáng/wāng xiǎo míng
+    "黎建国", # lǐ/lí jiàn guó
+    "赵雨萱",  # zhào yǔ xuān
+    "张致远", # zhāng zhì yuǎn
+]
 
 
 def run_asr(model, audio_path, label=""):

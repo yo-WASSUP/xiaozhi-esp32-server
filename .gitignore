@@ -193,3 +193,5 @@ main/xiaozhi-server/test/ros2_server/package-lock.json
 
 # Fun-ASR nested git repo
 main/xiaozhi-server/test_fun_asr_nano/Fun-ASR/
+
+# main/xiaozhi-server/models/SenseVoiceSmall/example/chafang.mp3
