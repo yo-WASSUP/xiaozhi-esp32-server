@@ -1,0 +1,7 @@
+# Fun-ASR-Nano-2512 依赖
+funasr>=1.2.7
+torch>=2.0.0
+torchaudio>=2.0.0
+modelscope
+transformer
+huggingface_hub
