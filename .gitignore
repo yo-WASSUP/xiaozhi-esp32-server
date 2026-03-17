@@ -190,3 +190,6 @@ uploadfile
 # Ignore ros2_server specific files
 main/xiaozhi-server/test/ros2_server/node_modules/
 main/xiaozhi-server/test/ros2_server/package-lock.json
+
+# Fun-ASR nested git repo
+main/xiaozhi-server/test_fun_asr_nano/Fun-ASR/
