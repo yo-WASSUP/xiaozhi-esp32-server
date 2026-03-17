@@ -16,21 +16,20 @@ import sys
 import time
 import torch
 
-# 添加父目录到 path，以便复用项目中的模型
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+# 添加 Fun-ASR 目录到 path，以便 funasr 加载 remote_code (model.py)
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "Fun-ASR"))
 
 # === 配置 ===
 MODEL_DIR = "FunAudioLLM/Fun-ASR-Nano-2512"
-TEST_AUDIO = os.path.join(os.path.dirname(__file__), "..", "models", "SenseVoiceSmall", "example", "chafang.mp3")
-# 音频内容：各位注意，现在开始查房。我是黎建国，赵雨萱昨晚有点发烧，请核实一下。
-# 十二号床王晓明的CT结果出来了吗？张志远家属问手术方案的事，跟他说张玮教授下午会过来跟他们谈。
+AUDIO_DIR = os.path.join(os.path.dirname(__file__), "audio")
+AUDIO_EXTS = {".wav", ".mp3", ".flac", ".m4a"}
 
 # === 自定义热词列表 ===
 HOTWORD_LIST = [
     # --- 容易混淆的两字人名 ---
     "张玮",       # zhāng wěi / wēi / wěi
     # --- 容易混淆的三字人名 ---
-    "王晓明",  # wáng/wāng xiǎo míng
+    "王小明",  # wáng/wāng xiǎo míng
     "黎建国",  # lǐ/lí jiàn guó
     "赵雨萱",   # zhào yǔ xuān
     "张致远",  # zhāng zhì yuǎn
@@ -90,56 +89,69 @@ def run_asr(model, audio_path, hotwords=None, label=""):
     return text, elapsed
 
 
+def find_audio_files():
+    """扫描 audio/ 目录下的音频文件"""
+    if not os.path.isdir(AUDIO_DIR):
+        os.makedirs(AUDIO_DIR)
+        return []
+    files = sorted(
+        f for f in os.listdir(AUDIO_DIR)
+        if os.path.splitext(f)[1].lower() in AUDIO_EXTS
+    )
+    return [os.path.join(AUDIO_DIR, f) for f in files]
+
+
 def main():
     print("=" * 60)
     print("Fun-ASR-Nano-2512 热词功能验证")
     print("=" * 60)
     print(f"模型: {MODEL_DIR}")
-    print(f"测试音频: {TEST_AUDIO}")
+    print(f"音频目录: {AUDIO_DIR}")
     print(f"热词列表: {HOTWORD_LIST}")
     print()
 
-    if not os.path.exists(TEST_AUDIO):
-        print(f"错误：测试音频不存在: {TEST_AUDIO}")
+    audio_files = find_audio_files()
+    if not audio_files:
+        print(f"错误：audio/ 目录下没有音频文件")
+        print(f"请将测试音频放入: {AUDIO_DIR}")
+        print(f"支持格式: {', '.join(AUDIO_EXTS)}")
         return
+
+    print(f"找到 {len(audio_files)} 个音频文件:")
+    for f in audio_files:
+        print(f"  - {os.path.basename(f)}")
+    print()
 
     device = get_device()
     model = load_model(device)
 
-    # --- 测试 1: 不带热词（基准） ---
-    print("-" * 40)
-    print("测试 1: 基准识别（无热词）")
-    print("-" * 40)
-    text_base, time_base = run_asr(model, TEST_AUDIO, label="无热词")
+    for i, audio_path in enumerate(audio_files, 1):
+        name = os.path.basename(audio_path)
+        print("=" * 60)
+        print(f"音频 {i}/{len(audio_files)}: {name}")
+        print("=" * 60)
 
-    # --- 测试 2: 带热词，默认权重 ---
-    print("-" * 40)
-    print("测试 2: 热词识别（默认权重）")
-    print("-" * 40)
-    text_hw, time_hw = run_asr(model, TEST_AUDIO, hotwords=HOTWORD_LIST, label="热词-默认")
+        # 无热词（基准）
+        print("-" * 40)
+        print("基准识别（无热词）")
+        print("-" * 40)
+        text_base, time_base = run_asr(model, audio_path, label="无热词")
 
-    # --- 测试 3: 带热词，用字符串形式传入 ---
-    print("-" * 40)
-    print("测试 3: 热词识别（字符串形式）")
-    print("-" * 40)
-    hotwords_str = " ".join(HOTWORD_LIST)
-    text_hw_str, time_hw_str = run_asr(model, TEST_AUDIO, hotwords=hotwords_str, label="热词-字符串")
+        # 有热词
+        print("-" * 40)
+        print("热词识别")
+        print("-" * 40)
+        text_hw, time_hw = run_asr(model, audio_path, hotwords=HOTWORD_LIST, label="有热词")
 
-    # --- 结果对比 ---
-    print("=" * 60)
-    print("结果对比")
-    print("=" * 60)
-    print(f"基准结果:       {text_base}")
-    print(f"热词(列表):     {text_hw}")
-    print(f"  与基准相同: {'是' if text_hw == text_base else '否 ← 热词生效！'}")
-    print(f"热词(字符串):   {text_hw_str}")
-    print(f"  与基准相同: {'是' if text_hw_str == text_base else '否 ← 热词生效！'}")
-
-    print()
-    print("耗时对比:")
-    print(f"  基准:         {time_base:.3f}s")
-    print(f"  热词(列表):   {time_hw:.3f}s (差异: {time_hw - time_base:+.3f}s)")
-    print(f"  热词(字符串): {time_hw_str:.3f}s (差异: {time_hw_str - time_base:+.3f}s)")
+        # 对比
+        print("-" * 40)
+        print("对比结果")
+        print("-" * 40)
+        print(f"  无热词: {text_base}")
+        print(f"  有热词: {text_hw}")
+        print(f"  结果相同: {'是' if text_hw == text_base else '否 ← 热词生效！'}")
+        print(f"  耗时差异: {time_hw - time_base:+.3f}s")
+        print()
 
 
 if __name__ == "__main__":
