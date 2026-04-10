@@ -195,3 +195,15 @@ main/xiaozhi-server/test/ros2_server/package-lock.json
 main/xiaozhi-server/test_fun_asr_nano/Fun-ASR/
 
 # main/xiaozhi-server/models/SenseVoiceSmall/example/chafang.mp3
+
+# ============ voiceprint-api ============
+voiceprint-api/logs/
+voiceprint-api/tmp/
+voiceprint-api/audio/
+
+# ============ SoulX-Duplug ============
+SoulX-Duplug/pretrained_models/
+SoulX-Duplug/outputs/
+SoulX-Duplug/tmp/
+SoulX-Duplug/asset/
+SoulX-Duplug/checkpoints/
