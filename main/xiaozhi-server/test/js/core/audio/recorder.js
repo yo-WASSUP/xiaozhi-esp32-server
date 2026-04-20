@@ -19,10 +19,17 @@ export class AudioRecorder {
         this.visualizationRequest = null;
         this.recordingTimer = null;
         this.websocket = null;
+        this.selectedDeviceId = null; // 选中的麦克风设备ID
         // Callback functions
         this.onRecordingStart = null;
         this.onRecordingStop = null;
         this.onVisualizerUpdate = null;
+    }
+
+    // Set microphone device ID
+    setDeviceId(deviceId) {
+        this.selectedDeviceId = deviceId || null;
+        log(`麦克风已切换: ${deviceId ? deviceId : '默认设备'}`, 'info');
     }
 
     // Set WebSocket instance
@@ -219,7 +226,11 @@ export class AudioRecorder {
                 return false;
             }
             log('请至少录制1-2秒音频以确保收集足够的数据', 'info');
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000, channelCount: 1 } });
+            const audioConstraints = { echoCancellation: true, noiseSuppression: true, sampleRate: 16000, channelCount: 1 };
+            if (this.selectedDeviceId) {
+                audioConstraints.deviceId = { exact: this.selectedDeviceId };
+            }
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
             this.audioContext = this.getAudioContext();
             if (this.audioContext.state === 'suspended') {
                 await this.audioContext.resume();

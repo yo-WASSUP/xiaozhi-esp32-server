@@ -24,6 +24,14 @@ export async function webSocketConnect(otaUrl, config) {
     // 使用OTA返回的websocket URL
     let connUrl = new URL(websocket.url);
 
+    // 用OTA请求的host替换WebSocket URL的host（解决TUN/VPN导致IP变化的问题）
+    try {
+        const otaUrlObj = new URL(otaUrl);
+        connUrl.hostname = otaUrlObj.hostname;
+    } catch (e) {
+        log('无法解析OTA URL，使用原始WebSocket地址', 'warn');
+    }
+
     // 添加token参数（从OTA响应中获取）
     if (websocket.token) {
         if (websocket.token.startsWith("Bearer ")) {

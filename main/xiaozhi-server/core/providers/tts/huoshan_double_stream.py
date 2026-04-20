@@ -185,6 +185,7 @@ class TTSProvider(TTSProviderBase):
         enable_ws_reuse_value = config.get("enable_ws_reuse", True)
         self.enable_ws_reuse = False if str(enable_ws_reuse_value).lower() == 'false' else True
         self.tts_text = ""
+        self._pending_texts = []  # 本地跟踪已发送的文本（V2.0不再在响应中返回text）
         self._session_start_time = None
         self._first_audio_received = False
 
@@ -353,6 +354,8 @@ class TTSProvider(TTSProviderBase):
             filtered_text = MarkdownCleaner.clean_markdown(text)
 
             if filtered_text:
+                # 记录发送的文本（V2.0响应不再返回text，需本地跟踪）
+                self._pending_texts.append(filtered_text)
                 # 发送文本
                 await self.send_text(self.voice, filtered_text, self.conn.sentence_id)
             return
@@ -498,6 +501,10 @@ class TTSProvider(TTSProviderBase):
                     elif res.optional.event == EVENT_TTSSentenceStart:
                         json_data = json.loads(res.payload.decode("utf-8"))
                         self.tts_text = json_data.get("text", "")
+                        # V2.0模型不再在响应中返回text，使用本地跟踪的文本
+                        if not self.tts_text and self._pending_texts:
+                            self.tts_text = "".join(self._pending_texts)
+                            self._pending_texts.clear()
                         logger.bind(tag=TAG).debug(f"句子语音生成开始: {self.tts_text}")
                         self.tts_audio_queue.put(
                             (SentenceType.FIRST, [], self.tts_text)
@@ -518,6 +525,7 @@ class TTSProvider(TTSProviderBase):
                     elif res.optional.event == EVENT_SessionFinished:
                         logger.bind(tag=TAG).debug(f"会话结束～～")
                         self.activate_session = False
+                        self._pending_texts.clear()
                         self._process_before_stop_play_files()
                         # 非复用模式下，会话结束后发送 FinishConnection
                         if not self.enable_ws_reuse:

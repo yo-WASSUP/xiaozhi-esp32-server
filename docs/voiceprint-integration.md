@@ -222,10 +222,15 @@ voiceprint:
 
 ```
 curl -X POST \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -F "speaker_id=your_speaker_id_here" \
-  -F "file=@/path/to/your/file" \
+  -H "Authorization: Bearer 3caac3ee-8288-4e61-89d6-b7fafc254bb6" \
+  -F "speaker_id=test1" \
+  -F "file=@F:/job-in-cn/xiaozhi-esp32-server/main/xiaozhi-server/test_fun_asr_nano/audio/chafang.wav" \
   http://localhost:8005/voiceprint/register
+
+```
+
+```powershell
+curl.exe -X POST -H "Authorization: Bearer 3caac3ee-8288-4e61-89d6-b7fafc254bb6" -F "speaker_id=test1" -F "file=@F:/job-in-cn/xiaozhi-esp32-server/main/xiaozhi-server/test_fun_asr_nano/audio/chafang.wav" http://localhost:8005/voiceprint/register
 ```
 
  这里的 `file` 是要注册的说话人说话的音频文件， `speaker_id` 需要和第一步配置接口的 `speaker_id` 保持一致。比如说我需要注册张三的声纹，在 `.config.yaml` 中填的张三的 `speaker_id` 为 `test1`，那么我注册张三声纹的时候，请求体里填的 `speaker_id` 就是 `test1`， `file` 填的就是张三说一段话的音频文件。

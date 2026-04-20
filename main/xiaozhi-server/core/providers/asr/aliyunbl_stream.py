@@ -1,12 +1,16 @@
 import json
 import uuid
+import time
 import asyncio
 import websockets
 import opuslib_next
-from typing import List
+from typing import List, Optional
 from config.logger import setup_logging
 from core.providers.asr.base import ASRProviderBase
 from core.providers.asr.dto.dto import InterfaceType
+from core.handle.receiveAudioHandle import startToChat
+from core.handle.reportHandle import enqueue_asr_report
+from core.utils.util import remove_punctuation_and_length
 
 TAG = __name__
 logger = setup_logging()
@@ -42,6 +46,9 @@ class ASRProvider(ASRProviderBase):
         self.punctuation_prediction_enabled = config.get("punctuation_prediction_enabled", True)
         self.inverse_text_normalization_enabled = config.get("inverse_text_normalization_enabled", True)
 
+        # 连接复用配置
+        self.enable_ws_reuse = config.get("enable_ws_reuse", True)
+
         # WebSocket URL
         self.ws_url = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
 
@@ -55,7 +62,7 @@ class ASRProvider(ASRProviderBase):
         # 先调用父类方法处理基础逻辑
         await super().receive_audio(conn, audio, audio_have_voice)
 
-        # 只在有声音且没有连接时建立连接
+        # 没有连接时建立连接（有声音触发，或连接复用模式下首次）
         if audio_have_voice and not self.is_processing and not self.asr_ws:
             try:
                 await self._start_recognition(conn)
@@ -64,12 +71,14 @@ class ASRProvider(ASRProviderBase):
                 await self._cleanup()
                 return
 
-        # 发送音频数据
+        # 持续发送音频数据（包括静默段，让 Paraformer 自己判断断句）
         if self.asr_ws and self.is_processing and self.server_ready:
             try:
                 pcm_frame = self.decoder.decode(audio, 960)
-                # 直接发送PCM音频数据(二进制)
                 await self.asr_ws.send(pcm_frame)
+            except websockets.ConnectionClosed:
+                logger.bind(tag=TAG).info("ASR连接已断开，将在下次说话时重连")
+                await self._cleanup()
             except Exception as e:
                 logger.bind(tag=TAG).warning(f"发送音频失败: {str(e)}")
                 await self._cleanup()
@@ -155,7 +164,7 @@ class ASRProvider(ASRProviderBase):
         return message
 
     async def _forward_results(self, conn):
-        """转发识别结果"""
+        """转发识别结果（连接复用：持续监听多句话）"""
         try:
             while not conn.stop_event.is_set():
                 # 获取当前连接的音频数据
@@ -199,6 +208,12 @@ class ASRProvider(ASRProviderBase):
                         if is_final:
                             logger.bind(tag=TAG).info(f"识别到文本: {text}")
 
+                            # 修正 client_voice_stop_time：VAD 设置它时已经晚了 min_silence_duration_ms
+                            # 减掉这个偏移，让端到端延迟从"嘴巴真正停了"开始算
+                            vad_silence_ms = getattr(conn.vad, 'silence_threshold_ms', 200)
+                            if conn.client_voice_stop_time > 0:
+                                conn.client_voice_stop_time = conn.client_voice_stop_time - vad_silence_ms / 1000
+
                             # 手动模式下累积识别结果
                             if conn.client_listen_mode == "manual":
                                 if self.text:
@@ -210,12 +225,18 @@ class ASRProvider(ASRProviderBase):
                                 if conn.client_voice_stop:
                                     logger.bind(tag=TAG).debug("收到最终识别结果，触发处理")
                                     await self.handle_voice_stop(conn, audio_data)
-                                    break
+                                    if not self.enable_ws_reuse:
+                                        break
+                                    conn.reset_audio_states()
                             else:
-                                # 自动模式下直接覆盖
+                                # 自动模式: 处理这句话，然后继续监听下一句
                                 self.text = text
                                 await self.handle_voice_stop(conn, audio_data)
-                                break
+                                if not self.enable_ws_reuse:
+                                    break
+                                # 重置音频状态，准备接收下一句
+                                conn.reset_audio_states()
+                                logger.bind(tag=TAG).debug("句子处理完成，继续监听下一句...")
 
                     # 处理task-finished事件
                     elif event == "task-finished":
@@ -232,8 +253,7 @@ class ASRProvider(ASRProviderBase):
                 except asyncio.TimeoutError:
                     continue
                 except websockets.ConnectionClosed:
-                    logger.bind(tag=TAG).info("ASR服务连接已关闭")
-                    self.is_processing = False
+                    logger.bind(tag=TAG).info("ASR服务连接已断开，将在下次说话时重连")
                     break
                 except Exception as e:
                     logger.bind(tag=TAG).error(f"处理结果失败: {str(e)}")
@@ -242,7 +262,6 @@ class ASRProvider(ASRProviderBase):
         except Exception as e:
             logger.bind(tag=TAG).error(f"结果转发失败: {str(e)}")
         finally:
-            # 清理连接的音频缓存
             await self._cleanup()
             conn.reset_audio_states()
 
@@ -307,6 +326,68 @@ class ASRProvider(ASRProviderBase):
         self.task_id = None
 
         logger.bind(tag=TAG).debug("ASR会话清理完成")
+
+    async def handle_voice_stop(self, conn, asr_audio_task: List[bytes]):
+        """流式ASR覆写：文本已通过WebSocket实时获取，立即送LLM，声纹后台跑"""
+        try:
+            total_start_time = time.monotonic()
+
+            text = self.text
+            self.text = ""
+
+            if not text:
+                return
+
+            logger.bind(tag=TAG).info(f"识别文本: {text}")
+
+            # 先用上次的说话人信息（如果有），不等声纹
+            speaker_name = getattr(conn, '_last_speaker_name', "")
+
+            enhanced_text = self._build_enhanced_text(text, speaker_name)
+            content_for_length_check = text
+
+            if conn.client_voice_stop_time > 0:
+                tail_latency = time.time() - conn.client_voice_stop_time
+                logger.bind(tag=TAG).debug(f"流式ASR端到端延迟 (本地判定停说到出词): {tail_latency:.3f}s")
+            else:
+                logger.bind(tag=TAG).debug(f"流式ASR处理: 实时出词完成")
+
+            # 立即触发对话，不等声纹
+            text_len, _ = remove_punctuation_and_length(content_for_length_check)
+            if text_len > 0:
+                await startToChat(conn, enhanced_text)
+                enqueue_asr_report(conn, enhanced_text, asr_audio_task.copy())
+
+            # 声纹在后台异步跑，结果存给下次用
+            if conn.voiceprint_provider and asr_audio_task:
+                asyncio.create_task(
+                    self._background_voiceprint(conn, asr_audio_task)
+                )
+
+        except Exception as e:
+            logger.bind(tag=TAG).error(f"流式ASR处理失败: {e}")
+            import traceback
+            logger.bind(tag=TAG).debug(f"异常详情: {traceback.format_exc()}")
+
+    async def _background_voiceprint(self, conn, asr_audio_task: List[bytes]):
+        """后台声纹识别，不阻塞主流程"""
+        try:
+            if conn.audio_format == "pcm":
+                pcm_data = asr_audio_task
+            else:
+                pcm_data = self.decode_opus(asr_audio_task)
+            combined_pcm = b"".join(pcm_data)
+            if not combined_pcm:
+                return
+            wav_data = self._pcm_to_wav(combined_pcm)
+            result = await conn.voiceprint_provider.identify_speaker(
+                wav_data, conn.session_id
+            )
+            if result and not isinstance(result, Exception):
+                conn._last_speaker_name = result
+                logger.bind(tag=TAG).info(f"后台声纹识别完成: {result}")
+        except Exception as e:
+            logger.bind(tag=TAG).error(f"后台声纹识别失败: {e}")
 
     async def speech_to_text(self, opus_data, session_id, audio_format, artifacts=None):
         """获取识别结果"""

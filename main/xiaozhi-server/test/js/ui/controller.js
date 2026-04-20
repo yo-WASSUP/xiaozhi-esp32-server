@@ -53,6 +53,9 @@ class UIController {
         this.updateConnectionUI(false);
         this.updateDialButton(false);
 
+        // Initialize microphone selector
+        this.initMicrophoneSelector();
+
         console.log('UIController init completed');
     }
 
@@ -73,6 +76,8 @@ class UIController {
         if (settingsBtn) {
             settingsBtn.addEventListener('click', () => {
                 this.showModal('settingsModal');
+                // Refresh mic list when opening settings
+                this.enumerateMicrophones();
             });
         }
 
@@ -591,6 +596,64 @@ class UIController {
     updateSessionEmotion(emoji) {
         // Here can add emotion update logic
         // For example: display emoji in status indicator
+    }
+
+    // Initialize microphone selector
+    initMicrophoneSelector() {
+        const micSelect = document.getElementById('micSelect');
+        if (!micSelect) return;
+
+        // Load saved selection
+        const savedDeviceId = localStorage.getItem('selectedMicDeviceId');
+        if (savedDeviceId) {
+            const audioRecorder = getAudioRecorder();
+            audioRecorder.setDeviceId(savedDeviceId);
+        }
+
+        // Handle selection change
+        micSelect.addEventListener('change', (e) => {
+            const deviceId = e.target.value;
+            const audioRecorder = getAudioRecorder();
+            audioRecorder.setDeviceId(deviceId);
+            localStorage.setItem('selectedMicDeviceId', deviceId);
+        });
+
+        // Initial enumeration
+        this.enumerateMicrophones();
+    }
+
+    // Enumerate available microphones
+    async enumerateMicrophones() {
+        const micSelect = document.getElementById('micSelect');
+        if (!micSelect) return;
+
+        try {
+            // Request permission first (needed to get device labels)
+            await navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => stream.getTracks().forEach(t => t.stop()));
+
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const audioInputs = devices.filter(d => d.kind === 'audioinput');
+
+            const savedDeviceId = localStorage.getItem('selectedMicDeviceId') || '';
+
+            // Keep default option, clear the rest
+            micSelect.innerHTML = '<option value="">默认麦克风</option>';
+
+            audioInputs.forEach((device, index) => {
+                const option = document.createElement('option');
+                option.value = device.deviceId;
+                option.textContent = device.label || `麦克风 ${index + 1}`;
+                if (device.deviceId === savedDeviceId) {
+                    option.selected = true;
+                }
+                micSelect.appendChild(option);
+            });
+
+            console.log(`Found ${audioInputs.length} microphone(s)`);
+        } catch (err) {
+            console.warn('Failed to enumerate microphones:', err.message);
+        }
     }
 }
 
