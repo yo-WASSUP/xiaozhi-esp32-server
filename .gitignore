@@ -227,6 +227,7 @@ main/xiaozhi-server/data/hospice_media/
 # Capacitor 壳生成的原生工程（npx cap add android 重新生成）
 mobile/*/android/
 mobile/*/node_modules/
-# 例外：Capacitor 壳的 package-lock 要跟踪（保证公司机器上装出一致依赖）
+# 例外：Capacitor 壳的 package-lock / capacitor.config 要跟踪（保证公司机器上装出一致依赖）
 !mobile/**/package.json
 !mobile/**/package-lock.json
+!mobile/**/capacitor.config.json
