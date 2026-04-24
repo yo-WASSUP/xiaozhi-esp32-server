@@ -1,0 +1,134 @@
+# 安宁疗护陪伴机器人 - 配置模板
+# 部署步骤：
+#   cp data/.config_hospice.example.yaml data/.config_hospice.yaml
+# 然后把所有 YOUR_XXX_HERE 替换成真实密钥。
+# 真实配置文件 (.config_hospice.yaml) 已在 .gitignore，不要提交。
+
+server:
+  ip: 0.0.0.0
+  port: 8000
+  http_port: 8003
+
+selected_module:
+  VAD: SileroVAD
+  ASR: AliyunBLStreamASR
+  LLM: AliLLM
+  TTS: HuoshanDoubleStreamTTS
+  Memory: nomem
+  Intent: function_call
+
+# ========== 安宁疗护专用提示词 ==========
+prompt: |
+  你是"小暖"，一个温柔体贴的安宁疗护陪伴助手。你正在陪伴一位需要关怀的老年患者。
+
+  ## 你的核心原则
+  - 永远以温暖、耐心、共情的态度回应
+  - 不催促、不评判、不给医疗建议
+  - 用简短、温暖的句子回应，避免长篇大论
+  - 适当使用四川方言中亲切的语气词（如"嘛""噻"）
+
+  ## 你会做的事情
+  - 倾听患者的心声和回忆
+  - 陪患者聊家人、聊过去的美好时光
+  - 在患者焦虑或不安时，温柔地安慰和陪伴
+  - 聊一些轻松愉快的话题，比如好吃的、好看的风景
+  - 回应患者的情感需求，给予真诚的关怀
+
+  ## 你绝对不做的事情
+  - 不讨论病情预后和生死话题（除非患者主动提起，此时只倾听和共情）
+  - 不替代医护人员给任何医疗建议
+  - 不说"加油""要坚强"等空洞鼓励
+  - 不使用复杂的专业术语
+
+  ## 情感标注
+  在你每次回复的最末尾，用HTML注释格式附加患者当前的情绪判断：
+  <!--emotion:{"mood":"happy","intensity":0.7}-->
+  mood 可选值：happy, sad, anxious, calm, lonely, nostalgic, angry, neutral
+  intensity 范围：0.0 ~ 1.0
+
+  注意：这个标签必须放在回复的最后
+
+# ========== 安宁疗护会话日志配置 ==========
+hospice:
+  enable_logging: true
+  db_path: data/hospice_sessions.db
+  # summary_schedule: "22:00"  # 每日摘要定时任务，未启用
+  upload_max_mb: 200            # 家属/患者发送媒体文件的大小上限
+
+# 声纹识别配置（可选，未用到可留空）
+# voiceprint:
+#   url: http://<VOICEPRINT_HOST>:8005/voiceprint/health?key=YOUR_VOICEPRINT_KEY_HERE
+#   speakers:
+#     - "test1,张三,张三是谁"
+#     - "test2,李四,李四是谁"
+
+LLM:
+  AliLLM:
+    type: openai
+    base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+    model_name: qwen-flash-2025-07-28
+    # 阿里云通义 DashScope API Key
+    # 申请：https://dashscope.console.aliyun.com/apiKey
+    api_key: YOUR_ALIYUN_DASHSCOPE_API_KEY_HERE
+    temperature: 0.7
+    max_tokens: 500
+    top_p: 1
+    frequency_penalty: 0
+
+VAD:
+  SileroVAD:
+    type: silero
+    threshold: 0.5
+    threshold_low: 0.3
+    model_dir: models/snakers4_silero-vad
+    min_silence_duration_ms: 200
+
+ASR:
+  AliyunBLStreamASR:
+    type: aliyunbl_stream
+    # 同一个阿里云 DashScope API Key（语音识别也用它）
+    api_key: YOUR_ALIYUN_DASHSCOPE_API_KEY_HERE
+    model: paraformer-realtime-v2
+    output_dir: tmp/
+    max_sentence_silence: 500
+    semantic_punctuation_enabled: false
+    disfluency_removal_enabled: true
+    punctuation_prediction_enabled: true
+
+TTS:
+  HuoshanDoubleStreamTTS:
+    type: huoshan_double_stream
+    ws_url: wss://openspeech.bytedance.com/api/v3/tts/bidirection
+    # 火山引擎 TTS 凭据
+    # 申请：https://console.volcengine.com/speech/app
+    appid: YOUR_VOLCENGINE_APPID_HERE
+    access_token: YOUR_VOLCENGINE_ACCESS_TOKEN_HERE
+    resource_id: seed-tts-2.0
+    speaker: zh_female_vv_uranus_bigtts
+    enable_ws_reuse: True
+    audio_params:
+      speech_rate: -10
+      loudness_rate: 10
+    additions:
+      post_process:
+        pitch: -1
+      explicit_dialect: "sichuan"
+
+Intent:
+  function_call:
+    type: function_call
+    functions:
+      - get_weather
+
+plugins:
+  get_weather:
+    # 和风天气 API
+    # 申请：https://console.qweather.com/
+    api_host: "YOUR_QWEATHER_HOST_HERE.re.qweatherapi.com"
+    api_key: "YOUR_QWEATHER_API_KEY_HERE"
+    default_location: "成都"
+
+max_dialogue_rounds: 10
+
+log:
+  log_level: DEBUG
