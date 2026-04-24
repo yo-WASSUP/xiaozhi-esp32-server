@@ -44,8 +44,17 @@ async def monitor_stdin():
 
 
 async def main():
+    # 解析命令行参数
+    import argparse
+    parser = argparse.ArgumentParser(description="小智服务器")
+    parser.add_argument(
+        "--config", "-c", type=str, default=None,
+        help="指定配置文件名，例如: --config hospice 会加载 data/.config_hospice.yaml"
+    )
+    args = parser.parse_args()
+
     check_ffmpeg_installed()
-    config = load_config()
+    config = load_config(config_name=args.config)
 
     # auth_key优先级：配置文件server.auth_key > manager-api.secret > 自动生成
     # auth_key用于jwt认证，比如视觉分析接口的jwt认证、ota接口的token生成与websocket认证

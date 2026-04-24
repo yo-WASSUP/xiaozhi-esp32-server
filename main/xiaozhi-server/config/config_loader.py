@@ -15,17 +15,32 @@ def read_config(config_path):
     return config
 
 
-def load_config():
-    """加载配置文件"""
+def load_config(config_name=None):
+    """加载配置文件
+    
+    Args:
+        config_name: 可选配置名称，如 'hospice' 会加载 data/.config_hospice.yaml
+                     为 None 时加载默认的 data/.config.yaml
+    """
     from core.utils.cache.manager import cache_manager, CacheType
 
-    # 检查缓存
-    cached_config = cache_manager.get(CacheType.CONFIG, "main_config")
-    if cached_config is not None:
-        return cached_config
+    # 带 config_name 时不走缓存，因为可能切换配置
+    if config_name is None:
+        cached_config = cache_manager.get(CacheType.CONFIG, "main_config")
+        if cached_config is not None:
+            return cached_config
 
     default_config_path = get_project_dir() + "config.yaml"
-    custom_config_path = get_project_dir() + "data/.config.yaml"
+    if config_name:
+        custom_config_path = get_project_dir() + f"data/.config_{config_name}.yaml"
+        if not os.path.exists(custom_config_path):
+            raise FileNotFoundError(
+                f"找不到配置文件: {custom_config_path}\n"
+                f"请确认 data/.config_{config_name}.yaml 是否存在"
+            )
+        print(f"使用配置文件: data/.config_{config_name}.yaml")
+    else:
+        custom_config_path = get_project_dir() + "data/.config.yaml"
 
     # 加载默认配置
     default_config = read_config(default_config_path)

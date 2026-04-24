@@ -1,8 +1,10 @@
 import asyncio
+import os
 from aiohttp import web
 from config.logger import setup_logging
 from core.api.ota_handler import OTAHandler
 from core.api.vision_handler import VisionHandler
+from core.api.hospice import register_hospice_routes
 
 TAG = __name__
 
@@ -74,6 +76,32 @@ class SimpleHttpServer:
                         ),
                     ]
                 )
+
+                # 注册安宁疗护 API 路由
+                register_hospice_routes(app, self.config)
+
+                # 静态文件服务：患者端和家属端 PWA
+                apps_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "apps")
+                from core.utils.util import get_local_ip
+                local_ip = get_local_ip()
+                if os.path.exists(os.path.join(apps_dir, "patient")):
+                    app.router.add_static("/patient/", os.path.join(apps_dir, "patient"), show_index=True)
+                    self.logger.bind(tag=TAG).info(f"患者端 PWA:\thttp://{local_ip}:{port}/patient/index.html")
+                if os.path.exists(os.path.join(apps_dir, "family")):
+                    app.router.add_static("/family/", os.path.join(apps_dir, "family"), show_index=True)
+                    self.logger.bind(tag=TAG).info(f"家属端面板:\thttp://{local_ip}:{port}/family/index.html")
+                if os.path.exists(os.path.join(apps_dir, "shared")):
+                    app.router.add_static("/shared/", os.path.join(apps_dir, "shared"), show_index=False)
+
+                # 将 test 目录作为静态资源暴露，供患者端复用其 WebSocket/音频模块
+                test_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "test")
+                if os.path.exists(test_dir):
+                    app.router.add_static("/test-assets/", test_dir, show_index=False)
+
+                # 家属消息上传的媒体文件（语音/图片）
+                media_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "hospice_media")
+                os.makedirs(media_dir, exist_ok=True)
+                app.router.add_static("/hospice-media/", media_dir, show_index=False)
 
                 # 运行服务
                 runner = web.AppRunner(app)

@@ -1027,7 +1027,36 @@ class ConnectionHandler:
         if len(response_message) > 0:
             text_buff = "".join(response_message)
             self.tts_MessageText = text_buff
-            self.dialogue.put(Message(role="assistant", content=text_buff))
+
+            # ── 安宁疗护：情感解析 + 会话日志 ──
+            try:
+                from core.providers.emotion import parse_emotion
+                clean_text, emotion_data = parse_emotion(text_buff)
+                # 存入对话历史时去掉情感标签，避免标签累积
+                self.dialogue.put(Message(role="assistant", content=clean_text))
+
+                # 记录到会话日志（如果启用了 hospice 模块）
+                hospice_config = self.config.get("hospice", {})
+                if hospice_config.get("enable_logging", False):
+                    from core.api.hospice.storage import get_session_logger
+                    session_logger = get_session_logger(self.config)
+                    device_id = self.device_id or "default"
+                    # 记录用户消息
+                    if query:
+                        session_logger.log_conversation(
+                            device_id, self.session_id, "patient", query
+                        )
+                    # 记录助手回复 + 情感
+                    mood = emotion_data.get("mood") if emotion_data else None
+                    intensity = emotion_data.get("intensity") if emotion_data else None
+                    session_logger.log_conversation(
+                        device_id, self.session_id, "assistant", clean_text,
+                        emotion_mood=mood, emotion_intensity=intensity
+                    )
+            except Exception as e:
+                self.logger.bind(tag=TAG).debug(f"情感解析/会话日志记录跳过: {e}")
+                self.dialogue.put(Message(role="assistant", content=text_buff))
+                
         # LLM 调用总耗时日志
         llm_total_ms = (time.time() - llm_total_start) * 1000
         try:
