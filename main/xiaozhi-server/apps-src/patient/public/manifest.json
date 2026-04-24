@@ -1,0 +1,18 @@
+{
+    "name": "小暖 · 陪伴助手",
+    "short_name": "小暖",
+    "description": "安宁疗护智能陪伴助手",
+    "start_url": "/patient/index.html",
+    "scope": "/patient/",
+    "display": "standalone",
+    "orientation": "landscape",
+    "background_color": "#f3e9d4",
+    "theme_color": "#f3e9d4",
+    "icons": [
+        {
+            "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='80'>🌸</text></svg>",
+            "sizes": "any",
+            "type": "image/svg+xml"
+        }
+    ]
+}
