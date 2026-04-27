@@ -138,7 +138,22 @@ class OTAHandler(BaseHandler):
         if "你的" not in websocket_config:
             return websocket_config
         else:
-            return f"ws://{local_ip}:{port}/xiaozhi/v1/"
+            tls_cfg = server_config.get("tls") or {}
+            cert_file = tls_cfg.get("cert_file")
+            key_file = tls_cfg.get("key_file")
+
+            def resolve(path):
+                root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+                return path if os.path.isabs(path) else os.path.join(root, path)
+
+            tls_enabled = (
+                bool(cert_file)
+                and bool(key_file)
+                and os.path.exists(resolve(cert_file))
+                and os.path.exists(resolve(key_file))
+            )
+            scheme = "wss" if tls_enabled else "ws"
+            return f"{scheme}://{local_ip}:{port}/xiaozhi/v1/"
 
     async def handle_post(self, request):
         """处理 OTA POST 请求

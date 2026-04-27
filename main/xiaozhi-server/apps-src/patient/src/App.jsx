@@ -15,6 +15,7 @@ export default function App() {
   const [incoming, setIncoming]   = useState(null);   // {caller, callType}
   const [inCall, setInCall]       = useState(null);
   const [connected, setConnected] = useState(false);
+  const [connectStatus, setConnectStatus] = useState('');
   const [recording, setRecording] = useState(false);
   const [micOk, setMicOk]         = useState(false);
   const [contacts, setContacts]   = useState([]);
@@ -56,6 +57,7 @@ export default function App() {
     const onState = e => setAiState(e.detail.state);
     const onLlm   = e => setMsg(e.detail.text);
     const onStt   = () => { };
+    const onErr   = e => setConnectStatus(e.detail?.message || e.detail?.error?.message || '连接模块初始化失败');
     const onReady = async () => {
       try {
         const ok = await window.XiaozhiClient.init();
@@ -66,6 +68,7 @@ export default function App() {
     window.addEventListener('xz:state', onState);
     window.addEventListener('xz:llm', onLlm);
     window.addEventListener('xz:stt', onStt);
+    window.addEventListener('xz:error', onErr);
     window.addEventListener('xz:ready', onReady);
     if (window.XiaozhiClient) onReady();
     return () => {
@@ -73,13 +76,28 @@ export default function App() {
       window.removeEventListener('xz:state', onState);
       window.removeEventListener('xz:llm', onLlm);
       window.removeEventListener('xz:stt', onStt);
+      window.removeEventListener('xz:error', onErr);
       window.removeEventListener('xz:ready', onReady);
     };
   }, []);
 
   const handleConnect = async () => {
-    try { await window.XiaozhiClient.connect(); }
-    catch (err) { console.error('连接失败', err); }
+    setConnectStatus('正在连接...');
+    try {
+      if (!window.XiaozhiClient) {
+        setConnectStatus('连接模块还没有加载完成，请刷新页面后重试');
+        return;
+      }
+      const ok = await Promise.race([
+        window.XiaozhiClient.connect(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('CONNECT_TIMEOUT')), 10000)),
+      ]);
+      setConnectStatus(ok ? '' : 'CONNECT_FAILED: check OTA/WSS/8000');
+    }
+    catch (err) {
+      console.error('connect failed', err);
+      setConnectStatus(err?.message === 'CONNECT_TIMEOUT' ? 'CONNECT_TIMEOUT: OTA or WSS did not respond in 10s' : (err?.message || 'CONNECT_FAILED'));
+    }
   };
   const handleDisconnect = () => window.XiaozhiClient.disconnect();
   const handleSendText   = (t) => window.XiaozhiClient.sendText(t);
@@ -150,6 +168,7 @@ export default function App() {
         <ConnectBar
           connected={connected} onConnect={handleConnect} onDisconnect={handleDisconnect}
           onSendText={handleSendText} recording={recording} onToggleRec={handleToggleRec} micOk={micOk}
+          connectStatus={connectStatus}
         />
       )}
 

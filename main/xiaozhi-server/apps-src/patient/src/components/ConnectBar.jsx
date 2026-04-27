@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { C } from '../theme';
 
 /** 开发调试栏：连接小暖服务器、文字输入、切换录音。生产阶段可以隐藏。 */
-export default function ConnectBar({ connected, onConnect, onDisconnect, onSendText, recording, onToggleRec, micOk }) {
+export default function ConnectBar({ connected, onConnect, onDisconnect, onSendText, recording, onToggleRec, micOk, connectStatus }) {
   const [text, setText] = useState('');
   return (
     <div style={{ position: 'absolute', bottom: 86, right: 24, zIndex: 30, display: 'flex', gap: 10, alignItems: 'center', background: 'rgba(255,250,242,0.92)', backdropFilter: 'blur(12px)', padding: '10px 14px', borderRadius: 18, border: '1px solid rgba(143,163,176,0.22)', boxShadow: '0 4px 18px rgba(0,0,0,0.08)', flexWrap: 'wrap', maxWidth: '72vw' }}>
@@ -37,6 +37,11 @@ export default function ConnectBar({ connected, onConnect, onDisconnect, onSendT
             断开
           </button>
         </>
+      )}
+      {connectStatus && !connected && (
+        <span style={{ fontSize: 12, color: connectStatus.includes('失败') ? C.red : C.inkFaint, fontFamily: 'Noto Sans SC', maxWidth: 260, lineHeight: 1.4 }}>
+          {connectStatus}
+        </span>
       )}
     </div>
   );

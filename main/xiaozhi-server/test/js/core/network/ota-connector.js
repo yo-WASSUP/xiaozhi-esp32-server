@@ -28,6 +28,7 @@ export async function webSocketConnect(otaUrl, config) {
     try {
         const otaUrlObj = new URL(otaUrl);
         connUrl.hostname = otaUrlObj.hostname;
+        connUrl.protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     } catch (e) {
         log('无法解析OTA URL，使用原始WebSocket地址', 'warn');
     }
@@ -71,9 +72,12 @@ function validateConfig(config) {
 
 // OTA发送请求，验证状态，并返回响应数据
 async function sendOTA(otaUrl, config) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
     try {
         const res = await fetch(otaUrl, {
             method: 'POST',
+            signal: controller.signal,
             headers: {
                 'Content-Type': 'application/json',
                 'Device-Id': config.deviceId,
@@ -112,6 +116,9 @@ async function sendOTA(otaUrl, config) {
         const result = await res.json();
         return result; // 返回完整的响应数据
     } catch (err) {
+        log(`OTA request failed: ${err.name || 'Error'} ${err.message || ''}`, 'error');
         return null; // 失败返回null
+    } finally {
+        clearTimeout(timeoutId);
     }
 }

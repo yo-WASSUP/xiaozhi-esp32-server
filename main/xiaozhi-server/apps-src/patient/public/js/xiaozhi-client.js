@@ -3,6 +3,30 @@
 // 通过垫片（shim）隐藏掉它们对 test_page DOM 的依赖，
 // 并以 window 事件的形式向 React 应用广播会话状态变化。
 
+let resolveXiaozhiBridge;
+let rejectXiaozhiBridge;
+const xiaozhiBridgeReady = new Promise((resolve, reject) => {
+  resolveXiaozhiBridge = resolve;
+  rejectXiaozhiBridge = reject;
+});
+
+window.XiaozhiClient = {
+  ready: xiaozhiBridgeReady,
+  async init() { return (await xiaozhiBridgeReady).init(); },
+  async connect() { return (await xiaozhiBridgeReady).connect(); },
+  disconnect() { return xiaozhiBridgeReady.then(c => c.disconnect()); },
+  sendText(text) { return xiaozhiBridgeReady.then(c => c.sendText(text)); },
+  async startRecording() { return (await xiaozhiBridgeReady).startRecording(); },
+  stopRecording() { return xiaozhiBridgeReady.then(c => c.stopRecording()); },
+  isConnected() { return false; },
+  isRemoteSpeaking() { return false; },
+};
+
+(async function initXiaozhiBridge() {
+if (document.readyState === 'loading') {
+  await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, { once: true }));
+}
+
 const TEST = '/test-assets/js';
 
 // ── 1. 垫片：补齐原模块期望的隐藏 DOM ────────────────────
@@ -102,7 +126,7 @@ wsHandler.onChatMessage = (text, isUser) => {
 };
 
 // ── 5. 暴露统一的客户端 API ──────────────────────────────
-window.XiaozhiClient = {
+const realClient = {
   async init() {
     opusMod.checkOpusLoaded();
     opusMod.initOpusEncoder();
@@ -139,3 +163,11 @@ window.XiaozhiClient = {
 
 // 让 React 侧知道桥已就绪
 window.dispatchEvent(new Event('xz:ready'));
+window.XiaozhiClient = Object.assign(window.XiaozhiClient, realClient);
+resolveXiaozhiBridge(realClient);
+window.dispatchEvent(new Event('xz:ready'));
+})().catch((err) => {
+  console.error('XiaozhiClient bootstrap failed', err);
+  rejectXiaozhiBridge(err);
+  window.dispatchEvent(new CustomEvent('xz:error', { detail: { error: err } }));
+});

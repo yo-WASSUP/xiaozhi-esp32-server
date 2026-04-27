@@ -1,8 +1,10 @@
 import asyncio
 import logging
+import os
 
 import websockets
 from config.logger import setup_logging
+from core.http_server import _build_ssl_context
 
 
 class SuppressInvalidHandshakeFilter(logging.Filter):
@@ -72,9 +74,21 @@ class WebSocketServer:
         server_config = self.config["server"]
         host = server_config.get("ip", "0.0.0.0")
         port = int(server_config.get("port", 8000))
+        xiaozhi_root = os.path.dirname(os.path.dirname(__file__))
+        ssl_context = _build_ssl_context(
+            server_config.get("tls") or {}, xiaozhi_root, self.logger
+        )
+        scheme = "wss" if ssl_context else "ws"
+        self.logger.bind(tag=TAG).info(
+            f"WebSocket 服务监听: {scheme}://{host}:{port}/xiaozhi/v1/"
+        )
 
         async with websockets.serve(
-            self._handle_connection, host, port, process_request=self._http_response
+            self._handle_connection,
+            host,
+            port,
+            process_request=self._http_response,
+            ssl=ssl_context,
         ):
             await asyncio.Future()
 
