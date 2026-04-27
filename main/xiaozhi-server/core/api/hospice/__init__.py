@@ -335,10 +335,12 @@ class HospiceFamilyHandler:
 
         room = self.call_rooms.setdefault(device_id, {})
         # 若同角色已有连接，踢掉旧的
+        # 用 close code 4001 标记"被新连接顶替"，客户端据此判断不重连
+        # （关闭码比 message 帧更可靠——不会被浏览器事件循环顺序搞乱）
         old = room.get(role)
         if old is not None and not old.closed:
             try:
-                await old.close()
+                await old.close(code=4001, message=b"replaced-by-new")
             except Exception:
                 pass
         room[role] = ws

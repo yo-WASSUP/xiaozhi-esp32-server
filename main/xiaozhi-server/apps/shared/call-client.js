@@ -30,13 +30,13 @@
       this.deviceId = opts.deviceId;
       this.role = opts.role;
       this.handlers = {
-        onIncoming: opts.onIncoming || (() => {}),
-        onAccepted: opts.onAccepted || (() => {}),
-        onRejected: opts.onRejected || (() => {}),
-        onEnded: opts.onEnded || (() => {}),
-        onLocalStream: opts.onLocalStream || (() => {}),
-        onRemoteStream: opts.onRemoteStream || (() => {}),
-        onState: opts.onState || (() => {}),
+        onIncoming: opts.onIncoming || (() => { }),
+        onAccepted: opts.onAccepted || (() => { }),
+        onRejected: opts.onRejected || (() => { }),
+        onEnded: opts.onEnded || (() => { }),
+        onLocalStream: opts.onLocalStream || (() => { }),
+        onRemoteStream: opts.onRemoteStream || (() => { }),
+        onState: opts.onState || (() => { }),
       };
       this.ws = null;
       this.pc = null;
@@ -46,6 +46,8 @@
       this.peerName = null;
       this.state = 'idle';
       this._pendingCandidates = [];  // 远端 ICE 等待 setRemoteDescription
+      this._destroyed = false;
+      this._reconnectTimer = null;
     }
 
     _setState(s) {
@@ -55,6 +57,7 @@
     }
 
     connect() {
+      if (this._destroyed) return;                                      // 已销毁：拒绝任何新连接
       if (this.ws && (this.ws.readyState === 0 || this.ws.readyState === 1)) return;
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const url = `${proto}//${location.host}/api/hospice/call/ws?device_id=${encodeURIComponent(this.deviceId)}&role=${this.role}`;
@@ -62,12 +65,21 @@
       this.ws = ws;
       ws.onopen = () => console.log('[call] ws open');
       ws.onmessage = (ev) => this._onMessage(ev);
-      ws.onclose = () => {
-        console.log('[call] ws closed');
+      ws.onclose = (ev) => {
+        console.log('[call] ws closed, code=', ev && ev.code, 'reason=', ev && ev.reason);
         this._cleanup('ws-closed');
+        // 服务端踢掉用的 code=4001，收到就别重连
+        if (ev && ev.code === 4001) {
+          console.warn('[call] kicked by server (code 4001), will not reconnect');
+          this._destroyed = true;
+          return;
+        }
         if (this._destroyed) return;
         // 3s 后重连，确保随时能接电话
-        setTimeout(() => this.connect(), 3000);
+        this._reconnectTimer = setTimeout(() => {
+          this._reconnectTimer = null;
+          this.connect();
+        }, 3000);
       };
       ws.onerror = (e) => console.warn('[call] ws error', e);
     }
@@ -163,6 +175,13 @@
           }
           break;
         }
+
+        case 'kicked': {
+          // 服务端因为同角色有新连接进来，把本连接踢掉了 —— 彻底销毁，别重连
+          console.warn('[call] kicked by server:', msg.reason);
+          this.disconnect();
+          break;
+        }
       }
     }
 
@@ -246,9 +265,15 @@
 
     disconnect() {
       this._destroyed = true;
+      if (this._reconnectTimer) {
+        clearTimeout(this._reconnectTimer);
+        this._reconnectTimer = null;
+      }
       if (this.ws) {
         this.ws.onclose = null; // 避免触发重连逻辑
-        this.ws.close();
+        this.ws.onmessage = null;
+        this.ws.onerror = null;
+        try { this.ws.close(); } catch (_) {}
         this.ws = null;
       }
       this._cleanup('user-disconnect');
@@ -257,7 +282,7 @@
     _cleanup(reason) {
       const wasActive = this.state !== 'idle';
       if (this.pc) {
-        try { this.pc.close(); } catch (_) {}
+        try { this.pc.close(); } catch (_) { }
         this.pc = null;
       }
       if (this.localStream) {

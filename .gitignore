@@ -224,6 +224,9 @@ main/xiaozhi-server/data/hospice_sessions.db-shm
 main/xiaozhi-server/data/hospice_sessions.db-wal
 main/xiaozhi-server/data/hospice_media/
 
+# TLS 证书（mkcert 或其它签发的，绝对不能进 git）
+main/xiaozhi-server/data/certs/
+
 # Capacitor 壳生成的原生工程（npx cap add android 重新生成）
 mobile/*/android/
 mobile/*/node_modules/

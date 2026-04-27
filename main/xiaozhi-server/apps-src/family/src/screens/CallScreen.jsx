@@ -53,14 +53,18 @@ export default function CallScreen() {
     };
   }, []);
 
+  // 同时依赖 callState：localStream 在 placeCall 时就拿到了，
+  // 但此时 callState='calling'，<video> 元素还没挂载。
+  // 当 callState 跳到 'connecting'/'active'，active 视图渲染、ref 才有效，
+  // effect 必须再跑一次才能把 srcObject 赋上去。
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) remoteVideoRef.current.srcObject = remoteStream;
     if (remoteAudioRef.current && remoteStream) remoteAudioRef.current.srcObject = remoteStream;
-  }, [remoteStream]);
+  }, [remoteStream, callState]);
 
   useEffect(() => {
     if (localVideoRef.current && localStream) localVideoRef.current.srcObject = localStream;
-  }, [localStream]);
+  }, [localStream, callState]);
 
   useEffect(() => {
     if (callState !== 'active') return;
@@ -136,7 +140,7 @@ export default function CallScreen() {
     <div style={{ position: 'absolute', top: 0, bottom: 80, left: 0, right: 0, background: `radial-gradient(circle at 50% 40%,#1a2a18,#080e08)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 28, animation: 'fadeIn .4s ease' }}>
       <div style={{ position: 'relative', width: 160, height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {[0, 1, 2].map(i => (
-          <div key={i} style={{ position: 'absolute', inset: -(i * 22), borderRadius: '50%', border: `1.5px solid ${C.sage}${['44', '2a', '18'][i]}`, animation: `ripple ${1.6 + i * .4}s ease-out ${i * .35}s infinite` }} />
+          <div key={i} style={{ position: 'absolute', inset: -(i * 22), borderRadius: '50%', border: `1.5px solid ${C.sage}${['44', '2a', '18'][i]}`, animation: `ripple ${1.6 + i * .4}s ease-out ${i * .35}s infinite`, pointerEvents: 'none' }} />
         ))}
         <div style={{ width: 100, height: 100, borderRadius: '50%', background: `radial-gradient(circle at 33% 30%,${C.amber}cc,#b87340aa)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 44 }}>👴</div>
       </div>

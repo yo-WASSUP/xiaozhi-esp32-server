@@ -9,6 +9,21 @@ server:
   port: 8000
   http_port: 8003
 
+  # ========== 可选：HTTPS（手机 APK / 局域网外访问通话功能时必须）==========
+  # 浏览器和 Android WebView 要求 HTTPS 才允许麦克风/摄像头（WebRTC）。
+  # 推荐用 mkcert 给局域网 IP 签自签证书，然后把根证书装到手机。
+  # 步骤：
+  #   1) 电脑：https://github.com/FiloSottile/mkcert 下载 mkcert.exe
+  #   2) mkcert -install                         安装本机根 CA
+  #   3) cd main/xiaozhi-server/data/certs        （没有就新建）
+  #   4) mkcert 192.168.1.7 localhost 127.0.0.1  生成证书文件
+  #   5) 把 "mkcert -CAROOT" 目录里的 rootCA.pem 拷到手机，系统设置里装入用户证书
+  #   6) 下面填两个文件路径（相对 main/xiaozhi-server/ 即可）
+  # 没填或者文件不存在时自动回退到 HTTP。
+  # tls:
+  #   cert_file: data/certs/192.168.1.7+2.pem
+  #   key_file:  data/certs/192.168.1.7+2-key.pem
+
 selected_module:
   VAD: SileroVAD
   ASR: AliyunBLStreamASR

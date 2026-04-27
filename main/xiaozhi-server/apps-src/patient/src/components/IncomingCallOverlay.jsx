@@ -9,7 +9,7 @@ export default function IncomingCallOverlay({ caller, callType, onAccept, onDecl
     <div style={{ position: 'absolute', inset: 0, zIndex: 100, background: 'rgba(10,8,6,.78)', backdropFilter: 'blur(18px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 32, animation: 'fadeIn .4s ease' }}>
       <div style={{ position: 'relative', width: 200, height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {[0, 1, 2].map(i => (
-          <div key={i} style={{ position: 'absolute', inset: -(i * 28), borderRadius: '50%', border: `1.5px solid ${C.sage}${['55', '33', '1a'][i]}`, animation: `ripple ${1.8 + i * .4}s ease-out ${i * .4}s infinite` }} />
+          <div key={i} style={{ position: 'absolute', inset: -(i * 28), borderRadius: '50%', border: `1.5px solid ${C.sage}${['55', '33', '1a'][i]}`, animation: `ripple ${1.8 + i * .4}s ease-out ${i * .4}s infinite`, pointerEvents: 'none' }} />
         ))}
         <div style={{ width: 120, height: 120, borderRadius: '50%', background: `radial-gradient(circle at 33% 30%,${C.sage}cc,#3a7055bb)`, boxShadow: `0 0 40px ${C.sage}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 48 }}>
           {caller.avatar}

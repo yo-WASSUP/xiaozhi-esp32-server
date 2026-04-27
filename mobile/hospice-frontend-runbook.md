@@ -112,32 +112,14 @@ npm run build
 
 ---
 
-## 4. 手机连 dev server（绕过 HMR 限制）
+## 4. APK 打包
 
-上面的 HMR 只对 `localhost` 生效。如果想让手机**实时看**你改的代码（不走"build → 刷新手机"的循环），有两种办法：
-
-### 4.1 让手机直接访问 Vite dev server
-
-Vite 的 `server.host: true` 已经让 dev server 绑 `0.0.0.0`，所以手机浏览器打开 `http://<PC局域网IP>:5555` 或 `http://<PC局域网IP>:5556` 就能连到 Vite，HMR 也起作用。前提是 PC 防火墙放行 5555/5556。
-
-⚠️ 注意：手机访问 Vite dev 时，HMR / API proxy 都走 Vite；只要后端也跑着，一切正常。
-
-### 4.2 Capacitor 壳里临时切到 dev URL
-
-改 `mobile/family/capacitor.config.json` 里 `server.url` 指向 `http://<PC>:5555`，重新 `npx cap sync && 装 APK`，然后 App 就直接加载 Vite dev server 内容。**改完别忘改回指向 8003 再重新打包发给用户**。
-
-日常不推荐这么折腾，改完用 `npm run build` 推新版本最稳。
-
----
-
-## 5. APK 打包
-
-### 5.1 一次性准备
+### 4.1 一次性准备
 
 下载 Android Studio：https://developer.android.com/studio  
 首次启动时让它把 SDK 自动装好，记下 SDK 路径（后面 Capacitor 会自动探测）。
 
-### 5.2 家属端 APK
+### 4.2 家属端 APK
 
 ```bash
 cd mobile/family
@@ -390,44 +372,155 @@ npx cap open android    # Android Studio 里 Build APK
 | `mobile/*/capacitor.config.json`、`package.json`、`package-lock.json` | Capacitor 壳配置 |
 | `mobile/*/www/` | Capacitor 占位壳（极小） |
 
-### 首次 commit 建议粒度
+---
 
-hospice 这批改动如果一次性 commit 会 5000 行巨无霸，建议拆：
+## 11. HTTPS（手机真机 + 通话必备）
+
+**什么时候需要**：手机 APK / 局域网外的浏览器里要用**麦克风/摄像头**（通话、录音功能）。浏览器和 Android WebView 的安全上下文规则：除 `http://localhost` 外的 HTTP 页面拿不到 `navigator.mediaDevices`，`getUserMedia` 直接报错。
+
+### 11.1 准备 mkcert
+
+mkcert 会在你的电脑和所有需要用到这个服务的手机上，各自安装一次"本机根 CA"，然后给局域网 IP 签发"浏览器信任"的证书。不像纯自签证书到处会弹"不安全"警告。
+
+**电脑端（只装一次）**：
 
 ```bash
-# 先单独提 gitignore 改动
-git add .gitignore
-git commit -m "chore: add hospice ignore rules"
+# Windows（用 chocolatey 或 scoop）
+scoop install mkcert
+# 或 choco install mkcert
+# 或直接从 https://github.com/FiloSottile/mkcert/releases 下载 .exe 放 PATH 里
 
-# 后端核心
-git add main/xiaozhi-server/app.py main/xiaozhi-server/config/ \
-        main/xiaozhi-server/core/connection.py \
-        main/xiaozhi-server/core/http_server.py \
-        main/xiaozhi-server/core/api/hospice/ \
-        main/xiaozhi-server/core/providers/emotion/ \
-        main/xiaozhi-server/apps/shared/
-git commit -m "feat(hospice): 后端 API、会话日志、情绪解析、WebRTC 信令"
-
-# 配置模板
-git add main/xiaozhi-server/data/.config_hospice.example.yaml
-git commit -m "chore(hospice): 配置文件模板"
-
-# 前端
-git add main/xiaozhi-server/apps-src/
-git commit -m "feat(hospice): 家属端 + 患者端 Vite 前端"
-
-# Capacitor 壳
-git add mobile/
-git commit -m "feat(hospice): Android APK 壳（家属 + 患者）"
-
-# 文档
-git add mobile/hospice-frontend-runbook.md
-git commit -m "docs(hospice): 开发和部署手册"
+# 安装本机根 CA 到系统信任库
+mkcert -install
 ```
 
-### 分支策略建议
+### 11.2 给局域网 IP 签证书
 
-- 这个 repo 原本 fork 自 `xinnan-tech/xiaozhi-esp32-server`，长期会有上游更新
-- hospice 功能建议在独立分支 `hospice/main` 维护，公司部署就用这个分支
-- `main` 分支定期 `git pull upstream main` 同步上游，避免日后 merge 爆炸
-- 具体做不做看你，当下首要是先把改动 push 起来
+```bash
+cd main/xiaozhi-server
+mkdir -p data/certs
+cd data/certs
+
+# 把你电脑的局域网 IP 换掉（ipconfig 查 IPv4）
+mkcert 192.168.1.7 localhost 127.0.0.1
+```
+
+会生成两个文件：
+
+```
+192.168.1.7+2.pem       ← 证书
+192.168.1.7+2-key.pem   ← 私钥
+```
+
+名字里的 `+2` 表示"主机名 + 2 个额外 SAN"，版本不同可能是 `+N`，对应往后用。
+
+### 11.3 在 `.config_hospice.yaml` 里启用
+
+```yaml
+server:
+  ip: 0.0.0.0
+  port: 8000
+  http_port: 8003
+  tls:
+    cert_file: data/certs/192.168.1.7+2.pem
+    key_file:  data/certs/192.168.1.7+2-key.pem
+```
+
+**重启后端** (`python app.py --config hospice`)，日志里 URL 前缀应该变成 `https://` 了：
+
+```
+家属端面板: https://192.168.1.7:8003/family/index.html
+患者端 PWA: https://192.168.1.7:8003/patient/index.html
+```
+
+证书文件不存在或加载失败时会自动回退到 HTTP 并打印 WARNING，日志里一眼能看见。
+
+### 11.4 手机上装根 CA（关键步骤）
+
+只在电脑装 CA 还不够，**手机需要单独装一次**，否则 Android WebView 打开 `https://...` 会报"证书不信任"。
+
+1. **拿到根证书文件**：
+   ```bash
+   mkcert -CAROOT
+   # 输出类似：C:\Users\38370\AppData\Local\mkcert
+   ```
+   这个目录下有 `rootCA.pem`。
+
+2. **改扩展名为 `.crt`**（Android 对扩展名敏感）：
+   ```bash
+   cp "C:\Users\38370\AppData\Local\mkcert\rootCA.pem" C:\Users\38370\Desktop\mkcert-root.crt
+   ```
+
+3. **把 `mkcert-root.crt` 拷到手机**（微信发给自己 / QQ 文件传输 / 邮件附件 / 数据线都行）
+
+4. **手机上打开这个 crt 文件 → 系统弹出"安装证书"对话框**：
+   - 设置 → 安全 → 加密与凭据 → 安装证书 → CA 证书
+   - 选 "VPN 和应用"（不是 WLAN）
+   - 给证书随便起个名字（比如 "mkcert 小暖开发"）
+   - 不同品牌路径略有差异，搜 "安装 CA 证书" + 你的手机型号
+
+5. **装好后** 打开手机 Chrome 访问 `https://192.168.1.7:8003/family/index.html`，**地址栏应该是小锁图标，没有红色警告**。
+
+### 11.5 更新 APK 让 WebView 认这个 CA
+
+**关键**：Android 7+ 起，**App 默认不信任用户安装的 CA** —— 只信系统自带 CA。所以即使手机装好了 mkcert 根证书，Capacitor WebView 打开 `https://` 还是会报错。
+
+要让 APK 信任用户 CA，在 `mobile/family/android/app/src/main/res/xml/network_security_config.xml` 加一个文件（如果目录没有就创建）：
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
+```
+
+然后在 `android/app/src/main/AndroidManifest.xml` 的 `<application>` 标签加上引用：
+
+```xml
+<application
+    ...
+    android:networkSecurityConfig="@xml/network_security_config"
+    ...>
+```
+
+重新 Build APK → 装到手机。现在 WebView 就会接受 mkcert 签的证书。
+
+### 11.6 Capacitor config 换 https
+
+```json
+// mobile/family/capacitor.config.json
+{
+  "server": {
+    "url": "https://192.168.1.7:8003/family/index.html",
+    ...
+  }
+}
+```
+
+patient 同理。修改后 `npx cap sync android` → Build APK → 装手机。
+
+### 11.7 验证全链路
+
+1. PC 浏览器打开 `https://192.168.1.7:8003/family/index.html` → 没有证书警告 ✓
+2. 手机 Chrome 打开同一地址 → 没警告 ✓（没警告 = 11.4 装对了）
+3. APK 打开家属端 → 直接进主界面（没提示"Net::ERR_CERT_AUTHORITY_INVALID"）✓（没错 = 11.5 做对了）
+4. 点拨号 → 能正常获取麦克风/摄像头权限 → 发起通话 → 患者端接听 → 通话打通 ✓
+
+### 11.8 IP 变了怎么办
+
+**重新签一套证书**：
+
+```bash
+cd main/xiaozhi-server/data/certs
+rm *.pem
+mkcert 192.168.X.X localhost 127.0.0.1
+```
+
+然后改 `.config_hospice.yaml` 里的文件名（因为可能从 `+2` 变成 `+3`）、改 capacitor.config.json 里的 IP、重打 APK。
+
+**建议**：局域网路由器里给 PC 绑定静态 IP，一劳永逸。

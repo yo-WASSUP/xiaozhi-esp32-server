@@ -1,13 +1,12 @@
 // 患者端 Service Worker - 仅做壳缓存，API/SSE/WS/上传不拦截
-const CACHE_NAME = 'hospice-patient-v2';
+// v3: index.html 改 network-first，避免 Vite 新构建后引用旧 hash 资源
+const CACHE_NAME = 'hospice-patient-v3';
 const SHELL = [
-    '/patient/',
-    '/patient/index.html',
     '/patient/manifest.json',
 ];
 
 self.addEventListener('install', event => {
-    event.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(SHELL).catch(() => {})));
+    event.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(SHELL).catch(() => { })));
     self.skipWaiting();
 });
 
@@ -29,6 +28,13 @@ self.addEventListener('fetch', event => {
         || url.pathname.startsWith('/xiaozhi/')
         || url.pathname.includes('/assets/')
         || event.request.method !== 'GET') {
+        return;
+    }
+    // index.html 走 network-first
+    if (url.pathname === '/patient/' || url.pathname === '/patient/index.html') {
+        event.respondWith(
+            fetch(event.request).catch(() => caches.match(event.request))
+        );
         return;
     }
     event.respondWith(

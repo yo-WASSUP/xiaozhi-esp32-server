@@ -1,13 +1,12 @@
 // 家属端 Service Worker - 仅做壳缓存，API/SSE/上传不拦截
-const CACHE_NAME = 'hospice-family-v2';
+// v3: index.html 改 network-first，避免 Vite 重新构建后引用了不存在的 hash 资源
+const CACHE_NAME = 'hospice-family-v3';
 const SHELL = [
-    '/family/',
-    '/family/index.html',
     '/family/manifest.json',
 ];
 
 self.addEventListener('install', event => {
-    event.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(SHELL).catch(() => {})));
+    event.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(SHELL).catch(() => { })));
     self.skipWaiting();
 });
 
@@ -28,6 +27,13 @@ self.addEventListener('fetch', event => {
         || url.pathname.startsWith('/shared/')
         || url.pathname.includes('/assets/')
         || event.request.method !== 'GET') {
+        return;
+    }
+    // index.html 走 network-first：每次构建新 hash，缓存的旧 HTML 会引用 404 资源
+    if (url.pathname === '/family/' || url.pathname === '/family/index.html') {
+        event.respondWith(
+            fetch(event.request).catch(() => caches.match(event.request))
+        );
         return;
     }
     event.respondWith(
