@@ -48,6 +48,43 @@ TAG = __name__
 
 auto_import_modules("plugins_func.functions")
 
+EMOTION_TAG_PREFIX = "<!--emotion:"
+EMOTION_TAG_END = "-->"
+
+
+def _filter_stream_emotion_tag(content, pending=""):
+    """Remove hospice emotion tags before streaming text to TTS."""
+    if not content:
+        return "", pending
+
+    combined = pending + content
+    output = []
+    index = 0
+
+    while index < len(combined):
+        tag_start = combined.find(EMOTION_TAG_PREFIX, index)
+        if tag_start == -1:
+            tail = combined[index:]
+            keep = 0
+            max_keep = min(len(tail), len(EMOTION_TAG_PREFIX) - 1)
+            for size in range(max_keep, 0, -1):
+                if tail.endswith(EMOTION_TAG_PREFIX[:size]):
+                    keep = size
+                    break
+            if keep:
+                output.append(tail[:-keep])
+                return "".join(output), tail[-keep:]
+            output.append(tail)
+            return "".join(output), ""
+
+        output.append(combined[index:tag_start])
+        tag_end = combined.find(EMOTION_TAG_END, tag_start + len(EMOTION_TAG_PREFIX))
+        if tag_end == -1:
+            return "".join(output), combined[tag_start:]
+        index = tag_end + len(EMOTION_TAG_END)
+
+    return "".join(output), ""
+
 
 class TTSException(RuntimeError):
     pass
@@ -889,6 +926,7 @@ class ConnectionHandler:
         # 支持多个并行工具调用 - 使用列表存储
         tool_calls_list = []  # 格式: [{"id": "", "name": "", "arguments": ""}]
         content_arguments = ""
+        emotion_tag_pending = ""
         self.client_abort = False
         emotion_flag = True
         first_token_ms = None
@@ -928,15 +966,19 @@ class ConnectionHandler:
 
                 if content is not None and len(content) > 0:
                     if not tool_call_flag:
-                        response_message.append(content)
-                        self.tts.tts_text_queue.put(
-                            TTSMessageDTO(
-                                sentence_id=self.sentence_id,
-                                sentence_type=SentenceType.MIDDLE,
-                                content_type=ContentType.TEXT,
-                                content_detail=content,
-                            )
+                        tts_content, emotion_tag_pending = _filter_stream_emotion_tag(
+                            content, emotion_tag_pending
                         )
+                        response_message.append(content)
+                        if tts_content:
+                            self.tts.tts_text_queue.put(
+                                TTSMessageDTO(
+                                    sentence_id=self.sentence_id,
+                                    sentence_type=SentenceType.MIDDLE,
+                                    content_type=ContentType.TEXT,
+                                    content_detail=tts_content,
+                                )
+                            )
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"LLM stream processing error: {e}")
             self.tts.tts_text_queue.put(
@@ -1026,12 +1068,12 @@ class ConnectionHandler:
         # 存储对话内容
         if len(response_message) > 0:
             text_buff = "".join(response_message)
-            self.tts_MessageText = text_buff
 
             # ── 安宁疗护：情感解析 + 会话日志 ──
             try:
                 from core.providers.emotion import parse_emotion
                 clean_text, emotion_data = parse_emotion(text_buff)
+                self.tts_MessageText = clean_text
                 # 存入对话历史时去掉情感标签，避免标签累积
                 self.dialogue.put(Message(role="assistant", content=clean_text))
 
@@ -1055,6 +1097,7 @@ class ConnectionHandler:
                     )
             except Exception as e:
                 self.logger.bind(tag=TAG).debug(f"情感解析/会话日志记录跳过: {e}")
+                self.tts_MessageText = text_buff
                 self.dialogue.put(Message(role="assistant", content=text_buff))
                 
         # LLM 调用总耗时日志

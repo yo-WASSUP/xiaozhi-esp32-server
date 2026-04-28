@@ -19,6 +19,7 @@ window.XiaozhiClient = {
   async startRecording() { return (await xiaozhiBridgeReady).startRecording(); },
   stopRecording() { return xiaozhiBridgeReady.then(c => c.stopRecording()); },
   isConnected() { return false; },
+  isRecording() { return false; },
   isRemoteSpeaking() { return false; },
 };
 
@@ -85,7 +86,7 @@ const [
   playerMod,
   opusMod,
 ] = await Promise.all([
-  import(`${TEST}/core/network/websocket.js?v=0127`),
+  import(`${TEST}/core/network/websocket.js?v=0128`),
   import(`${TEST}/core/audio/recorder.js?v=0127`),
   import(`${TEST}/core/audio/player.js?v=0127`),
   import(`${TEST}/core/audio/opus-codec.js?v=0127`),
@@ -125,6 +126,11 @@ wsHandler.onChatMessage = (text, isUser) => {
   }
 };
 
+wsHandler.onClientAction = (payload) => {
+  window.dispatchEvent(new CustomEvent('xz:client-action', { detail: payload || {} }));
+  window.dispatchEvent(new CustomEvent('xz:state', { detail: { state: 'idle' } }));
+};
+
 // ── 5. 暴露统一的客户端 API ──────────────────────────────
 const realClient = {
   async init() {
@@ -158,6 +164,7 @@ const realClient = {
   },
 
   isConnected() { return isConnected; },
+  isRecording() { return !!recorder.isRecording; },
   isRemoteSpeaking() { return isRemoteSpeaking; },
 };
 

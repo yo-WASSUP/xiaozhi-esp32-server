@@ -15,22 +15,13 @@ function Clock() {
   );
 }
 
-export default function TopBar({ screen, setScreen, unread }) {
-  const navBtn = (id, icon, label) => (
-    <button onClick={() => setScreen(id)} style={{
-      display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 20, border: 'none', cursor: 'pointer',
-      background: screen === id ? `${C.mist}22` : 'transparent',
-      transition: 'background .2s', position: 'relative',
-    }}>
-      <span style={{ fontSize: 20 }}>{icon}</span>
-      <span style={{ fontSize: 14, color: screen === id ? C.ink : C.inkFaint, fontFamily: 'Noto Sans SC', fontWeight: 300, letterSpacing: '.06em' }}>{label}</span>
-      {id === 'inbox' && unread > 0 && (
-        <div style={{ position: 'absolute', top: 4, right: 8, width: 16, height: 16, borderRadius: '50%', background: C.amber, fontSize: 10, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Noto Sans SC' }}>
-          {unread}
-        </div>
-      )}
-    </button>
-  );
+export default function TopBar({ connected, recording, unread, micOk, connectStatus }) {
+  const statusColor = connected && recording ? C.sage : connected ? C.amber : C.red;
+  const statusText = connected && recording
+    ? '小暖在线聆听'
+    : connected
+      ? '小暖在线'
+      : '正在连接小暖';
 
   return (
     <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 72, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 48px', borderBottom: `0.5px solid ${C.mist}22`, backdropFilter: 'blur(12px)', background: `rgba(243,233,212,0.55)` }}>
@@ -41,9 +32,20 @@ export default function TopBar({ screen, setScreen, unread }) {
           <div style={{ fontSize: 11, color: C.inkFaint, letterSpacing: '.08em', fontFamily: 'Noto Sans SC', fontWeight: 300 }}>安宁疗护陪伴助手</div>
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 4 }}>
-        {navBtn('chat', '💬', '陪伴对话')}
-        {navBtn('inbox', '💌', '家人消息')}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 22, fontFamily: 'Noto Sans SC', fontWeight: 300 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: statusColor, fontSize: 14, letterSpacing: '.08em' }}>
+          <span style={{ width: 9, height: 9, borderRadius: '50%', background: statusColor, boxShadow: `0 0 8px ${statusColor}`, animation: recording ? 'dotPulse 1.2s ease-in-out infinite' : 'none' }} />
+          {statusText}
+        </div>
+        <div style={{ color: unread > 0 ? C.amber : C.inkFaint, fontSize: 14, letterSpacing: '.08em' }}>
+          家人消息 {unread > 0 ? `${unread} 条未读` : '无未读'}
+        </div>
+        {!micOk && (
+          <div style={{ color: C.red, fontSize: 13, letterSpacing: '.06em' }}>需要麦克风权限</div>
+        )}
+        {connectStatus && connected && (
+          <div style={{ color: C.inkFaint, fontSize: 12, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{connectStatus}</div>
+        )}
       </div>
       <Clock />
     </div>

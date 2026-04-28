@@ -16,6 +16,7 @@ export class WebSocketHandler {
         this.onSessionStateChange = null;
         this.onSessionEmotionChange = null;
         this.onChatMessage = null; // 新增：聊天消息回调
+        this.onClientAction = null; // 患者端本地动作：接电话、读消息等
         this.currentSessionId = null;
         this.isRemoteSpeaking = false;
     }
@@ -121,6 +122,13 @@ export class WebSocketHandler {
             log(toolText, 'info');
             if (this.onChatMessage) {
                 this.onChatMessage(toolText, false);
+            }
+        } else if (message.type === 'client_action') {
+            log(`收到客户端动作: ${JSON.stringify(message)}`, 'info');
+            if (this.onClientAction) {
+                this.onClientAction(message);
+            } else if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('xz:client-action', { detail: message }));
             }
         } else if (message.type === 'mcp') {
             this.handleMCPMessage(message);
