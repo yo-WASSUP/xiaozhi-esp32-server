@@ -15,7 +15,7 @@ function Clock() {
   );
 }
 
-export default function TopBar({ connected, recording, unread, micOk, connectStatus }) {
+export default function TopBar({ connected, recording, unread, micOk, connectStatus, onOpenSettings }) {
   const statusColor = connected && recording ? C.sage : connected ? C.amber : C.red;
   const statusText = connected && recording
     ? '小暖在线聆听'
@@ -46,6 +46,23 @@ export default function TopBar({ connected, recording, unread, micOk, connectSta
         {connectStatus && connected && (
           <div style={{ color: C.inkFaint, fontSize: 12, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{connectStatus}</div>
         )}
+        <button
+          onClick={onOpenSettings}
+          title="设置"
+          style={{
+            width: 38,
+            height: 38,
+            borderRadius: '50%',
+            border: `1px solid ${C.mist}44`,
+            background: 'rgba(255,250,242,.72)',
+            color: C.inkMid,
+            cursor: 'pointer',
+            fontSize: 18,
+            lineHeight: 1,
+          }}
+        >
+          ⚙
+        </button>
       </div>
       <Clock />
     </div>

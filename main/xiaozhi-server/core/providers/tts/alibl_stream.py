@@ -6,6 +6,7 @@ import queue
 import asyncio
 import traceback
 import websockets
+import yaml
 from asyncio import Task
 from config.logger import setup_logging
 from core.utils import opus_encoder_utils
@@ -38,6 +39,10 @@ class TTSProvider(TTSProviderBase):
         self.voice = config.get("voice", "longxiaochun_v2")  # 默认音色
         if config.get("private_voice"):
             self.voice = config.get("private_voice")
+        self.base_voice = self.voice
+        self.base_model = self.model
+        self.instruction = config.get("instruction")
+        self.base_instruction = self.instruction
 
         # 音频参数配置
         self.format = config.get("format", "pcm")
@@ -57,6 +62,67 @@ class TTSProvider(TTSProviderBase):
             # "X-DashScope-WorkSpace": workspace, // 可选，阿里云百炼业务空间ID
             "X-DashScope-DataInspection": "enable",
         }
+
+    async def open_audio_channels(self, conn):
+        await super().open_audio_channels(conn)
+        self._apply_hospice_voice_settings(conn)
+
+    def _apply_hospice_voice_settings(self, conn):
+        settings_path = os.path.join("data", "hospice_voice_settings.yaml")
+        try:
+            device_id = getattr(conn, "device_id", None)
+            if not device_id or not os.path.exists(settings_path):
+                return
+            with open(settings_path, "r", encoding="utf-8") as f:
+                all_settings = yaml.safe_load(f) or {}
+            settings = all_settings.get(device_id) or {}
+            voice_id = settings.get("voice_id") or settings.get("speaker_id")
+            if not settings.get("active") or not voice_id:
+                self.voice = self.base_voice
+                self.model = self.base_model
+                self.instruction = self.base_instruction
+                return
+            if settings.get("provider") and settings.get("provider") != "aliyun_cosyvoice":
+                return
+            self.voice = voice_id
+            self.model = settings.get("model") or self.base_model
+            self.instruction = settings.get("instruction") or self.instruction
+            logger.bind(tag=TAG).info(
+                f"使用患者端 CosyVoice 音色: device={device_id}, voice={self.voice}, model={self.model}"
+            )
+        except Exception as e:
+            logger.bind(tag=TAG).warning(f"读取患者端 CosyVoice 音色设置失败: {e}")
+
+    def _build_parameters(self):
+        params = {
+            "text_type": "PlainText",
+            "voice": self.voice,
+            "format": self.format,
+            "sample_rate": self.conn.sample_rate,
+            "volume": self.volume,
+            "rate": self.rate,
+            "pitch": self.pitch,
+        }
+        if self.instruction and self._supports_instruction():
+            params["instruction"] = self.instruction
+        return params
+
+    def _supports_instruction(self):
+        # The official CosyVoice system voices reject instruction with 428.
+        # Cloned/designed voice IDs are model-prefixed, e.g. cosyvoice-v3.5-flash-...
+        return str(self.voice or "").startswith("cosyvoice-")
+
+    def _should_flush_text(self, text):
+        if not text:
+            return False
+        if len(text) >= 80:
+            return True
+        return text[-1] in "。！？；.!?;\n"
+
+    def _flush_text_buffer(self, parts):
+        text = "".join(parts).strip()
+        parts.clear()
+        return text
 
     async def _ensure_connection(self):
         """确保WebSocket连接可用，支持60秒内连接复用"""
@@ -87,9 +153,17 @@ class TTSProvider(TTSProviderBase):
 
     def tts_text_priority_thread(self):
         """流式TTS文本处理线程"""
+        pending_texts = []
         while not self.conn.stop_event.is_set():
             try:
                 message = self.tts_text_queue.get(timeout=1)
+                if message.content_type == ContentType.TEXT and message.content_detail:
+                    pending_texts.append(message.content_detail)
+                    merged = "".join(pending_texts)
+                    if self._should_flush_text(merged):
+                        message.content_detail = self._flush_text_buffer(pending_texts)
+                    else:
+                        message.content_detail = None
                 logger.bind(tag=TAG).debug(
                     f"收到TTS任务｜{message.sentence_type.name} ｜ {message.content_type.name} | 会话ID: {self.conn.sentence_id}"
                 )
@@ -108,6 +182,7 @@ class TTSProvider(TTSProviderBase):
                 if message.sentence_type == SentenceType.FIRST:
                     # 初始化会话
                     try:
+                        pending_texts.clear()
                         if not getattr(self.conn, "sentence_id", None): 
                             self.conn.sentence_id = uuid.uuid4().hex
                             logger.bind(tag=TAG).info(f"自动生成新的 会话ID: {self.conn.sentence_id}")
@@ -118,6 +193,7 @@ class TTSProvider(TTSProviderBase):
                             loop=self.conn.loop,
                         )
                         future.result()
+                        pending_texts.clear()
                         self.before_stop_play_files.clear()
                         logger.bind(tag=TAG).info("TTS会话启动成功")
                     except Exception as e:
@@ -151,6 +227,13 @@ class TTSProvider(TTSProviderBase):
                 if message.sentence_type == SentenceType.LAST:
                     try:
                         logger.bind(tag=TAG).info("开始结束TTS会话...")
+                        send_text = self._flush_text_buffer(pending_texts)
+                        if send_text:
+                            future = asyncio.run_coroutine_threadsafe(
+                                self.text_to_speak(send_text, None),
+                                loop=self.conn.loop,
+                            )
+                            future.result()
                         future = asyncio.run_coroutine_threadsafe(
                             self.finish_session(self.conn.sentence_id),
                             loop=self.conn.loop,
@@ -234,15 +317,7 @@ class TTSProvider(TTSProviderBase):
                     "task": "tts",
                     "function": "SpeechSynthesizer",
                     "model": self.model,
-                    "parameters": {
-                        "text_type": "PlainText",
-                        "voice": self.voice,
-                        "format": self.format,
-                        "sample_rate": self.conn.sample_rate,
-                        "volume": self.volume,
-                        "rate": self.rate,
-                        "pitch": self.pitch,
-                    },
+                    "parameters": self._build_parameters(),
                     "input": {}
                 },
             }
@@ -418,15 +493,7 @@ class TTSProvider(TTSProviderBase):
                             "task": "tts",
                             "function": "SpeechSynthesizer",
                             "model": self.model,
-                            "parameters": {
-                                "text_type": "PlainText",
-                                "voice": self.voice,
-                                "format": self.format,
-                                "sample_rate": self.conn.sample_rate,
-                                "volume": self.volume,
-                                "rate": self.rate,
-                                "pitch": self.pitch,
-                            },
+                            "parameters": self._build_parameters(),
                             "input": {}
                         },
                     }

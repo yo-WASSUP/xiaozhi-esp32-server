@@ -39,14 +39,25 @@ async def handle_user_intent(conn, text):
             from core.api.hospice.patient_actions import detect_patient_action
             patient_action = detect_patient_action(text)
             if patient_action:
+                action = patient_action.get("action")
+                if action == "accept_call":
+                    conn.hospice_call_active = True
+                    conn.logger.bind(tag=TAG).info("安宁疗护患者端进入通话指令模式")
+                elif action in ("reject_call", "hangup_call"):
+                    conn.hospice_call_active = False
+                    conn.logger.bind(tag=TAG).info("安宁疗护患者端退出通话指令模式")
                 await send_stt_message(conn, text)
                 await conn.websocket.send(json.dumps(patient_action, ensure_ascii=False))
                 conn.logger.bind(tag=TAG).info(
-                    f"安宁疗护患者端动作: {patient_action.get('action')}"
+                    f"安宁疗护患者端动作: {action}"
                 )
                 return True
         except Exception as e:
             conn.logger.bind(tag=TAG).warning(f"患者端动作指令处理失败: {e}")
+
+    if getattr(conn, "hospice_call_active", False):
+        conn.logger.bind(tag=TAG).info("通话中语音未命中患者端动作，已忽略普通对话处理")
+        return True
 
     if conn.intent_type == "function_call":
         # 使用支持function calling的聊天方法,不再进行意图分析

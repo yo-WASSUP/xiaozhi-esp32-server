@@ -91,6 +91,9 @@ class TTSException(RuntimeError):
 
 
 class ConnectionHandler:
+    _active_connections = {}
+    _active_connections_lock = threading.Lock()
+
     def __init__(
         self,
         config: Dict[str, Any],
@@ -207,6 +210,74 @@ class ConnectionHandler:
         # 初始化提示词管理器
         self.prompt_manager = PromptManager(self.config, self.logger)
 
+    @classmethod
+    def register_active_connection(cls, device_id, conn):
+        if not device_id or conn is None:
+            return
+        with cls._active_connections_lock:
+            cls._active_connections[device_id] = conn
+
+    @classmethod
+    def unregister_active_connection(cls, device_id, conn):
+        if not device_id or conn is None:
+            return
+        with cls._active_connections_lock:
+            current = cls._active_connections.get(device_id)
+            if current is conn:
+                cls._active_connections.pop(device_id, None)
+
+    @classmethod
+    def get_active_connection(cls, device_id):
+        with cls._active_connections_lock:
+            if device_id and device_id in cls._active_connections:
+                return cls._active_connections.get(device_id)
+            if len(cls._active_connections) == 1:
+                return next(iter(cls._active_connections.values()))
+            return None
+
+    def speak_text_with_tts(self, text):
+        text = (text or "").strip()
+        if not text:
+            return False
+
+        if self.tts is None:
+            try:
+                self.tts = self._initialize_tts()
+                if self.tts is not None and getattr(self.tts, "conn", None) is None and self.loop:
+                    future = asyncio.run_coroutine_threadsafe(
+                        self.tts.open_audio_channels(self),
+                        self.loop,
+                    )
+                    future.result(timeout=10)
+            except Exception:
+                return False
+        if self.tts is None:
+            return False
+
+        sentence_id = str(uuid.uuid4().hex)
+        self.sentence_id = sentence_id
+        self.tts.tts_text_queue.put(
+            TTSMessageDTO(
+                sentence_id=sentence_id,
+                sentence_type=SentenceType.FIRST,
+                content_type=ContentType.ACTION,
+            )
+        )
+        self.tts.tts_one_sentence(
+            self,
+            ContentType.TEXT,
+            content_detail=text,
+            sentence_id=sentence_id,
+        )
+        self.tts.tts_text_queue.put(
+            TTSMessageDTO(
+                sentence_id=sentence_id,
+                sentence_type=SentenceType.LAST,
+                content_type=ContentType.ACTION,
+            )
+        )
+        return True
+
     async def handle_connection(self, ws):
         try:
             # 获取运行中的事件循环（必须在异步上下文中）
@@ -226,6 +297,7 @@ class ConnectionHandler:
             )
 
             self.device_id = self.headers.get("device-id", None)
+            self.register_active_connection(self.device_id, self)
 
             # 认证通过,继续处理
             self.websocket = ws
@@ -278,6 +350,8 @@ class ConnectionHandler:
                     self.logger.bind(tag=TAG).error(
                         f"强制关闭连接时出错: {close_error}"
                     )
+            finally:
+                self.unregister_active_connection(self.device_id, self)
 
     async def _save_and_close(self, ws):
         """保存记忆并关闭连接"""

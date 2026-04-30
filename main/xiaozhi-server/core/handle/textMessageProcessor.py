@@ -24,6 +24,13 @@ class TextMessageProcessor:
                 # 记录日志
                 conn.logger.bind(tag=TAG).info(f"收到{message_type}消息：{message}")
 
+                if message_type == "hospice_client_state":
+                    conn.hospice_call_active = bool(msg_json.get("call_active"))
+                    conn.logger.bind(tag=TAG).info(
+                        f"安宁疗护患者端通话状态: {conn.hospice_call_active}"
+                    )
+                    return
+
                 # 获取并执行处理器
                 handler = self.registry.get_handler(message_type)
                 if handler:

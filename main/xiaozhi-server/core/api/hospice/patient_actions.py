@@ -25,7 +25,7 @@ def _extract_contact_name(text: str) -> Optional[str]:
     return name
 
 
-def detect_patient_action(text: str) -> Optional[Dict[str, Any]]:
+def detect_patient_action(text: str, call_active: bool = False) -> Optional[Dict[str, Any]]:
     normalized = _normalized(text)
     if not normalized:
         return None
@@ -37,7 +37,7 @@ def detect_patient_action(text: str) -> Optional[Dict[str, Any]]:
     if _has_any(normalized, ("接电话", "接听电话", "接一下", "接通", "帮我接", "接起来")):
         return {"type": "client_action", "action": "accept_call", "text": text}
 
-    if _has_any(normalized, ("挂电话", "挂断电话", "结束通话", "挂了电话", "挂掉电话")):
+    if _has_any(normalized, ("挂电话", "挂断电话", "结束通话", "挂了电话", "挂掉电话", "挂断", "挂了")):
         return {"type": "client_action", "action": "hangup_call", "text": text}
 
     if _has_any(normalized, ("停止播放", "别读了", "不要读了", "停一下消息")):

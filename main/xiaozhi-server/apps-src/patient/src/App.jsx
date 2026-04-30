@@ -7,6 +7,7 @@ import ChatScreen from './screens/ChatScreen';
 import InboxScreen from './screens/InboxScreen';
 import IncomingCallOverlay from './components/IncomingCallOverlay';
 import ActiveCallOverlay from './components/ActiveCallOverlay';
+import SettingsPanel from './components/SettingsPanel';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -16,6 +17,7 @@ export default function App() {
   const [lastHeard, setLastHeard] = useState('');
   const [incoming, setIncoming]   = useState(null);   // {caller, callType}
   const [inCall, setInCall]       = useState(null);
+  const [callState, setCallState] = useState('idle');
   const [connected, setConnected] = useState(false);
   const [connectStatus, setConnectStatus] = useState('');
   const [recording, setRecording] = useState(false);
@@ -24,23 +26,30 @@ export default function App() {
   const [contacts, setContacts]   = useState([]);
   const [eventTick, setEventTick] = useState(0);
   const [maxUploadMb, setMaxUploadMb] = useState(50);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const connectingRef = useRef(false);
   const initStartedRef = useRef(false);
   const reconnectTimerRef = useRef(null);
+  const callStateTimerRef = useRef(null);
+  const callCommandRecognizerRef = useRef(null);
+  const callCommandRecognizerActiveRef = useRef(false);
   const recordingRef = useRef(false);
   const connectedRef = useRef(false);
   const micOkRef = useRef(false);
   const assistantHoldRef = useRef(false);
   const inCallRef = useRef(null);
   const incomingRef = useRef(null);
+  const callStateRef = useRef('idle');
   const mediaPlaybackRef = useRef(null);
+  const ttsPlaybackAbortRef = useRef(false);
 
   useEffect(() => { connectedRef.current = connected; }, [connected]);
   useEffect(() => { micOkRef.current = micOk; }, [micOk]);
   useEffect(() => { assistantHoldRef.current = assistantHold; }, [assistantHold]);
   useEffect(() => { inCallRef.current = inCall; }, [inCall]);
   useEffect(() => { incomingRef.current = incoming; }, [incoming]);
+  useEffect(() => { callStateRef.current = callState; }, [callState]);
 
   // 拉一次配置（上传上限）
   useEffect(() => {
@@ -73,9 +82,6 @@ export default function App() {
   }, [loadContacts]);
 
   const stopPlayback = useCallback(() => {
-    try {
-      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-    } catch (_) { }
     if (mediaPlaybackRef.current) {
       try {
         mediaPlaybackRef.current.pause();
@@ -85,22 +91,38 @@ export default function App() {
     }
   }, []);
 
-  const speakLocal = useCallback((text) => new Promise((resolve) => {
-    if (!text) { resolve(); return; }
-    if (!('speechSynthesis' in window)) {
-      console.log('[patient] speech:', text);
-      resolve();
-      return;
+  const stopTtsPlayback = useCallback(async () => {
+    ttsPlaybackAbortRef.current = true;
+    try {
+      await fetch('/api/hospice/tts/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_id: DEVICE_ID }),
+      });
+    } catch (e) {
+      console.error('停止TTS失败', e);
     }
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.lang = 'zh-CN';
-    utter.rate = 0.92;
-    utter.pitch = 1;
-    utter.onend = resolve;
-    utter.onerror = resolve;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utter);
-  }), []);
+  }, []);
+
+  const speakViaTts = useCallback(async (text) => {
+    const content = (text || '').trim();
+    if (!content) return false;
+    try {
+      const r = await fetch('/api/hospice/tts/speak', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_id: DEVICE_ID, text: content }),
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body?.error || `HTTP ${r.status}`);
+      }
+      return true;
+    } catch (e) {
+      console.error('TTS播报失败', e);
+      return false;
+    }
+  }, []);
 
   const playAudioFile = useCallback((url) => new Promise((resolve) => {
     if (!url) { resolve(); return; }
@@ -129,11 +151,11 @@ export default function App() {
     assistantHoldRef.current = false;
   }, []);
 
-  const startListening = useCallback(async () => {
+  const startListening = useCallback(async ({ allowInCall = false } = {}) => {
     if (!window.XiaozhiClient || recordingRef.current || !connectedRef.current || !micOkRef.current) return;
-    if (assistantHoldRef.current || inCallRef.current) return;
+    if (!allowInCall && (assistantHoldRef.current || inCallRef.current)) return;
     try {
-      const ok = await window.XiaozhiClient.startRecording();
+      const ok = await window.XiaozhiClient.startRecording({ callActive: allowInCall });
       recordingRef.current = !!ok;
       setRecording(!!ok);
       if (!ok) setConnectStatus('麦克风没有开始工作，请点“重新连接”重试');
@@ -144,6 +166,104 @@ export default function App() {
       setConnectStatus('麦克风启动失败：' + (err?.message || '未知错误'));
     }
   }, []);
+
+  const resumeAssistantAndStart = useCallback(async ({ allowInCall = false, delay = 200 } = {}) => {
+    resumeAssistantListening();
+    await sleep(delay);
+    await startListening({ allowInCall });
+  }, [resumeAssistantListening, startListening]);
+
+  const sendClientState = useCallback(async (payload) => {
+    if (!window.XiaozhiClient || typeof window.XiaozhiClient.sendClientState !== 'function') return false;
+    try {
+      return await window.XiaozhiClient.sendClientState(payload);
+    } catch (_) {
+      return false;
+    }
+  }, []);
+
+  const normalizeCommandText = (text) => String(text || '').replace(/[\s，。！？、,.!?]/g, '');
+
+  const isHangupCommand = (text) => {
+    const value = normalizeCommandText(text);
+    return [
+      '挂电话',
+      '挂断电话',
+      '挂掉电话',
+      '结束通话',
+      '挂了电话',
+      '挂掉',
+      '挂断',
+      '挂了',
+    ].some(phrase => value.includes(phrase));
+  };
+
+  const stopCallCommandRecognizer = useCallback(() => {
+    callCommandRecognizerActiveRef.current = false;
+    const recognizer = callCommandRecognizerRef.current;
+    callCommandRecognizerRef.current = null;
+    if (recognizer) {
+      try {
+        recognizer.onend = null;
+        recognizer.stop();
+      } catch (_) { }
+    }
+  }, []);
+
+  const setCallCommandMode = useCallback(async (active) => {
+    if (callStateTimerRef.current) {
+      clearInterval(callStateTimerRef.current);
+      callStateTimerRef.current = null;
+    }
+    await sendClientState({ call_active: active });
+    if (active) {
+      callStateTimerRef.current = setInterval(() => {
+        sendClientState({ call_active: true });
+      }, 2000);
+    }
+  }, [sendClientState]);
+
+  const endCallRef = useRef(null);
+
+  const startCallCommandRecognizer = useCallback(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition || callCommandRecognizerActiveRef.current) return;
+
+    const recognizer = new SpeechRecognition();
+    recognizer.lang = 'zh-CN';
+    recognizer.continuous = true;
+    recognizer.interimResults = true;
+    recognizer.maxAlternatives = 3;
+    callCommandRecognizerActiveRef.current = true;
+    callCommandRecognizerRef.current = recognizer;
+
+    recognizer.onresult = (event) => {
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const result = event.results[i];
+        for (let j = 0; j < result.length; j += 1) {
+          const text = result[j]?.transcript || '';
+          if (isHangupCommand(text)) {
+            stopCallCommandRecognizer();
+            if (endCallRef.current) endCallRef.current();
+            return;
+          }
+        }
+      }
+    };
+    recognizer.onerror = () => { };
+    recognizer.onend = () => {
+      if (callCommandRecognizerActiveRef.current && (callStateRef.current === 'active' || inCallRef.current)) {
+        try { recognizer.start(); } catch (_) { }
+      }
+    };
+
+    try {
+      recognizer.start();
+    } catch (_) {
+      callCommandRecognizerActiveRef.current = false;
+      callCommandRecognizerRef.current = null;
+    }
+  }, [stopCallCommandRecognizer]);
 
   const connectXiaozhi = useCallback(async () => {
     if (!window.XiaozhiClient || connectingRef.current || connectedRef.current) return;
@@ -210,7 +330,30 @@ export default function App() {
     return `${contactName}发来一条消息。`;
   };
 
+  const estimateSpeechMs = useCallback((text) => {
+    const len = String(text || '').replace(/\s+/g, '').length;
+    return Math.min(10000, Math.max(1200, len * 180));
+  }, []);
+
+  const waitForTts = useCallback(async (ms) => {
+    let remaining = Math.max(0, ms || 0);
+    while (remaining > 0 && !ttsPlaybackAbortRef.current) {
+      const chunk = Math.min(200, remaining);
+      await sleep(chunk);
+      remaining -= chunk;
+    }
+  }, []);
+
+  const speakAndWait = useCallback(async (text) => {
+    const content = (text || '').trim();
+    if (!content || ttsPlaybackAbortRef.current) return;
+    await speakViaTts(content);
+    if (ttsPlaybackAbortRef.current) return;
+    await waitForTts(estimateSpeechMs(content));
+  }, [estimateSpeechMs, speakViaTts, waitForTts]);
+
   const readFamilyMessages = useCallback(async (targetName) => {
+    ttsPlaybackAbortRef.current = false;
     await pauseAssistantListening();
     stopPlayback();
     try {
@@ -226,11 +369,11 @@ export default function App() {
       }
       if (!contact) contact = latestContacts.find(c => (c.unread || 0) > 0);
       if (!contact && normalizedTarget) {
-        await speakLocal(`没有找到${normalizedTarget}的消息。`);
+        await speakAndWait(`没有找到${normalizedTarget}的消息。`);
         return;
       }
       if (!contact) {
-        await speakLocal('现在没有新的家人消息。');
+        await speakAndWait('现在没有新的家人消息。');
         return;
       }
 
@@ -239,13 +382,13 @@ export default function App() {
       const unreadMessages = familyMessages.filter(m => !m.played);
       const messagesToRead = unreadMessages.length > 0 ? unreadMessages : familyMessages.slice(-3);
       if (messagesToRead.length === 0) {
-        await speakLocal(`${contact.contact_name}还没有发来消息。`);
+        await speakAndWait(`${contact.contact_name}还没有发来消息。`);
         return;
       }
 
-      await speakLocal(`${contact.contact_name}给您发来${messagesToRead.length}条消息。`);
+      await speakAndWait(`${contact.contact_name}给您发来${messagesToRead.length}条消息。`);
       for (const message of messagesToRead) {
-        await speakLocal(messageSpeechText(contact.contact_name, message));
+        await speakAndWait(messageSpeechText(contact.contact_name, message));
         if (message.message_type === 'voice' && message.file_path) {
           await playAudioFile(message.file_path);
           await sleep(300);
@@ -254,28 +397,29 @@ export default function App() {
       await markThreadRead(contact.contact_name);
     } catch (err) {
       console.error('收听家属消息失败', err);
-      await speakLocal('消息暂时读不了，请稍后再试。');
+      await speakAndWait('消息暂时读不了，请稍后再试。');
     } finally {
-      resumeAssistantListening();
+      await resumeAssistantAndStart();
     }
-  }, [loadContacts, loadThreadMessages, markThreadRead, pauseAssistantListening, playAudioFile, resumeAssistantListening, speakLocal, stopPlayback]);
+  }, [loadContacts, loadThreadMessages, markThreadRead, pauseAssistantListening, playAudioFile, resumeAssistantAndStart, speakAndWait, stopPlayback]);
 
   const announceUnread = useCallback(async () => {
+    ttsPlaybackAbortRef.current = false;
     await pauseAssistantListening();
     try {
       const latestContacts = await loadContacts();
       const unreadContacts = latestContacts.filter(c => (c.unread || 0) > 0);
       const total = unreadContacts.reduce((sum, c) => sum + (c.unread || 0), 0);
       if (total === 0) {
-        await speakLocal('现在没有新的家人消息。');
+        await speakAndWait('现在没有新的家人消息。');
         return;
       }
       const names = unreadContacts.map(c => `${c.contact_name}${c.unread}条`).join('，');
-      await speakLocal(`您有${total}条新的家人消息，来自${names}。`);
+      await speakAndWait(`您有${total}条新的家人消息，来自${names}。`);
     } finally {
-      resumeAssistantListening();
+      await resumeAssistantAndStart();
     }
-  }, [loadContacts, pauseAssistantListening, resumeAssistantListening, speakLocal]);
+  }, [loadContacts, pauseAssistantListening, resumeAssistantAndStart, speakAndWait]);
 
   // 联系人列表 + SSE 订阅
   useEffect(() => {
@@ -301,7 +445,13 @@ export default function App() {
       }
     };
     const onState = e => setAiState(e.detail.state);
-    const onLlm   = e => setMsg(e.detail.text);
+    const onLlm   = e => {
+      if (callStateRef.current === 'active' || inCallRef.current) {
+        stopTtsPlayback();
+        return;
+      }
+      setMsg(e.detail.text);
+    };
     const onStt   = e => setLastHeard(e.detail?.text || '');
     const onErr   = e => setConnectStatus(e.detail?.message || e.detail?.error?.message || '连接模块初始化失败');
     const onReady = async () => {
@@ -333,16 +483,26 @@ export default function App() {
       window.removeEventListener('xz:error', onErr);
       window.removeEventListener('xz:ready', onReady);
     };
-  }, [connectXiaozhi, scheduleReconnect]);
+  }, [connectXiaozhi, scheduleReconnect, stopTtsPlayback]);
 
   useEffect(() => {
     if (connected && micOk && !assistantHold && !inCall) startListening();
   }, [assistantHold, connected, inCall, micOk, startListening]);
 
+  useEffect(() => {
+    if (settingsOpen) {
+      pauseAssistantListening();
+    } else {
+      resumeAssistantListening();
+    }
+  }, [pauseAssistantListening, resumeAssistantListening, settingsOpen]);
+
   useEffect(() => () => {
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    if (callStateTimerRef.current) clearInterval(callStateTimerRef.current);
+    stopCallCommandRecognizer();
     stopPlayback();
-  }, [stopPlayback]);
+  }, [stopCallCommandRecognizer, stopPlayback]);
 
   // ── 通话（WebRTC） ──
   const callRef = useRef(null);
@@ -358,28 +518,34 @@ export default function App() {
           caller: { from: fromName || '家人', avatar: '👤' },
           callType,
         });
+        setCallState('incoming');
+        resumeAssistantAndStart();
       },
       onLocalStream:  (s) => setLocalStream(s),
       onRemoteStream: (s) => setRemoteStream(s),
       onState: (s) => {
         // 状态 connecting / active 时：把来电浮层切换为通话浮层
         if (s === 'connecting' || s === 'active') {
-          pauseAssistantListening();
-          setIncoming(prev => {
-            if (prev) {
-              setInCall({ caller: prev.caller, callType: prev.callType });
-              return null;
-            }
-            return null;
+          pauseAssistantListening().finally(async () => {
+            await setCallCommandMode(true);
+            startCallCommandRecognizer();
           });
+          const caller = incomingRef.current?.caller || inCallRef.current?.caller || { from: '通话中', avatar: '☎' };
+          const callType = incomingRef.current?.callType || inCallRef.current?.callType || 'audio';
+          setCallState('active');
+          setInCall({ caller, callType });
+          setIncoming(null);
         }
       },
       onEnded: () => {
         setIncoming(null);
         setInCall(null);
+        setCallState('idle');
         setLocalStream(null);
         setRemoteStream(null);
-        resumeAssistantListening();
+        setCallCommandMode(false);
+        stopCallCommandRecognizer();
+        void resumeAssistantAndStart();
       },
     });
     callRef.current = client;
@@ -390,18 +556,36 @@ export default function App() {
         if (typeof client.disconnect === 'function') client.disconnect();
       } catch (_) { }
     };
-  }, [pauseAssistantListening, resumeAssistantListening]);
+  }, [pauseAssistantListening, resumeAssistantAndStart, setCallCommandMode, startCallCommandRecognizer, stopCallCommandRecognizer]);
 
   const acceptCall  = async () => {
     if (!callRef.current || !incomingRef.current) {
-      await speakLocal('现在没有来电。');
+      await speakViaTts('现在没有来电。');
       return;
     }
     await pauseAssistantListening();
+    await setCallCommandMode(true);
     callRef.current.accept();
+    setCallState('active');
+    startCallCommandRecognizer();
   };
-  const declineCall = () => { callRef.current && callRef.current.reject(); setIncoming(null); };
-  const endCall     = () => callRef.current && callRef.current.hangup();
+  const declineCall = () => {
+    if (callRef.current) callRef.current.reject();
+    setIncoming(null);
+    setInCall(null);
+    setCallState('idle');
+    setCallCommandMode(false);
+    stopCallCommandRecognizer();
+  };
+  const endCall     = () => {
+    if (callRef.current) callRef.current.hangup();
+    setInCall(null);
+    setIncoming(null);
+    setCallState('idle');
+    setCallCommandMode(false);
+    stopCallCommandRecognizer();
+  };
+  endCallRef.current = endCall;
   const toggleMute   = (v) => callRef.current && callRef.current.toggleMute(v);
   const toggleCamera = (v) => callRef.current && callRef.current.toggleCamera(v);
 
@@ -415,36 +599,53 @@ export default function App() {
         await acceptCall();
       } else if (action === 'reject_call') {
         if (incomingRef.current) {
+          await pauseAssistantListening();
           declineCall();
-          await speakLocal('已经帮您拒接。');
+          await speakAndWait('已经帮您拒接。');
+          await resumeAssistantAndStart();
         } else {
-          await speakLocal('现在没有来电。');
+          await pauseAssistantListening();
+          await speakAndWait('现在没有来电。');
+          await resumeAssistantAndStart();
         }
       } else if (action === 'hangup_call') {
-        if (inCallRef.current) {
+        if (callRef.current) {
           endCall();
+          await resumeAssistantAndStart();
         } else if (incomingRef.current) {
+          await pauseAssistantListening();
           declineCall();
-          await speakLocal('已经挂掉来电。');
+          await speakAndWait('已经挂掉来电。');
+          await resumeAssistantAndStart();
         } else {
-          await speakLocal('现在没有正在进行的通话。');
+          await pauseAssistantListening();
+          await speakAndWait('现在没有正在进行的通话。');
+          await resumeAssistantAndStart();
         }
       } else if (action === 'read_family_messages') {
         await readFamilyMessages(detail.contact_name || detail.target_name || '');
       } else if (action === 'announce_unread') {
         await announceUnread();
       } else if (action === 'stop_playback') {
+        await stopTtsPlayback();
         stopPlayback();
-        resumeAssistantListening();
+        await resumeAssistantAndStart();
       }
     };
     window.addEventListener('xz:client-action', onClientAction);
     return () => window.removeEventListener('xz:client-action', onClientAction);
-  }, [announceUnread, readFamilyMessages, resumeAssistantListening, speakLocal, stopPlayback]);
+  }, [announceUnread, pauseAssistantListening, readFamilyMessages, resumeAssistantAndStart, speakAndWait, stopPlayback, stopTtsPlayback]);
 
   return (
     <PaperBg>
-      <TopBar connected={connected} recording={recording} unread={unread} micOk={micOk} connectStatus={connectStatus} />
+      <TopBar
+        connected={connected}
+        recording={recording}
+        unread={unread}
+        micOk={micOk}
+        connectStatus={connectStatus}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
       <main style={{
         position: 'absolute',
         top: 72,
@@ -482,6 +683,7 @@ export default function App() {
           localStream={localStream} remoteStream={remoteStream}
           onToggleMute={toggleMute} onToggleCamera={toggleCamera} />
       )}
+      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </PaperBg>
   );
 }
