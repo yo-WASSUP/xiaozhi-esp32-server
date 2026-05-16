@@ -73,6 +73,25 @@ async def startToChat(conn, text):
         await check_bind_device(conn)
         return
 
+    if getattr(conn, "hospice_call_active", False):
+        try:
+            from core.api.hospice.patient_actions import detect_patient_action
+            action = detect_patient_action(actual_text, call_active=True)
+            if action:
+                if action.get("action") in ("reject_call", "hangup_call"):
+                    conn.hospice_call_active = False
+                await send_stt_message(conn, actual_text)
+                await conn.websocket.send(json.dumps(action, ensure_ascii=False))
+                conn.logger.bind(tag=TAG).info(
+                    f"通话中患者端动作: {action.get('action')}"
+                )
+            else:
+                conn.logger.bind(tag=TAG).info("通话中语音未命中患者端动作，已忽略")
+            return
+        except Exception as e:
+            conn.logger.bind(tag=TAG).warning(f"通话中动作指令处理失败: {e}")
+            return
+
     # 如果当日的输出字数大于限定的字数
     if conn.max_output_size > 0:
         if check_device_output_limit(
@@ -99,6 +118,9 @@ async def startToChat(conn, text):
 async def no_voice_close_connect(conn, have_voice):
     if have_voice:
         conn.last_activity_time = time.time() * 1000
+        return
+    hospice_config = conn.config.get("hospice", {}) or {}
+    if hospice_config and hospice_config.get("keep_patient_online", True):
         return
     # 只有在已经初始化过时间戳的情况下才进行超时检查
     if conn.last_activity_time > 0.0:

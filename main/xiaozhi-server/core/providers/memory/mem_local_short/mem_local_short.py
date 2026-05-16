@@ -10,69 +10,41 @@ from core.utils.util import check_model_key
 
 
 short_term_memory_prompt = """
-# 时空记忆编织者
+你是一个保守的对话记忆整理器。你的任务是把用户明确说过、以后对陪伴有帮助的信息整理成简洁记忆。
 
-## 核心使命
-构建可生长的动态记忆网络，在有限空间内保留关键信息的同时，智能维护信息演变轨迹
-根据对话记录，总结user的重要信息，以便在未来的对话中提供更个性化的服务
+严格规则：
+1. 只记录用户明确说过的事实，不要猜测、推断、补全。
+2. 不要创造姓名、姓氏、昵称或尊称。比如没有明确说“叫我唐大爷”，就不能写“唐大爷”。
+3. 如果出现矛盾，以用户最新纠正为准，并把被纠正的信息放入“已纠正信息”。
+4. 助手说过的话不能当作用户事实。
+5. 不记录无关寒暄、测试语句、模型自我介绍。
+6. 输出必须是合法 JSON，不要 Markdown，不要解释。
 
-## 记忆法则
-### 1. 三维度记忆评估（每次更新必执行）
-| 维度       | 评估标准                  | 权重分 |
-|------------|---------------------------|--------|
-| 时效性     | 信息新鲜度（按对话轮次） | 40%    |
-| 情感强度   | 含💖标记/重复提及次数     | 35%    |
-| 关联密度   | 与其他信息的连接数量      | 25%    |
-
-### 2. 动态更新机制
-**名字变更处理示例：**
-原始记忆："曾用名": ["张三"], "现用名": "张三丰"
-触发条件：当检测到「我叫X」「称呼我Y」等命名信号时
-操作流程：
-1. 将旧名移入"曾用名"列表
-2. 记录命名时间轴："2024-02-15 14:32:启用张三丰"
-3. 在记忆立方追加：「从张三到张三丰的身份蜕变」
-
-### 3. 空间优化策略
-- **信息压缩术**：用符号体系提升密度
-  - ✅"张三丰[北/软工/🐱]"
-  - ❌"北京软件工程师，养猫"
-- **淘汰预警**：当总字数≥900时触发
-  1. 删除权重分<60且3轮未提及的信息
-  2. 合并相似条目（保留时间戳最近的）
-
-## 记忆结构
-输出格式必须为可解析的json字符串，不需要解释、注释和说明，保存记忆时仅从对话提取信息，不要混入示例内容
-```json
+输出结构固定为：
 {
-  "时空档案": {
-    "身份图谱": {
-      "现用名": "",
-      "特征标记": [] 
-    },
-    "记忆立方": [
-      {
-        "事件": "入职新公司",
-        "时间戳": "2024-03-20",
-        "情感值": 0.9,
-        "关联项": ["下午茶"],
-        "保鲜期": 30 
-      }
-    ]
+  "患者画像": {
+    "姓名或称呼": "",
+    "年龄": "",
+    "居住地": "",
+    "健康相关": [],
+    "性格与沟通偏好": []
   },
-  "关系网络": {
-    "高频话题": {"职场": 12},
-    "暗线联系": [""]
-  },
-  "待响应": {
-    "紧急事项": ["需立即处理的任务"], 
-    "潜在关怀": ["可主动提供的帮助"]
-  },
-  "高光语录": [
-    "最打动人心的瞬间，强烈的情感表达，user的原话"
-  ]
+  "家庭关系": [],
+  "饮食与生活偏好": [],
+  "重要回忆": [],
+  "已纠正信息": [],
+  "陪伴建议": [],
+  "禁止假设": [
+    "未知姓名时只称呼“您”",
+    "不要编造患者姓名、姓氏、昵称或家属关系"
+  ],
+  "最近更新时间": "YYYY-MM-DD"
 }
-```
+
+字段填写规则：
+- 不知道就填空字符串或空数组。
+- “姓名或称呼”只有在用户明确说“我叫X”“你叫我X”“我是X”时才填写。
+- “陪伴建议”只能基于明确事实生成，比如“可以聊苹果”，不要写没有依据的关怀任务。
 """
 
 
@@ -89,7 +61,22 @@ def extract_json_data(json_code):
             print("Error:", e)
         return ""
     jsonData = json_code[start + 7 : end]
-    return jsonData
+    return jsonData.strip()
+
+
+def _memory_to_text(memory):
+    if not memory:
+        return ""
+    if isinstance(memory, (dict, list)):
+        return json.dumps(memory, ensure_ascii=False, indent=2)
+    return str(memory)
+
+
+def _parse_memory_json(memory_text):
+    try:
+        return json.loads(memory_text)
+    except Exception:
+        return None
 
 
 TAG = __name__
@@ -113,7 +100,7 @@ class MemoryProvider(MemoryProviderBase):
     def load_memory(self, summary_memory):
         # api获取到总结记忆后直接返回
         if summary_memory or not self.save_to_file:
-            self.short_memory = summary_memory
+            self.short_memory = _memory_to_text(summary_memory)
             return
 
         all_memory = {}
@@ -121,16 +108,24 @@ class MemoryProvider(MemoryProviderBase):
             with open(self.memory_path, "r", encoding="utf-8") as f:
                 all_memory = yaml.safe_load(f) or {}
         if self.role_id in all_memory:
-            self.short_memory = all_memory[self.role_id]
+            self.short_memory = _memory_to_text(all_memory[self.role_id])
 
     def save_memory_to_file(self):
         all_memory = {}
         if os.path.exists(self.memory_path):
             with open(self.memory_path, "r", encoding="utf-8") as f:
                 all_memory = yaml.safe_load(f) or {}
-        all_memory[self.role_id] = self.short_memory
+        all_memory[self.role_id] = (
+            _parse_memory_json(self.short_memory) or self.short_memory
+        )
         with open(self.memory_path, "w", encoding="utf-8") as f:
-            yaml.dump(all_memory, f, allow_unicode=True)
+            yaml.safe_dump(
+                all_memory,
+                f,
+                allow_unicode=True,
+                sort_keys=False,
+                default_flow_style=False,
+            )
 
     async def save_memory(self, msgs, session_id=None):
         # 打印使用的模型信息
@@ -170,8 +165,12 @@ class MemoryProvider(MemoryProviderBase):
                     temperature=0.2,
                 )
                 json_str = extract_json_data(result)
-                json.loads(json_str)  # 检查json格式是否正确
-                self.short_memory = json_str
+                memory_data = json.loads(json_str)  # 检查json格式是否正确
+                self.short_memory = json.dumps(
+                    memory_data,
+                    ensure_ascii=False,
+                    indent=2,
+                )
                 self.save_memory_to_file()
             except Exception as e:
                 logger.bind(tag=TAG).error(f"Error in saving memory: {e}")

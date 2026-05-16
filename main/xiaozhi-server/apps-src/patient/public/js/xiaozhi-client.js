@@ -15,10 +15,12 @@ window.XiaozhiClient = {
   async init() { return (await xiaozhiBridgeReady).init(); },
   async connect() { return (await xiaozhiBridgeReady).connect(); },
   disconnect() { return xiaozhiBridgeReady.then(c => c.disconnect()); },
+  sendClientState(payload) { return xiaozhiBridgeReady.then(c => c.sendClientState(payload)); },
   sendText(text) { return xiaozhiBridgeReady.then(c => c.sendText(text)); },
-  async startRecording() { return (await xiaozhiBridgeReady).startRecording(); },
+  async startRecording(options) { return (await xiaozhiBridgeReady).startRecording(options); },
   stopRecording() { return xiaozhiBridgeReady.then(c => c.stopRecording()); },
   isConnected() { return false; },
+  isRecording() { return false; },
   isRemoteSpeaking() { return false; },
 };
 
@@ -56,6 +58,7 @@ if (!deviceMac) {
   ).join(':');
   localStorage.setItem('xz_tester_deviceMac', deviceMac);
 }
+localStorage.setItem('hospice_device_id', deviceMac);
 let clientId = localStorage.getItem('xz_tester_clientId');
 if (!clientId) {
   clientId = (crypto && crypto.randomUUID) ? crypto.randomUUID()
@@ -85,7 +88,7 @@ const [
   playerMod,
   opusMod,
 ] = await Promise.all([
-  import(`${TEST}/core/network/websocket.js?v=0127`),
+  import(`${TEST}/core/network/websocket.js?v=0128`),
   import(`${TEST}/core/audio/recorder.js?v=0127`),
   import(`${TEST}/core/audio/player.js?v=0127`),
   import(`${TEST}/core/audio/opus-codec.js?v=0127`),
@@ -125,6 +128,11 @@ wsHandler.onChatMessage = (text, isUser) => {
   }
 };
 
+wsHandler.onClientAction = (payload) => {
+  window.dispatchEvent(new CustomEvent('xz:client-action', { detail: payload || {} }));
+  window.dispatchEvent(new CustomEvent('xz:state', { detail: { state: 'idle' } }));
+};
+
 // ── 5. 暴露统一的客户端 API ──────────────────────────────
 const realClient = {
   async init() {
@@ -145,11 +153,21 @@ const realClient = {
     wsHandler.disconnect();
   },
 
+  sendClientState(payload) {
+    const ws = wsHandler.getWebSocket && wsHandler.getWebSocket();
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+    ws.send(JSON.stringify({ type: 'hospice_client_state', ...(payload || {}) }));
+    return true;
+  },
+
   sendText(text) {
     return wsHandler.sendTextMessage(text);
   },
 
-  async startRecording() {
+  async startRecording(options = {}) {
+    if (options.callActive) {
+      this.sendClientState({ call_active: true });
+    }
     return await recorder.start();
   },
 
@@ -158,6 +176,7 @@ const realClient = {
   },
 
   isConnected() { return isConnected; },
+  isRecording() { return !!recorder.isRecording; },
   isRemoteSpeaking() { return isRemoteSpeaking; },
 };
 

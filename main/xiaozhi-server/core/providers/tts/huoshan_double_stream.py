@@ -6,6 +6,7 @@ import asyncio
 import time
 import traceback
 import websockets
+import yaml
 
 from typing import Callable, Any
 from core.utils.tts import MarkdownCleaner
@@ -150,11 +151,14 @@ class TTSProvider(TTSProviderBase):
         self.access_token = config.get("access_token")
         self.cluster = config.get("cluster")
         self.resource_id = config.get("resource_id")
+        self.base_resource_id = self.resource_id
+        self.config = config
         self.activate_session = False
         if config.get("private_voice"):
             self.voice = config.get("private_voice")
         else:
             self.voice = config.get("speaker")
+        self.base_voice = self.voice
 
         # 默认 audio_params 配置
         default_audio_params = {
@@ -196,12 +200,33 @@ class TTSProvider(TTSProviderBase):
     async def open_audio_channels(self, conn):
         try:
             await super().open_audio_channels(conn)
+            self._apply_hospice_voice_settings(conn)
             # 更新 audio_params 中的采样率为实际的 conn.sample_rate
             self.audio_params["sample_rate"] = conn.sample_rate
         except Exception as e:
             logger.bind(tag=TAG).error(f"Failed to open audio channels: {str(e)}")
             self.ws = None
             raise
+
+    def _apply_hospice_voice_settings(self, conn):
+        """Use the patient-selected cloned voice for new TTS connections."""
+        settings_path = os.path.join("data", "hospice_voice_settings.yaml")
+        try:
+            device_id = getattr(conn, "device_id", None)
+            if not device_id or not os.path.exists(settings_path):
+                return
+            with open(settings_path, "r", encoding="utf-8") as f:
+                all_settings = yaml.safe_load(f) or {}
+            settings = all_settings.get(device_id) or {}
+            if not settings.get("active") or not settings.get("speaker_id"):
+                return
+            self.voice = settings["speaker_id"]
+            self.resource_id = settings.get("resource_id") or self.base_resource_id
+            logger.bind(tag=TAG).info(
+                f"使用患者端设置音色: device={device_id}, speaker={self.voice}, resource={self.resource_id}"
+            )
+        except Exception as e:
+            logger.bind(tag=TAG).warning(f"读取患者端音色设置失败: {e}")
 
     async def _ensure_connection(self):
         """建立新的WebSocket连接，并启动监听任务（仅第一次）"""

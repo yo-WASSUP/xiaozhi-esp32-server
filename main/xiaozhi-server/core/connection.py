@@ -48,12 +48,52 @@ TAG = __name__
 
 auto_import_modules("plugins_func.functions")
 
+EMOTION_TAG_PREFIX = "<!--emotion:"
+EMOTION_TAG_END = "-->"
+
+
+def _filter_stream_emotion_tag(content, pending=""):
+    """Remove hospice emotion tags before streaming text to TTS."""
+    if not content:
+        return "", pending
+
+    combined = pending + content
+    output = []
+    index = 0
+
+    while index < len(combined):
+        tag_start = combined.find(EMOTION_TAG_PREFIX, index)
+        if tag_start == -1:
+            tail = combined[index:]
+            keep = 0
+            max_keep = min(len(tail), len(EMOTION_TAG_PREFIX) - 1)
+            for size in range(max_keep, 0, -1):
+                if tail.endswith(EMOTION_TAG_PREFIX[:size]):
+                    keep = size
+                    break
+            if keep:
+                output.append(tail[:-keep])
+                return "".join(output), tail[-keep:]
+            output.append(tail)
+            return "".join(output), ""
+
+        output.append(combined[index:tag_start])
+        tag_end = combined.find(EMOTION_TAG_END, tag_start + len(EMOTION_TAG_PREFIX))
+        if tag_end == -1:
+            return "".join(output), combined[tag_start:]
+        index = tag_end + len(EMOTION_TAG_END)
+
+    return "".join(output), ""
+
 
 class TTSException(RuntimeError):
     pass
 
 
 class ConnectionHandler:
+    _active_connections = {}
+    _active_connections_lock = threading.Lock()
+
     def __init__(
         self,
         config: Dict[str, Any],
@@ -170,6 +210,74 @@ class ConnectionHandler:
         # 初始化提示词管理器
         self.prompt_manager = PromptManager(self.config, self.logger)
 
+    @classmethod
+    def register_active_connection(cls, device_id, conn):
+        if not device_id or conn is None:
+            return
+        with cls._active_connections_lock:
+            cls._active_connections[device_id] = conn
+
+    @classmethod
+    def unregister_active_connection(cls, device_id, conn):
+        if not device_id or conn is None:
+            return
+        with cls._active_connections_lock:
+            current = cls._active_connections.get(device_id)
+            if current is conn:
+                cls._active_connections.pop(device_id, None)
+
+    @classmethod
+    def get_active_connection(cls, device_id):
+        with cls._active_connections_lock:
+            if device_id and device_id in cls._active_connections:
+                return cls._active_connections.get(device_id)
+            if len(cls._active_connections) == 1:
+                return next(iter(cls._active_connections.values()))
+            return None
+
+    def speak_text_with_tts(self, text):
+        text = (text or "").strip()
+        if not text:
+            return False
+
+        if self.tts is None:
+            try:
+                self.tts = self._initialize_tts()
+                if self.tts is not None and getattr(self.tts, "conn", None) is None and self.loop:
+                    future = asyncio.run_coroutine_threadsafe(
+                        self.tts.open_audio_channels(self),
+                        self.loop,
+                    )
+                    future.result(timeout=10)
+            except Exception:
+                return False
+        if self.tts is None:
+            return False
+
+        sentence_id = str(uuid.uuid4().hex)
+        self.sentence_id = sentence_id
+        self.tts.tts_text_queue.put(
+            TTSMessageDTO(
+                sentence_id=sentence_id,
+                sentence_type=SentenceType.FIRST,
+                content_type=ContentType.ACTION,
+            )
+        )
+        self.tts.tts_one_sentence(
+            self,
+            ContentType.TEXT,
+            content_detail=text,
+            sentence_id=sentence_id,
+        )
+        self.tts.tts_text_queue.put(
+            TTSMessageDTO(
+                sentence_id=sentence_id,
+                sentence_type=SentenceType.LAST,
+                content_type=ContentType.ACTION,
+            )
+        )
+        return True
+
     async def handle_connection(self, ws):
         try:
             # 获取运行中的事件循环（必须在异步上下文中）
@@ -189,6 +297,7 @@ class ConnectionHandler:
             )
 
             self.device_id = self.headers.get("device-id", None)
+            self.register_active_connection(self.device_id, self)
 
             # 认证通过,继续处理
             self.websocket = ws
@@ -241,6 +350,8 @@ class ConnectionHandler:
                     self.logger.bind(tag=TAG).error(
                         f"强制关闭连接时出错: {close_error}"
                     )
+            finally:
+                self.unregister_active_connection(self.device_id, self)
 
     async def _save_and_close(self, ws):
         """保存记忆并关闭连接"""
@@ -889,6 +1000,7 @@ class ConnectionHandler:
         # 支持多个并行工具调用 - 使用列表存储
         tool_calls_list = []  # 格式: [{"id": "", "name": "", "arguments": ""}]
         content_arguments = ""
+        emotion_tag_pending = ""
         self.client_abort = False
         emotion_flag = True
         first_token_ms = None
@@ -928,15 +1040,19 @@ class ConnectionHandler:
 
                 if content is not None and len(content) > 0:
                     if not tool_call_flag:
-                        response_message.append(content)
-                        self.tts.tts_text_queue.put(
-                            TTSMessageDTO(
-                                sentence_id=self.sentence_id,
-                                sentence_type=SentenceType.MIDDLE,
-                                content_type=ContentType.TEXT,
-                                content_detail=content,
-                            )
+                        tts_content, emotion_tag_pending = _filter_stream_emotion_tag(
+                            content, emotion_tag_pending
                         )
+                        response_message.append(content)
+                        if tts_content:
+                            self.tts.tts_text_queue.put(
+                                TTSMessageDTO(
+                                    sentence_id=self.sentence_id,
+                                    sentence_type=SentenceType.MIDDLE,
+                                    content_type=ContentType.TEXT,
+                                    content_detail=tts_content,
+                                )
+                            )
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"LLM stream processing error: {e}")
             self.tts.tts_text_queue.put(
@@ -1026,12 +1142,12 @@ class ConnectionHandler:
         # 存储对话内容
         if len(response_message) > 0:
             text_buff = "".join(response_message)
-            self.tts_MessageText = text_buff
 
             # ── 安宁疗护：情感解析 + 会话日志 ──
             try:
                 from core.providers.emotion import parse_emotion
                 clean_text, emotion_data = parse_emotion(text_buff)
+                self.tts_MessageText = clean_text
                 # 存入对话历史时去掉情感标签，避免标签累积
                 self.dialogue.put(Message(role="assistant", content=clean_text))
 
@@ -1055,6 +1171,7 @@ class ConnectionHandler:
                     )
             except Exception as e:
                 self.logger.bind(tag=TAG).debug(f"情感解析/会话日志记录跳过: {e}")
+                self.tts_MessageText = text_buff
                 self.dialogue.put(Message(role="assistant", content=text_buff))
                 
         # LLM 调用总耗时日志

@@ -17,8 +17,7 @@ export default function MessageScreen() {
   const mediaRecRef = useRef(null);
   const chunksRef = useRef([]);
   const streamRef = useRef(null);
-  const fileInputRef = useRef(null);
-  const videoInputRef = useRef(null);
+  const mediaInputRef = useRef(null);
   const scrollRef = useRef(null);
 
   useEffect(() => {
@@ -149,27 +148,17 @@ export default function MessageScreen() {
     setRec(false); setRecSecs(0);
   };
 
-  const onPickPhoto = async (e) => {
+  const onPickMedia = async (e) => {
     const file = e.target.files && e.target.files[0];
     e.target.value = '';
     if (!file) return;
-    setBusy(true);
-    try {
-      const up = await uploadFile(file, file.name);
-      await postMessage({
-        device_id: DEVICE_ID, sender_role: 'family', sender_name: SENDER_NAME,
-        type: 'photo', content: file.name, file_path: up.url,
-      });
-      loadMessages();
-    } catch (err) { console.error(err); toast('⚠ ' + err.message); }
-    finally { setBusy(false); }
-  };
-
-  const onPickVideo = async (e) => {
-    const file = e.target.files && e.target.files[0];
-    e.target.value = '';
-    if (!file) return;
-    if (file.size > maxUploadMb * 1024 * 1024) {
+    const isImage = file.type.startsWith('image/');
+    const isVideo = file.type.startsWith('video/');
+    if (!isImage && !isVideo) {
+      toast('⚠ 请选择照片或视频');
+      return;
+    }
+    if (isVideo && file.size > maxUploadMb * 1024 * 1024) {
       toast(`⚠ 视频过大（${(file.size / 1024 / 1024).toFixed(1)}MB），最多 ${maxUploadMb}MB`);
       return;
     }
@@ -178,7 +167,7 @@ export default function MessageScreen() {
       const up = await uploadFile(file, file.name);
       await postMessage({
         device_id: DEVICE_ID, sender_role: 'family', sender_name: SENDER_NAME,
-        type: 'video', content: file.name, file_path: up.url,
+        type: isVideo ? 'video' : 'photo', content: file.name, file_path: up.url,
       });
       loadMessages();
     } catch (err) { console.error(err); toast('⚠ ' + err.message); }
@@ -216,10 +205,8 @@ export default function MessageScreen() {
 
       {/* 底部输入栏 */}
       <div style={{ borderTop: `0.5px solid ${C.mist}22`, background: C.card, padding: '8px 10px', display: 'flex', alignItems: 'flex-end', gap: 8 }}>
-        <button onClick={() => fileInputRef.current && fileInputRef.current.click()} disabled={busy || recording} title="照片"
-          style={{ width: 40, height: 40, borderRadius: '50%', border: `1px solid ${C.mist}33`, background: 'transparent', cursor: busy || recording ? 'not-allowed' : 'pointer', fontSize: 18, flexShrink: 0, opacity: busy || recording ? .4 : 1 }}>📷</button>
-        <button onClick={() => videoInputRef.current && videoInputRef.current.click()} disabled={busy || recording} title={`视频（最大 ${maxUploadMb}MB）`}
-          style={{ width: 40, height: 40, borderRadius: '50%', border: `1px solid ${C.mist}33`, background: 'transparent', cursor: busy || recording ? 'not-allowed' : 'pointer', fontSize: 18, flexShrink: 0, opacity: busy || recording ? .4 : 1 }}>🎬</button>
+        <button onClick={() => mediaInputRef.current && mediaInputRef.current.click()} disabled={busy || recording} title={`照片或视频（视频最大 ${maxUploadMb}MB）`}
+          style={{ width: 40, height: 40, borderRadius: '50%', border: `1px solid ${C.mist}33`, background: 'transparent', cursor: busy || recording ? 'not-allowed' : 'pointer', fontSize: 18, flexShrink: 0, opacity: busy || recording ? .4 : 1 }}>📎</button>
         <button onClick={startRec} disabled={busy || recording} title="语音"
           style={{ width: 40, height: 40, borderRadius: '50%', border: `1px solid ${C.mist}33`, background: recording ? C.red + '33' : 'transparent', cursor: busy || recording ? 'not-allowed' : 'pointer', fontSize: 18, flexShrink: 0, opacity: busy ? .4 : 1 }}>🎤</button>
         <textarea value={text} onChange={e => setText(e.target.value)} placeholder="说点什么…" rows={1}
@@ -227,8 +214,7 @@ export default function MessageScreen() {
           style={{ flex: 1, minHeight: 40, maxHeight: 100, padding: '10px 12px', borderRadius: 18, border: `1px solid ${C.mist}33`, background: 'white', resize: 'none', fontSize: 15, color: C.ink, fontFamily: 'Noto Sans SC', fontWeight: 300, outline: 'none', lineHeight: 1.4 }} />
         <button onClick={sendText} disabled={!text.trim() || busy}
           style={{ padding: '10px 14px', borderRadius: 18, border: 'none', background: text.trim() && !busy ? C.amber : `${C.mist}44`, color: 'white', fontSize: 13, fontFamily: 'Noto Sans SC', fontWeight: 400, cursor: text.trim() && !busy ? 'pointer' : 'not-allowed', flexShrink: 0 }}>发送</button>
-        <input ref={fileInputRef} type="file" accept="image/*" onChange={onPickPhoto} style={{ display: 'none' }} />
-        <input ref={videoInputRef} type="file" accept="video/*" onChange={onPickVideo} style={{ display: 'none' }} />
+        <input ref={mediaInputRef} type="file" accept="image/*,video/*" onChange={onPickMedia} style={{ display: 'none' }} />
       </div>
     </div>
   );

@@ -1,0 +1,72 @@
+default:
+  provider: aliyun_cosyvoice
+  alias: 唐三
+  model: cosyvoice-v3.5-flash
+  status: OK
+  active: true
+  oss_object_key: xiaozhi/cosyvoice/20260430/sample-2e130b479c70.wav
+  instruction: 请用四川话，亲切自然，语速稍慢，像家人在身边陪伴一样说话。
+  updated_at: '2026-04-30 09:55:16'
+  resource_link: http://nls-cloud-cn-beijing.oss-cn-beijing.aliyuncs.com/nls-customization-data-prod/tts/voice/1600236389285400/hospice/cosyvoice-v3.5-flash-hospice-d2fdccabd3804c22acbe3d7322dc49c1/orig/cosyvoice-v3.5-flash-hospice-d2fdccabd3804c22acbe3d7322dc49c1.wav?Expires=1777600526&OSSAccessKeyId=LTAIbiWMiTSgcJ6i&Signature=imwmouQlk8nGLP12pSzsgMho0ss%3D
+  voices:
+  - provider: aliyun_cosyvoice
+    voice_id: cosyvoice-v3.5-flash-hospice-d2fdccabd3804c22acbe3d7322dc49c1
+    speaker_id: cosyvoice-v3.5-flash-hospice-d2fdccabd3804c22acbe3d7322dc49c1
+    alias: 唐三
+    model: cosyvoice-v3.5-flash
+    status: OK
+    active: true
+    resource_link: http://nls-cloud-cn-beijing.oss-cn-beijing.aliyuncs.com/nls-customization-data-prod/tts/voice/1600236389285400/hospice/cosyvoice-v3.5-flash-hospice-d2fdccabd3804c22acbe3d7322dc49c1/orig/cosyvoice-v3.5-flash-hospice-d2fdccabd3804c22acbe3d7322dc49c1.wav?Expires=1777600526&OSSAccessKeyId=LTAIbiWMiTSgcJ6i&Signature=imwmouQlk8nGLP12pSzsgMho0ss%3D
+    oss_object_key: xiaozhi/cosyvoice/20260430/sample-2e130b479c70.wav
+    instruction: 请用四川话，亲切自然，语速稍慢，像家人在身边陪伴一样说话。
+    updated_at: '2026-04-30 09:55:16'
+  voice_id: cosyvoice-v3.5-flash-hospice-d2fdccabd3804c22acbe3d7322dc49c1
+  speaker_id: cosyvoice-v3.5-flash-hospice-d2fdccabd3804c22acbe3d7322dc49c1
+  active_voice_id: cosyvoice-v3.5-flash-hospice-d2fdccabd3804c22acbe3d7322dc49c1
+09:49:06:53:6E:2A:
+  voices:
+  - provider: aliyun_cosyvoice
+    voice_id: cosyvoice-v3.5-flash-hospice-660e5bc23ea2496ba6ee6210628afb24
+    speaker_id: cosyvoice-v3.5-flash-hospice-660e5bc23ea2496ba6ee6210628afb24
+    alias: 唐四
+    model: cosyvoice-v3.5-flash
+    status: OK
+    active: true
+    resource_link: http://nls-cloud-cn-beijing.oss-cn-beijing.aliyuncs.com/nls-customization-data-prod/tts/voice/1600236389285400/hospice/cosyvoice-v3.5-flash-hospice-660e5bc23ea2496ba6ee6210628afb24/orig/cosyvoice-v3.5-flash-hospice-660e5bc23ea2496ba6ee6210628afb24.wav?Expires=1777616321&OSSAccessKeyId=LTAIbiWMiTSgcJ6i&Signature=CKHKU51LUKA%2BwnmaBfvYbkM3rSY%3D
+    oss_object_key: xiaozhi/cosyvoice/20260430/sample-cb24767d2b8f.wav
+    instruction: 请用四川话，亲切自然，语速稍慢，像家人在身边陪伴一样说话。
+    updated_at: '2026-04-30 14:18:31'
+  - provider: aliyun_cosyvoice
+    voice_id: cosyvoice-v3.5-flash-hospice-b14aecb1f16249c887d477f36f6ec8c9
+    speaker_id: cosyvoice-v3.5-flash-hospice-b14aecb1f16249c887d477f36f6ec8c9
+    alias: 周杰伦
+    model: cosyvoice-v3.5-flash
+    status: OK
+    active: false
+    resource_link: http://nls-cloud-cn-beijing.oss-cn-beijing.aliyuncs.com/nls-customization-data-prod/tts/voice/1600236389285400/hospice/cosyvoice-v3.5-flash-hospice-89a821a9e06c4495a61718107b5239e9/orig/cosyvoice-v3.5-flash-hospice-89a821a9e06c4495a61718107b5239e9.wav?Expires=1777614932&OSSAccessKeyId=LTAIbiWMiTSgcJ6i&Signature=2Bw2qbrq%2BW86pgyplUWr0%2B5Y7b8%3D
+    oss_object_key: xiaozhi/cosyvoice/20260430/sample-80b353ef6ae4.wav
+    instruction: 请用四川话，亲切自然，语速稍慢，像家人在身边陪伴一样说话。
+    updated_at: '2026-04-30 13:57:42'
+  - provider: aliyun_cosyvoice
+    voice_id: cosyvoice-v3.5-flash-hospice-9fa7b28c00834775b5b19e2d17518219
+    speaker_id: cosyvoice-v3.5-flash-hospice-9fa7b28c00834775b5b19e2d17518219
+    alias: 唐三
+    model: cosyvoice-v3.5-flash
+    status: OK
+    active: false
+    oss_object_key: xiaozhi/cosyvoice/20260430/sample-80b353ef6ae4.wav
+    instruction: 请用四川话，亲切自然，语速稍慢，像家人在身边陪伴一样说话。
+    updated_at: '2026-04-30 13:55:51'
+    resource_link: http://nls-cloud-cn-beijing.oss-cn-beijing.aliyuncs.com/nls-customization-data-prod/tts/voice/1600236389285400/hospice/cosyvoice-v3.5-flash-hospice-89a821a9e06c4495a61718107b5239e9/orig/cosyvoice-v3.5-flash-hospice-89a821a9e06c4495a61718107b5239e9.wav?Expires=1777614932&OSSAccessKeyId=LTAIbiWMiTSgcJ6i&Signature=2Bw2qbrq%2BW86pgyplUWr0%2B5Y7b8%3D
+  active: true
+  provider: aliyun_cosyvoice
+  voice_id: cosyvoice-v3.5-flash-hospice-660e5bc23ea2496ba6ee6210628afb24
+  speaker_id: cosyvoice-v3.5-flash-hospice-660e5bc23ea2496ba6ee6210628afb24
+  alias: 唐四
+  model: cosyvoice-v3.5-flash
+  instruction: 请用四川话，亲切自然，语速稍慢，像家人在身边陪伴一样说话。
+  updated_at: '2026-04-30 14:18:31'
+  active_voice_id: cosyvoice-v3.5-flash-hospice-660e5bc23ea2496ba6ee6210628afb24
+  status: OK
+  oss_object_key: xiaozhi/cosyvoice/20260430/sample-cb24767d2b8f.wav
+  resource_link: http://nls-cloud-cn-beijing.oss-cn-beijing.aliyuncs.com/nls-customization-data-prod/tts/voice/1600236389285400/hospice/cosyvoice-v3.5-flash-hospice-660e5bc23ea2496ba6ee6210628afb24/orig/cosyvoice-v3.5-flash-hospice-660e5bc23ea2496ba6ee6210628afb24.wav?Expires=1777616321&OSSAccessKeyId=LTAIbiWMiTSgcJ6i&Signature=CKHKU51LUKA%2BwnmaBfvYbkM3rSY%3D

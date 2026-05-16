@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react';
 import { C } from '../theme';
 
-/** 回复输入区：文本 / 录音 / 选视频 */
-export default function ReplyBar({ onSendText, onSendVoice, onPickVideo, disabled, maxUploadMb }) {
+/** 回复输入区：文本 / 录音 / 媒体 */
+export default function ReplyBar({ onSendText, onSendVoice, onPickMedia, disabled, maxUploadMb }) {
   const [text, setText] = useState('');
   const [rec, setRec] = useState(false);
   const [recSecs, setRecSecs] = useState(0);
@@ -11,7 +11,7 @@ export default function ReplyBar({ onSendText, onSendVoice, onPickVideo, disable
   const chunksRef = useRef([]);
   const streamRef = useRef(null);
   const recTimerRef = useRef(null);
-  const videoInputRef = useRef(null);
+  const mediaInputRef = useRef(null);
 
   const submitText = () => {
     const t = text.trim();
@@ -56,15 +56,21 @@ export default function ReplyBar({ onSendText, onSendVoice, onPickVideo, disable
     onSendVoice(blob, ext, secs);
   };
 
-  const handleVideoPick = (e) => {
+  const handleMediaPick = (e) => {
     const file = e.target.files && e.target.files[0];
     e.target.value = '';
     if (!file) return;
-    if (file.size > maxUploadMb * 1024 * 1024) {
+    const isVideo = file.type.startsWith('video/');
+    const isImage = file.type.startsWith('image/');
+    if (!isVideo && !isImage) {
+      alert('请选择照片或视频');
+      return;
+    }
+    if (isVideo && file.size > maxUploadMb * 1024 * 1024) {
       alert(`视频过大（${(file.size / 1024 / 1024).toFixed(1)}MB），最多 ${maxUploadMb}MB`);
       return;
     }
-    onPickVideo && onPickVideo(file);
+    onPickMedia && onPickMedia(file);
   };
 
   return (
@@ -82,16 +88,16 @@ export default function ReplyBar({ onSendText, onSendVoice, onPickVideo, disable
         {rec ? `${recSecs}s` : '🎤'}
       </button>
 
-      <button onClick={() => videoInputRef.current && videoInputRef.current.click()}
+      <button onClick={() => mediaInputRef.current && mediaInputRef.current.click()}
         disabled={disabled || rec}
-        title={`视频（最大 ${maxUploadMb}MB）`}
+        title={`照片或视频（视频最大 ${maxUploadMb}MB）`}
         style={{
           width: 44, height: 44, borderRadius: '50%', border: 'none',
           cursor: (disabled || rec) ? 'not-allowed' : 'pointer',
           background: `${C.sage}22`, color: C.sage,
           fontSize: 20, flexShrink: 0, opacity: (disabled || rec) ? .4 : 1,
-        }}>🎬</button>
-      <input ref={videoInputRef} type="file" accept="video/*" onChange={handleVideoPick} style={{ display: 'none' }} />
+        }}>📎</button>
+      <input ref={mediaInputRef} type="file" accept="image/*,video/*" onChange={handleMediaPick} style={{ display: 'none' }} />
 
       <input value={text} onChange={e => setText(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') submitText(); }}
