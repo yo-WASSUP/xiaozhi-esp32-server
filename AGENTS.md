@@ -29,6 +29,8 @@
 
 ```powershell
 cd main\xiaozhi-server
+激活conda虚拟环境
+conda activate xiaozhi-esp32-server
 python app.py
 ```
 

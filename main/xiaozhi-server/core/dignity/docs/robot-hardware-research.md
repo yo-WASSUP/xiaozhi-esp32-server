@@ -17,7 +17,8 @@
 
 ## 2. 现有语音服务如何控制眼睛
 
-当前 `xiaozhi-server` 已经有“情绪表情”消息通路，可作为眼睛显示控制的基础。
+当前 `xiaozhi-server` 已经有“情绪表情”消息通路，可作为眼睛显示控制的基础。  
+依赖 LLM 回复首段里的 emoji，不可靠。
 
 相关代码：
 
@@ -26,6 +27,7 @@
   - 一轮对话开头只获取一次情绪表情。
 - `main/xiaozhi-server/core/utils/textUtils.py`
   - `get_emotion(conn, text)` 会从 LLM 文本中提取 emoji。
+  找到后用 EMOJI_MAP 映射成 happy / sad / angry / crying / thinking 这类枚举。没找到 emoji 时，默认发 happy。
   - 然后通过 WebSocket 发送：
 
 ```json
@@ -46,7 +48,7 @@
 
 ## 3. 推荐控制链路
 
-眼睛显示不建议走“电机/继电器式枚举控制”。它更适合走显示端状态渲染：
+眼睛显示更适合走显示端状态渲染：
 
 ```text
 LLM / LangGraph
