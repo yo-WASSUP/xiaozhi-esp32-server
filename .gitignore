@@ -151,6 +151,8 @@ main/manager-web/node_modules
 config.yaml
 main/xiaozhi-server/data/.config.yaml
 main/xiaozhi-server/data/.config_hospice.yaml
+main/xiaozhi-server/data/.memory.yaml
+main/xiaozhi-server/data/hospice_voice_settings.yaml
 .secrets.yaml
 .private_config.yaml
 .env.development
