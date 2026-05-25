@@ -19,6 +19,10 @@ class LLMProvider(LLMProviderBase):
             self.base_url = config.get("url")
         timeout = config.get("timeout", 300)
         self.timeout = int(timeout) if timeout else 300
+        thinking_config = config.get("thinking") or {}
+        provider_hint = f"{self.base_url or ''} {self.model_name or ''}".lower()
+        self.thinking_configured = "thinking" in config or "deepseek" in provider_hint
+        self.thinking_enabled = bool(thinking_config.get("enabled", False))
 
         param_defaults = {
             "max_tokens": int,
@@ -75,6 +79,7 @@ class LLMProvider(LLMProviderBase):
         for key, value in optional_params.items():
             if value is not None:
                 request_params[key] = value
+        self._apply_thinking_config(request_params)
 
         responses = self.client.chat.completions.create(**request_params)
 
@@ -94,6 +99,13 @@ class LLMProvider(LLMProviderBase):
                     content = content.split("</think>")[-1]
                 if is_active:
                     yield content
+
+    def _apply_thinking_config(self, request_params):
+        if not self.thinking_configured:
+            return
+        extra_body = dict(request_params.get("extra_body") or {})
+        extra_body["thinking"] = {"type": "enabled" if self.thinking_enabled else "disabled"}
+        request_params["extra_body"] = extra_body
 
     def response_with_functions(self, session_id, dialogue, functions=None, **kwargs):
         dialogue = self.normalize_dialogue(dialogue)
@@ -115,6 +127,7 @@ class LLMProvider(LLMProviderBase):
         for key, value in optional_params.items():
             if value is not None:
                 request_params[key] = value
+        self._apply_thinking_config(request_params)
 
         stream = self.client.chat.completions.create(**request_params)
 

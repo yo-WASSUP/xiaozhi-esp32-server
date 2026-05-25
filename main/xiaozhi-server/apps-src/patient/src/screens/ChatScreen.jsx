@@ -10,8 +10,39 @@ const STATUS_MAP = {
   speaking:  { label: '小暖正在说话',         dot: C.amber, anim: false },
 };
 
-export default function ChatScreen({ aiState, msg, lastHeard, connected, recording }) {
+const STAGE_LABELS = {
+  rapport: '建立关系',
+  life_review: '人生回顾',
+  values: '价值提炼',
+  relationships: '重要关系',
+  legacy_message: '留言祝福',
+  summary_confirm: '总结确认',
+};
+
+const STRATEGY_LABELS = {
+  continue_deeper: '继续追问',
+  comfort: '安抚',
+  pause: '暂停',
+  switch_topic: '转话题',
+  ask_photo_context: '照片线索',
+  output_rewrite: '安全改写',
+  handoff_nurse: '人工介入',
+  simple_followup: '轻量追问',
+  summarize_confirm: '总结确认',
+};
+
+function formatLatency(ms) {
+  const value = Number(ms);
+  if (!Number.isFinite(value) || value <= 0) return '';
+  if (value < 1000) return `${Math.round(value)}ms`;
+  return `${(value / 1000).toFixed(1)}s`;
+}
+
+export default function ChatScreen({ aiState, msg, lastHeard, connected, recording, dignityMode, dignityStatus }) {
   const { label, dot, anim } = STATUS_MAP[aiState] || STATUS_MAP.idle;
+  const stage = STAGE_LABELS[dignityStatus?.current_stage] || dignityStatus?.current_stage || '建立关系';
+  const strategy = STRATEGY_LABELS[dignityStatus?.strategy] || dignityStatus?.strategy || '继续追问';
+  const responseLatency = formatLatency(dignityStatus?.client_response_latency_ms ?? dignityStatus?.response_latency_ms);
 
   return (
     <div style={{ position: 'relative', height: '100%', overflow: 'hidden' }}>
@@ -20,9 +51,19 @@ export default function ChatScreen({ aiState, msg, lastHeard, connected, recordi
 
       {/* 顶部状态 */}
       <div style={{ position: 'absolute', top: 28, left: 0, right: 0, display: 'flex', justifyContent: 'center', zIndex: 5 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'center', padding: '0 32px' }}>
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: dot, boxShadow: `0 0 8px ${dot}`, animation: anim ? 'dotPulse 1.1s ease-in-out infinite' : 'none' }} />
           <span style={{ fontSize: 14, color: dot, fontFamily: 'Noto Sans SC', fontWeight: 300, letterSpacing: '.08em', transition: 'color .6s' }}>{label}</span>
+          {dignityMode && (
+            <span style={{ fontSize: 12, color: dignityStatus?.strategy === 'handoff_nurse' ? C.red : C.inkFaint, fontFamily: 'Noto Sans SC', fontWeight: 300, letterSpacing: '.04em' }}>
+              尊严疗法 · {stage} · {strategy}
+            </span>
+          )}
+          {dignityMode && responseLatency && (
+            <span style={{ fontSize: 12, color: C.inkFaint, fontFamily: 'Noto Sans SC', fontWeight: 300, letterSpacing: '.04em' }}>
+              回复耗时 {responseLatency}
+            </span>
+          )}
         </div>
       </div>
 
@@ -49,7 +90,7 @@ export default function ChatScreen({ aiState, msg, lastHeard, connected, recordi
             </div>
           ) : (
             <div style={{ fontSize: 24, color: 'rgba(30,24,16,.24)', fontFamily: 'Noto Serif SC,serif', fontWeight: 300, letterSpacing: '.06em', lineHeight: 2.1 }}>
-              我一直在呢，<br />您直接说话就好
+              {dignityMode ? <>我们慢慢聊，<br />从重要的回忆开始</> : <>我一直在呢，<br />您直接说话就好</>}
             </div>
           )}
         </div>

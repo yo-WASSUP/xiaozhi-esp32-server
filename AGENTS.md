@@ -32,6 +32,7 @@ cd main\xiaozhi-server
 激活conda虚拟环境
 conda activate xiaozhi-esp32-server
 python app.py
+python app.py --config hospice
 ```
 
 ### React 患者端/家属端应用

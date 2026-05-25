@@ -17,6 +17,7 @@ export class WebSocketHandler {
         this.onSessionEmotionChange = null;
         this.onChatMessage = null; // 新增：聊天消息回调
         this.onClientAction = null; // 患者端本地动作：接电话、读消息等
+        this.onDignityEvent = null; // 尊严疗法模式事件
         this.currentSessionId = null;
         this.isRemoteSpeaking = false;
     }
@@ -129,6 +130,13 @@ export class WebSocketHandler {
                 this.onClientAction(message);
             } else if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('xz:client-action', { detail: message }));
+            }
+        } else if (message.type === 'dignity') {
+            log(`收到尊严疗法事件: ${JSON.stringify(message)}`, 'info');
+            if (this.onDignityEvent) {
+                this.onDignityEvent(message);
+            } else if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('xz:dignity', { detail: message }));
             }
         } else if (message.type === 'mcp') {
             this.handleMCPMessage(message);
@@ -362,8 +370,7 @@ export class WebSocketHandler {
             audioRecorder.setWebSocket(this.websocket);
 
             this.setupEventHandlers();
-
-            return true;
+            return await this.waitForOpenAndHello();
         } catch (error) {
             log(`连接错误: ${error.message}`, 'error');
             if (this.onConnectionStateChange) {
@@ -371,6 +378,28 @@ export class WebSocketHandler {
             }
             return false;
         }
+    }
+
+    waitForOpenAndHello() {
+        return new Promise(resolve => {
+            let settled = false;
+            const timeout = setTimeout(() => {
+                if (settled) return;
+                settled = true;
+                log('WebSocket连接或hello握手超时', 'error');
+                try {
+                    this.websocket?.close();
+                } catch (_) {}
+                resolve(false);
+            }, 8000);
+
+            this._resolveConnectAttempt = (ok) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                resolve(!!ok);
+            };
+        });
     }
 
     // 设置事件处理器
@@ -392,11 +421,19 @@ export class WebSocketHandler {
             // 在WebSocket连接成功时初始化Live2D音频分析器
             this.initializeLive2DAudioAnalyzer();
 
-            await this.sendHelloMessage();
+            const helloOk = await this.sendHelloMessage();
+            if (this._resolveConnectAttempt) {
+                this._resolveConnectAttempt(helloOk);
+                this._resolveConnectAttempt = null;
+            }
         };
 
         this.websocket.onclose = () => {
             log('已断开连接', 'info');
+            if (this._resolveConnectAttempt) {
+                this._resolveConnectAttempt(false);
+                this._resolveConnectAttempt = null;
+            }
 
             if (this.onConnectionStateChange) {
                 this.onConnectionStateChange(false);
@@ -409,6 +446,10 @@ export class WebSocketHandler {
         this.websocket.onerror = (error) => {
             log(`WebSocket错误: ${error.message || '未知错误'}`, 'error');
             uiController.addChatMessage(`⚠️ WebSocket错误: ${error.message || '未知错误'}`, false);
+            if (this._resolveConnectAttempt) {
+                this._resolveConnectAttempt(false);
+                this._resolveConnectAttempt = null;
+            }
             if (this.onConnectionStateChange) {
                 this.onConnectionStateChange(false);
             }

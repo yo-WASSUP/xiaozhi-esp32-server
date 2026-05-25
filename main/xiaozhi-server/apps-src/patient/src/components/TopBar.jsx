@@ -15,7 +15,16 @@ function Clock() {
   );
 }
 
-export default function TopBar({ connected, recording, unread, micOk, connectStatus, onOpenSettings }) {
+export default function TopBar({
+  connected,
+  recording,
+  unread,
+  micOk,
+  connectStatus,
+  onOpenSettings,
+  dignityMode,
+  onToggleDignityMode,
+}) {
   const statusColor = connected && recording ? C.sage : connected ? C.amber : C.red;
   const statusText = connected && recording
     ? '小暖在线聆听'
@@ -32,11 +41,32 @@ export default function TopBar({ connected, recording, unread, micOk, connectSta
           <div style={{ fontSize: 11, color: C.inkFaint, letterSpacing: '.08em', fontFamily: 'Noto Sans SC', fontWeight: 300 }}>安宁疗护陪伴助手</div>
         </div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 22, fontFamily: 'Noto Sans SC', fontWeight: 300 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 18, fontFamily: 'Noto Sans SC', fontWeight: 300 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: statusColor, fontSize: 14, letterSpacing: '.08em' }}>
           <span style={{ width: 9, height: 9, borderRadius: '50%', background: statusColor, boxShadow: `0 0 8px ${statusColor}`, animation: recording ? 'dotPulse 1.2s ease-in-out infinite' : 'none' }} />
           {statusText}
         </div>
+        <button
+          onClick={onToggleDignityMode}
+          title={dignityMode ? '退出尊严疗法模式' : '进入尊严疗法模式'}
+          style={{
+            minWidth: 132,
+            height: 36,
+            padding: '0 14px',
+            borderRadius: 18,
+            border: dignityMode ? `1px solid ${C.amber}` : `1px solid ${C.mist}55`,
+            background: dignityMode ? `${C.amber}22` : 'rgba(255,250,242,.72)',
+            color: dignityMode ? C.ink : C.inkMid,
+            cursor: 'pointer',
+            fontSize: 13,
+            letterSpacing: '.06em',
+            fontFamily: 'Noto Sans SC',
+            fontWeight: 300,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {dignityMode ? '尊严疗法中' : '自然聊天'}
+        </button>
         <div style={{ color: unread > 0 ? C.amber : C.inkFaint, fontSize: 14, letterSpacing: '.08em' }}>
           家人消息 {unread > 0 ? `${unread} 条未读` : '无未读'}
         </div>

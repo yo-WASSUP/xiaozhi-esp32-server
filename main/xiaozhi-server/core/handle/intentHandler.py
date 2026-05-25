@@ -59,6 +59,14 @@ async def handle_user_intent(conn, text):
         conn.logger.bind(tag=TAG).info("通话中语音未命中患者端动作，已忽略普通对话处理")
         return True
 
+    try:
+        from core.dignity.runtime import handle_dignity_turn_if_active
+
+        if await handle_dignity_turn_if_active(conn, text):
+            return True
+    except Exception as e:
+        conn.logger.bind(tag=TAG).error(f"尊严疗法模式处理失败: {e}")
+
     if conn.intent_type == "function_call":
         # 使用支持function calling的聊天方法,不再进行意图分析
         return False

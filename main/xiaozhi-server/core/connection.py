@@ -180,6 +180,13 @@ class ConnectionHandler:
         # llm相关变量
         self.dialogue = Dialogue(max_rounds=config.get("max_dialogue_rounds", 0))
 
+        # 尊严疗法模式运行时状态
+        self.dignity_active = False
+        self.dignity_state = None
+        self.dignity_debug_state = None
+        self.dignity_patient_id = None
+        self.dignity_decision_model = None
+
         # tts相关变量
         self.sentence_id = None
         # 处理TTS响应没有文本返回
@@ -1462,6 +1469,10 @@ class ConnectionHandler:
         """检查连接超时"""
         try:
             while not self.stop_event.is_set():
+                if getattr(self, "dignity_active", False):
+                    await asyncio.sleep(10)
+                    continue
+
                 last_activity_time = self.last_activity_time
                 if self.need_bind:
                     last_activity_time = self.first_activity_time

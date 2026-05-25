@@ -16,6 +16,7 @@ window.XiaozhiClient = {
   async connect() { return (await xiaozhiBridgeReady).connect(); },
   disconnect() { return xiaozhiBridgeReady.then(c => c.disconnect()); },
   sendClientState(payload) { return xiaozhiBridgeReady.then(c => c.sendClientState(payload)); },
+  sendDignityAction(action, payload) { return xiaozhiBridgeReady.then(c => c.sendDignityAction(action, payload)); },
   sendText(text) { return xiaozhiBridgeReady.then(c => c.sendText(text)); },
   async startRecording(options) { return (await xiaozhiBridgeReady).startRecording(options); },
   stopRecording() { return xiaozhiBridgeReady.then(c => c.stopRecording()); },
@@ -88,7 +89,7 @@ const [
   playerMod,
   opusMod,
 ] = await Promise.all([
-  import(`${TEST}/core/network/websocket.js?v=0128`),
+  import(`${TEST}/core/network/websocket.js?v=0129`),
   import(`${TEST}/core/audio/recorder.js?v=0127`),
   import(`${TEST}/core/audio/player.js?v=0127`),
   import(`${TEST}/core/audio/opus-codec.js?v=0127`),
@@ -133,6 +134,10 @@ wsHandler.onClientAction = (payload) => {
   window.dispatchEvent(new CustomEvent('xz:state', { detail: { state: 'idle' } }));
 };
 
+wsHandler.onDignityEvent = (payload) => {
+  window.dispatchEvent(new CustomEvent('xz:dignity', { detail: payload || {} }));
+};
+
 // ── 5. 暴露统一的客户端 API ──────────────────────────────
 const realClient = {
   async init() {
@@ -157,6 +162,13 @@ const realClient = {
     const ws = wsHandler.getWebSocket && wsHandler.getWebSocket();
     if (!ws || ws.readyState !== WebSocket.OPEN) return false;
     ws.send(JSON.stringify({ type: 'hospice_client_state', ...(payload || {}) }));
+    return true;
+  },
+
+  sendDignityAction(action, payload = {}) {
+    const ws = wsHandler.getWebSocket && wsHandler.getWebSocket();
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+    ws.send(JSON.stringify({ type: 'dignity', action, ...(payload || {}) }));
     return true;
   },
 

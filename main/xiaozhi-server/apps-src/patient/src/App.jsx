@@ -5,6 +5,7 @@ import TopBar from './components/TopBar';
 import ConnectBar from './components/ConnectBar';
 import ChatScreen from './screens/ChatScreen';
 import InboxScreen from './screens/InboxScreen';
+import DignityDebugPanel from './screens/DignityDebugPanel';
 import IncomingCallOverlay from './components/IncomingCallOverlay';
 import ActiveCallOverlay from './components/ActiveCallOverlay';
 import SettingsPanel from './components/SettingsPanel';
@@ -27,6 +28,14 @@ export default function App() {
   const [eventTick, setEventTick] = useState(0);
   const [maxUploadMb, setMaxUploadMb] = useState(50);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [dignityMode, setDignityMode] = useState(false);
+  const [dignityStatus, setDignityStatus] = useState(null);
+  const [dignityOpeningReply, setDignityOpeningReply] = useState('');
+  const [dignityTurns, setDignityTurns] = useState([]);
+  const [dignityDebugBusy, setDignityDebugBusy] = useState(false);
+  const [dignityDocumentBusy, setDignityDocumentBusy] = useState(false);
+  const [dignityDocument, setDignityDocument] = useState('');
+  const [dignityVoiceMode, setDignityVoiceMode] = useState(false);
 
   const connectingRef = useRef(false);
   const initStartedRef = useRef(false);
@@ -41,6 +50,9 @@ export default function App() {
   const inCallRef = useRef(null);
   const incomingRef = useRef(null);
   const callStateRef = useRef('idle');
+  const dignityModeRef = useRef(false);
+  const dignityLiveTurnStartedAtRef = useRef(null);
+  const dignityDebugTurnStartedAtRef = useRef(null);
   const mediaPlaybackRef = useRef(null);
   const ttsPlaybackAbortRef = useRef(false);
 
@@ -50,8 +62,9 @@ export default function App() {
   useEffect(() => { inCallRef.current = inCall; }, [inCall]);
   useEffect(() => { incomingRef.current = incoming; }, [incoming]);
   useEffect(() => { callStateRef.current = callState; }, [callState]);
+  useEffect(() => { dignityModeRef.current = dignityMode; }, [dignityMode]);
 
-  // 拉一次配置（上传上限）
+  // 鎷変竴娆￠厤缃紙涓婁紶涓婇檺锛?
   useEffect(() => {
     fetch('/api/hospice/config')
       .then(r => r.json())
@@ -68,7 +81,7 @@ export default function App() {
       const safeList = Array.isArray(list) ? list : [];
       setContacts(safeList);
       return safeList;
-    } catch (e) { console.error('加载联系人失败', e); }
+    } catch (e) { console.error('load contacts failed', e); }
     return [];
   }, []);
 
@@ -78,7 +91,7 @@ export default function App() {
       await fetch(`/api/hospice/thread/read?device_id=${encodeURIComponent(DEVICE_ID)}&contact_name=${encodeURIComponent(contactName)}`, { method: 'POST' });
       await loadContacts();
       setEventTick(t => t + 1);
-    } catch (e) { console.error('标记已读失败', e); }
+    } catch (e) { console.error('鏍囪宸茶澶辫触', e); }
   }, [loadContacts]);
 
   const stopPlayback = useCallback(() => {
@@ -100,7 +113,7 @@ export default function App() {
         body: JSON.stringify({ device_id: DEVICE_ID }),
       });
     } catch (e) {
-      console.error('停止TTS失败', e);
+      console.error('鍋滄TTS澶辫触', e);
     }
   }, []);
 
@@ -119,7 +132,7 @@ export default function App() {
       }
       return true;
     } catch (e) {
-      console.error('TTS播报失败', e);
+      console.error('TTS鎾姤澶辫触', e);
       return false;
     }
   }, []);
@@ -158,9 +171,9 @@ export default function App() {
       const ok = await window.XiaozhiClient.startRecording({ callActive: allowInCall });
       recordingRef.current = !!ok;
       setRecording(!!ok);
-      if (!ok) setConnectStatus('麦克风没有开始工作，请点“重新连接”重试');
+      if (!ok) setConnectStatus('麦克风没有开始工作，请重新连接后再试');
     } catch (err) {
-      console.error('自动拾音失败', err);
+      console.error('鑷姩鎷鹃煶澶辫触', err);
       recordingRef.current = false;
       setRecording(false);
       setConnectStatus('麦克风启动失败：' + (err?.message || '未知错误'));
@@ -182,7 +195,68 @@ export default function App() {
     }
   }, []);
 
-  const normalizeCommandText = (text) => String(text || '').replace(/[\s，。！？、,.!?]/g, '');
+  const sendDignityAction = useCallback(async (action, payload = {}) => {
+    if (!window.XiaozhiClient || typeof window.XiaozhiClient.sendDignityAction !== 'function') return false;
+    try {
+      return await window.XiaozhiClient.sendDignityAction(action, payload);
+    } catch (_) {
+      return false;
+    }
+  }, []);
+
+  const toggleDignityMode = useCallback(async () => {
+    if (!connectedRef.current) {
+      setConnectStatus('璇峰厛杩炴帴灏忔殩锛屽啀鍒囨崲灏婁弗鐤楁硶妯″紡');
+      return;
+    }
+    const nextAction = dignityMode ? 'stop' : 'start';
+    const ok = await sendDignityAction(nextAction, { patient_id: DEVICE_ID });
+    if (!ok) setConnectStatus('灏婁弗鐤楁硶妯″紡鍒囨崲澶辫触锛岃绋嶅悗鍐嶈瘯');
+  }, [dignityMode, sendDignityAction]);
+
+  const runDignityDebugTurn = useCallback(async (text) => {
+    setDignityDebugBusy(true);
+    dignityDebugTurnStartedAtRef.current = performance.now();
+    const ok = await sendDignityAction('debug_turn', { text });
+    if (!ok) {
+      dignityDebugTurnStartedAtRef.current = null;
+      setDignityDebugBusy(false);
+      setConnectStatus('尊严疗法调试发送失败');
+    }
+  }, [sendDignityAction]);
+
+  const resetDignityDebug = useCallback(async () => {
+    setDignityTurns([]);
+    const ok = await sendDignityAction('debug_reset');
+    if (!ok) setConnectStatus('尊严疗法调试重置失败');
+  }, [sendDignityAction]);
+
+
+  const normalizeCommandText = (text) => String(text || '').replace(/[\s锛屻€傦紒锛熴€?.!?]/g, '');
+
+  const generateDignityDocument = useCallback(async () => {
+    setDignityDocumentBusy(true);
+    const ok = await sendDignityAction('generate_document', { patient_id: DEVICE_ID });
+    if (!ok) {
+      setDignityDocumentBusy(false);
+      setConnectStatus('生命访谈文档生成请求发送失败');
+    }
+  }, [sendDignityAction]);
+
+  const toggleDignityVoiceMode = useCallback(async () => {
+    if (!dignityMode) return;
+    if (dignityVoiceMode) {
+      setDignityVoiceMode(false);
+      await pauseAssistantListening();
+      return;
+    }
+    if (!connectedRef.current || !micOkRef.current) {
+      setConnectStatus('请先连接并允许麦克风权限，再开始语音访谈');
+      return;
+    }
+    setDignityVoiceMode(true);
+    await resumeAssistantAndStart();
+  }, [dignityMode, dignityVoiceMode, pauseAssistantListening, resumeAssistantAndStart]);
 
   const isHangupCommand = (text) => {
     const value = normalizeCommandText(text);
@@ -268,7 +342,7 @@ export default function App() {
   const connectXiaozhi = useCallback(async () => {
     if (!window.XiaozhiClient || connectingRef.current || connectedRef.current) return;
     connectingRef.current = true;
-    setConnectStatus('正在连接小暖...');
+    setConnectStatus('姝ｅ湪杩炴帴灏忔殩...');
     try {
       const ok = await Promise.race([
         window.XiaozhiClient.connect(),
@@ -322,7 +396,7 @@ export default function App() {
     return (Array.isArray(list) ? list : []).slice().reverse();
   }, []);
 
-  const messageSpeechText = (contactName, message) => {
+const messageSpeechText = (contactName, message) => {
     if (message.message_type === 'text') return `${contactName}说：${message.content || ''}`;
     if (message.message_type === 'photo') return `${contactName}发来一张照片。`;
     if (message.message_type === 'video') return `${contactName}发来一个视频。`;
@@ -396,7 +470,7 @@ export default function App() {
       }
       await markThreadRead(contact.contact_name);
     } catch (err) {
-      console.error('收听家属消息失败', err);
+      console.error('鏀跺惉瀹跺睘娑堟伅澶辫触', err);
       await speakAndWait('消息暂时读不了，请稍后再试。');
     } finally {
       await resumeAssistantAndStart();
@@ -421,18 +495,18 @@ export default function App() {
     }
   }, [loadContacts, pauseAssistantListening, resumeAssistantAndStart, speakAndWait]);
 
-  // 联系人列表 + SSE 订阅
+  // 鑱旂郴浜哄垪琛?+ SSE 璁㈤槄
   useEffect(() => {
     loadContacts();
     const es = new EventSource(`/api/hospice/message/stream?device_id=${encodeURIComponent(DEVICE_ID)}`);
     const bump = () => { loadContacts(); setEventTick(t => t + 1); };
     es.addEventListener('message.new', bump);
     es.addEventListener('message.read', bump);
-    es.onerror = () => { /* 浏览器自动重连 */ };
+    es.onerror = () => { /* 娴忚鍣ㄨ嚜鍔ㄩ噸杩?*/ };
     return () => es.close();
   }, [loadContacts]);
 
-  // 桥接 XiaozhiClient 事件（connection / state / llm / stt / ready）
+  // 妗ユ帴 XiaozhiClient 浜嬩欢锛坈onnection / state / llm / stt / ready锛?
   useEffect(() => {
     const onConn  = e => {
       const isConnected = !!e.detail.connected;
@@ -452,8 +526,95 @@ export default function App() {
       }
       setMsg(e.detail.text);
     };
-    const onStt   = e => setLastHeard(e.detail?.text || '');
-    const onErr   = e => setConnectStatus(e.detail?.message || e.detail?.error?.message || '连接模块初始化失败');
+    const attachClientLatency = (payload, startedAtRef) => {
+      const startedAt = startedAtRef.current;
+      if (!startedAt) return payload;
+      startedAtRef.current = null;
+      return {
+        ...payload,
+        client_response_latency_ms: Math.max(0, Math.round(performance.now() - startedAt)),
+      };
+    };
+    const onStt = e => {
+      setLastHeard(e.detail?.text || '');
+      if (dignityModeRef.current) {
+        dignityLiveTurnStartedAtRef.current = performance.now();
+      }
+    };
+    const onErr = e => setConnectStatus(e.detail?.message || e.detail?.error?.message || '连接模块初始化失败');
+    const onDignity = e => {
+      const detail = e.detail || {};
+      const event = detail.event;
+      const data = detail.data || {};
+      if (event === 'mode_started') {
+        setDignityMode(true);
+        setDignityVoiceMode(false);
+        setDignityStatus(data);
+        setDignityOpeningReply(data.reply || '');
+        if (data.reply) setMsg(data.reply);
+        void pauseAssistantListening();
+      } else if (event === 'mode_stopped') {
+        setDignityMode(false);
+        setDignityVoiceMode(false);
+        setDignityStatus(data);
+        void resumeAssistantAndStart();
+      } else if (event === 'turn_result' || event === 'nurse_alert') {
+        const nextData = attachClientLatency(data, dignityLiveTurnStartedAtRef);
+        setDignityStatus(nextData);
+        setDignityTurns(items => [...items, nextData]);
+        if (nextData.reply) setMsg(nextData.reply);
+      } else if (event === 'state_updated') {
+        setDignityStatus(prev => ({
+          ...data,
+          client_response_latency_ms: data.client_response_latency_ms ?? prev?.client_response_latency_ms,
+        }));
+        setDignityTurns(items => {
+          if (!items.length) return items;
+          return items.map((item, index) => (
+            index === items.length - 1 ? { ...item, ...data } : item
+          ));
+        });
+      } else if (event === 'debug_turn_result') {
+        const nextData = attachClientLatency(data, dignityDebugTurnStartedAtRef);
+        setDignityDebugBusy(false);
+        setDignityStatus(nextData);
+        setDignityTurns(items => [...items, nextData]);
+      } else if (event === 'debug_state_updated') {
+        setDignityStatus(prev => ({
+          ...data,
+          client_response_latency_ms: data.client_response_latency_ms ?? prev?.client_response_latency_ms,
+        }));
+        setDignityTurns(items => {
+          if (!items.length) return items;
+          return items.map((item, index) => (
+            index === items.length - 1 ? { ...item, ...data } : item
+          ));
+        });
+      } else if (event === 'debug_reset') {
+        setDignityDebugBusy(false);
+        setDignityTurns([]);
+        setDignityStatus(data);
+        setDignityOpeningReply(data.reply || '');
+        if (data.reply) setMsg(data.reply);
+      } else if (event === 'document_started') {
+        setDignityDocumentBusy(true);
+      } else if (event === 'document_complete') {
+        setDignityDocumentBusy(false);
+        setDignityDocument(data.document || '');
+        if (data.dignity_memory) {
+          setDignityStatus(prev => ({ ...(prev || {}), dignity_memory: data.dignity_memory }));
+        }
+      } else if (event === 'document_error') {
+        setDignityDocumentBusy(false);
+        setConnectStatus(data.message || '鐢熷懡璁胯皥鏂囨。鐢熸垚澶辫触');
+      } else if (event === 'error') {
+        dignityLiveTurnStartedAtRef.current = null;
+        dignityDebugTurnStartedAtRef.current = null;
+        setDignityDebugBusy(false);
+        setDignityDocumentBusy(false);
+        setConnectStatus(data.message || '灏婁弗鐤楁硶妯″紡澶勭悊澶辫触');
+      }
+    };
     const onReady = async () => {
       if (initStartedRef.current) return;
       initStartedRef.current = true;
@@ -464,7 +625,7 @@ export default function App() {
         if (ok) connectXiaozhi();
         else setConnectStatus('请允许麦克风权限后重试');
       } catch (err) {
-        console.error('XiaozhiClient init 失败', err);
+        console.error('XiaozhiClient init 澶辫触', err);
         setConnectStatus('连接模块初始化失败：' + (err?.message || '未知错误'));
       }
     };
@@ -473,6 +634,7 @@ export default function App() {
     window.addEventListener('xz:llm', onLlm);
     window.addEventListener('xz:stt', onStt);
     window.addEventListener('xz:error', onErr);
+    window.addEventListener('xz:dignity', onDignity);
     window.addEventListener('xz:ready', onReady);
     if (window.XiaozhiClient) onReady();
     return () => {
@@ -481,13 +643,18 @@ export default function App() {
       window.removeEventListener('xz:llm', onLlm);
       window.removeEventListener('xz:stt', onStt);
       window.removeEventListener('xz:error', onErr);
+      window.removeEventListener('xz:dignity', onDignity);
       window.removeEventListener('xz:ready', onReady);
     };
-  }, [connectXiaozhi, scheduleReconnect, stopTtsPlayback]);
+  }, [connectXiaozhi, pauseAssistantListening, resumeAssistantAndStart, scheduleReconnect, stopTtsPlayback]);
 
   useEffect(() => {
-    if (connected && micOk && !assistantHold && !inCall) startListening();
-  }, [assistantHold, connected, inCall, micOk, startListening]);
+    if (connected && micOk && !assistantHold && !inCall && (!dignityMode || dignityVoiceMode)) startListening();
+  }, [assistantHold, connected, dignityMode, dignityVoiceMode, inCall, micOk, startListening]);
+
+  useEffect(() => {
+    if (dignityMode && !dignityVoiceMode) pauseAssistantListening();
+  }, [dignityMode, dignityVoiceMode, pauseAssistantListening]);
 
   useEffect(() => {
     if (settingsOpen) {
@@ -504,7 +671,7 @@ export default function App() {
     stopPlayback();
   }, [stopCallCommandRecognizer, stopPlayback]);
 
-  // ── 通话（WebRTC） ──
+  // 鈹€鈹€ 閫氳瘽锛圵ebRTC锛?鈹€鈹€
   const callRef = useRef(null);
   const [localStream, setLocalStream]   = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
@@ -515,7 +682,7 @@ export default function App() {
       role: 'patient',
       onIncoming: ({ fromName, callType }) => {
         setIncoming({
-          caller: { from: fromName || '家人', avatar: '👤' },
+          caller: { from: fromName || '瀹朵汉', avatar: '馃懁' },
           callType,
         });
         setCallState('incoming');
@@ -524,13 +691,13 @@ export default function App() {
       onLocalStream:  (s) => setLocalStream(s),
       onRemoteStream: (s) => setRemoteStream(s),
       onState: (s) => {
-        // 状态 connecting / active 时：把来电浮层切换为通话浮层
+        // 鐘舵€?connecting / active 鏃讹細鎶婃潵鐢垫诞灞傚垏鎹负閫氳瘽娴眰
         if (s === 'connecting' || s === 'active') {
           pauseAssistantListening().finally(async () => {
             await setCallCommandMode(true);
             startCallCommandRecognizer();
           });
-          const caller = incomingRef.current?.caller || inCallRef.current?.caller || { from: '通话中', avatar: '☎' };
+          const caller = incomingRef.current?.caller || inCallRef.current?.caller || { from: '通话中', avatar: '电话' };
           const callType = incomingRef.current?.callType || inCallRef.current?.callType || 'audio';
           setCallState('active');
           setInCall({ caller, callType });
@@ -645,6 +812,8 @@ export default function App() {
         micOk={micOk}
         connectStatus={connectStatus}
         onOpenSettings={() => setSettingsOpen(true)}
+        dignityMode={dignityMode}
+        onToggleDignityMode={toggleDignityMode}
       />
       <main style={{
         position: 'absolute',
@@ -659,10 +828,35 @@ export default function App() {
         overflow: 'hidden',
       }}>
         <section style={{ position: 'relative', minWidth: 0, borderRight: '0.5px solid rgba(143,163,176,0.22)', overflow: 'hidden' }}>
-          <ChatScreen aiState={aiState} msg={msg} lastHeard={lastHeard} connected={connected} recording={recording} />
+          <ChatScreen
+            aiState={aiState}
+            msg={msg}
+            lastHeard={lastHeard}
+            connected={connected}
+            recording={recording}
+            dignityMode={dignityMode}
+            dignityStatus={dignityStatus}
+          />
         </section>
         <section style={{ position: 'relative', minWidth: 0, overflow: 'hidden', background: 'rgba(255,250,242,0.28)' }}>
-          <InboxScreen contacts={contacts} refreshContacts={loadContacts} eventTick={eventTick} maxUploadMb={maxUploadMb} onOpenContact={markThreadRead} />
+          {dignityMode ? (
+            <DignityDebugPanel
+              turns={dignityTurns}
+              status={dignityStatus}
+              openingReply={dignityOpeningReply}
+              busy={dignityDebugBusy}
+              documentBusy={dignityDocumentBusy}
+              document={dignityDocument}
+              voiceMode={dignityVoiceMode}
+              recording={recording}
+              onRunTurn={runDignityDebugTurn}
+              onReset={resetDignityDebug}
+              onGenerateDocument={generateDignityDocument}
+              onToggleVoiceMode={toggleDignityVoiceMode}
+            />
+          ) : (
+            <InboxScreen contacts={contacts} refreshContacts={loadContacts} eventTick={eventTick} maxUploadMb={maxUploadMb} onOpenContact={markThreadRead} />
+          )}
         </section>
       </main>
 
