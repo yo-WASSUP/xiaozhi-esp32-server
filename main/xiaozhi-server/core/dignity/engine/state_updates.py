@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import json
+import re
 from copy import deepcopy
 from typing import Any, Dict, List
 
@@ -54,21 +54,75 @@ def merge_dignity_memory(
 def merge_list_state(current: Dict[str, List[Any]], update: Dict[str, List[Any]]) -> Dict[str, List[Any]]:
     merged: Dict[str, List[Any]] = {}
     for key, items in (current or {}).items():
-        merged[str(key)] = list(items) if isinstance(items, list) else []
+        if isinstance(items, list):
+            merged[str(key)] = _dedupe_memory_items(items)
 
     for key, items in (update or {}).items():
         if not isinstance(items, list):
             continue
         bucket = merged.setdefault(str(key), [])
-        seen = {_stable_key(item) for item in bucket}
         for item in items:
-            item_key = _stable_key(item)
-            if item_key in seen:
-                continue
-            bucket.append(item)
-            seen.add(item_key)
+            _append_memory_item(bucket, item)
     return merged
 
 
-def _stable_key(item: Any) -> str:
-    return json.dumps(item, ensure_ascii=False, sort_keys=True)
+def _dedupe_memory_items(items: List[Any]) -> List[Any]:
+    bucket: List[Any] = []
+    for item in items:
+        _append_memory_item(bucket, item)
+    return bucket
+
+
+def _append_memory_item(bucket: List[Any], item: Any) -> None:
+    item_text = _memory_item_text(item)
+    if not item_text:
+        return
+    item_key = _memory_item_key(item_text)
+    for index, existing in enumerate(bucket):
+        existing_text = _memory_item_text(existing)
+        existing_key = _memory_item_key(existing_text)
+        if item_key == existing_key:
+            bucket[index] = _prefer_memory_item(existing, item)
+            return
+        if _is_near_duplicate(existing_key, item_key):
+            bucket[index] = _prefer_memory_item(existing, item)
+            return
+    bucket.append(item)
+
+
+def _prefer_memory_item(existing: Any, incoming: Any) -> Any:
+    existing_text = _memory_item_text(existing)
+    incoming_text = _memory_item_text(incoming)
+    if len(incoming_text) > len(existing_text):
+        return incoming
+    return existing
+
+
+def _memory_item_text(item: Any) -> str:
+    if isinstance(item, str):
+        return item.strip()
+    if isinstance(item, dict):
+        return " ".join(
+            str(value).strip()
+            for _, value in sorted(item.items())
+            if value is not None and str(value).strip()
+        )
+    return str(item or "").strip()
+
+
+def _memory_item_key(text: str) -> str:
+    return re.sub(r"[\s，。；：、（）()《》“”\"'‘’！？!?,.：:;；-]+", "", text)
+
+
+def _is_near_duplicate(existing_key: str, item_key: str) -> bool:
+    if not existing_key or not item_key:
+        return False
+    shorter, longer = sorted((existing_key, item_key), key=len)
+    if len(shorter) < 4:
+        return shorter == longer
+    if shorter in longer:
+        return True
+    shorter_chars = set(shorter)
+    longer_chars = set(longer)
+    overlap = len(shorter_chars & longer_chars) / max(1, len(shorter_chars))
+    return overlap >= 0.92 and abs(len(longer) - len(shorter)) <= 8

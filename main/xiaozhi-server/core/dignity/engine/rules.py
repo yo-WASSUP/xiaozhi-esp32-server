@@ -10,7 +10,11 @@ from core.dignity.engine.config import (
     STRATEGY_TO_ROBOT_ACTION,
 )
 from core.dignity.engine.state_updates import normalize_emotion_state
-from core.dignity.engine.types import DignityDecision, DignityState, Route, StageId
+from core.dignity.engine.types import DignityDecision, DignityState, StageId
+
+
+PAUSE_STRATEGIES = {"pause", "switch_topic"}
+SAFETY_STRATEGIES = {"handoff_nurse"}
 
 
 def normalize_decision(raw_decision: Dict[str, Any]) -> DignityDecision:
@@ -40,21 +44,17 @@ def normalize_decision(raw_decision: Dict[str, Any]) -> DignityDecision:
     }
 
 
-def choose_active_stage(
-    state: DignityState, decision: DignityDecision, route: Route
-) -> StageId:
+def choose_active_stage(state: DignityState, decision: DignityDecision) -> StageId:
     current_index = int(state.get("stage_index", 0))
-    if route in {"pause", "safety"}:
+    if should_hold_stage(decision["strategy"]):
         return STAGE_ORDER[current_index]
     if not decision.get("should_advance_stage", False):
         return STAGE_ORDER[current_index]
     return STAGE_ORDER[min(current_index + 1, len(STAGE_ORDER) - 1)]
 
 
-def should_auto_advance_stage(
-    state: DignityState, decision: DignityDecision, route: Route
-) -> bool:
-    if route in {"pause", "safety"}:
+def should_auto_advance_stage(state: DignityState, decision: DignityDecision) -> bool:
+    if should_hold_stage(decision["strategy"]):
         return False
 
     current_stage = state.get("current_stage", "rapport")
@@ -81,6 +81,10 @@ def strategy_to_robot_action(strategy: str) -> str:
 def strategy_to_eye_expression(strategy: str) -> str:
     robot_action = strategy_to_robot_action(strategy)
     return ROBOT_ACTION_TO_EYE_EXPRESSION.get(robot_action, "attentive")
+
+
+def should_hold_stage(strategy: str) -> bool:
+    return strategy in PAUSE_STRATEGIES or strategy in SAFETY_STRATEGIES
 
 
 def _stage_index(stage: StageId | str) -> int:

@@ -34,7 +34,9 @@ export default function App() {
   const [dignityTurns, setDignityTurns] = useState([]);
   const [dignityDebugBusy, setDignityDebugBusy] = useState(false);
   const [dignityDocumentBusy, setDignityDocumentBusy] = useState(false);
+  const [dignityDocumentConfirmBusy, setDignityDocumentConfirmBusy] = useState(false);
   const [dignityDocument, setDignityDocument] = useState('');
+  const [dignityDocumentUrl, setDignityDocumentUrl] = useState('');
   const [dignityVoiceMode, setDignityVoiceMode] = useState(false);
 
   const connectingRef = useRef(false);
@@ -227,6 +229,9 @@ export default function App() {
 
   const resetDignityDebug = useCallback(async () => {
     setDignityTurns([]);
+    setDignityDocument('');
+    setDignityDocumentUrl('');
+    setDignityDocumentConfirmBusy(false);
     const ok = await sendDignityAction('debug_reset');
     if (!ok) setConnectStatus('尊严疗法调试重置失败');
   }, [sendDignityAction]);
@@ -236,10 +241,26 @@ export default function App() {
 
   const generateDignityDocument = useCallback(async () => {
     setDignityDocumentBusy(true);
+    setDignityDocumentConfirmBusy(false);
+    setDignityDocumentUrl('');
     const ok = await sendDignityAction('generate_document', { patient_id: DEVICE_ID });
     if (!ok) {
       setDignityDocumentBusy(false);
       setConnectStatus('生命访谈文档生成请求发送失败');
+    }
+  }, [sendDignityAction]);
+
+  const confirmDignityDocument = useCallback(async (documentText) => {
+    const document = String(documentText || '').trim();
+    if (!document) {
+      setConnectStatus('请先生成并确认文档内容');
+      return;
+    }
+    setDignityDocumentConfirmBusy(true);
+    const ok = await sendDignityAction('confirm_document', { patient_id: DEVICE_ID, document });
+    if (!ok) {
+      setDignityDocumentConfirmBusy(false);
+      setConnectStatus('生命访谈 Word 保存请求发送失败');
     }
   }, [sendDignityAction]);
 
@@ -598,20 +619,31 @@ const messageSpeechText = (contactName, message) => {
         if (data.reply) setMsg(data.reply);
       } else if (event === 'document_started') {
         setDignityDocumentBusy(true);
+        setDignityDocumentConfirmBusy(false);
       } else if (event === 'document_complete') {
         setDignityDocumentBusy(false);
         setDignityDocument(data.document || '');
+        setDignityDocumentUrl('');
         if (data.dignity_memory) {
           setDignityStatus(prev => ({ ...(prev || {}), dignity_memory: data.dignity_memory }));
         }
+      } else if (event === 'document_confirm_started') {
+        setDignityDocumentConfirmBusy(true);
+      } else if (event === 'document_confirmed') {
+        setDignityDocumentConfirmBusy(false);
+        setDignityDocument(data.document || '');
+        setDignityDocumentUrl(data.document_url || '');
       } else if (event === 'document_error') {
         setDignityDocumentBusy(false);
+        setDignityDocumentConfirmBusy(false);
+        setDignityDocumentUrl('');
         setConnectStatus(data.message || '鐢熷懡璁胯皥鏂囨。鐢熸垚澶辫触');
       } else if (event === 'error') {
         dignityLiveTurnStartedAtRef.current = null;
         dignityDebugTurnStartedAtRef.current = null;
         setDignityDebugBusy(false);
         setDignityDocumentBusy(false);
+        setDignityDocumentConfirmBusy(false);
         setConnectStatus(data.message || '灏婁弗鐤楁硶妯″紡澶勭悊澶辫触');
       }
     };
@@ -761,6 +793,7 @@ const messageSpeechText = (contactName, message) => {
       const detail = e.detail || {};
       const action = detail.action;
       if (!action) return;
+      if (action === 'robot_action') return;
       setAiState('idle');
       if (action === 'accept_call') {
         await acceptCall();
@@ -846,12 +879,16 @@ const messageSpeechText = (contactName, message) => {
               openingReply={dignityOpeningReply}
               busy={dignityDebugBusy}
               documentBusy={dignityDocumentBusy}
+              documentConfirmBusy={dignityDocumentConfirmBusy}
               document={dignityDocument}
+              documentUrl={dignityDocumentUrl}
               voiceMode={dignityVoiceMode}
               recording={recording}
               onRunTurn={runDignityDebugTurn}
               onReset={resetDignityDebug}
               onGenerateDocument={generateDignityDocument}
+              onConfirmDocument={confirmDignityDocument}
+              onDocumentChange={setDignityDocument}
               onToggleVoiceMode={toggleDignityVoiceMode}
             />
           ) : (

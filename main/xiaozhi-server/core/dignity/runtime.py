@@ -4,14 +4,17 @@ import asyncio
 import json
 import re
 import uuid
+import zipfile
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
+from xml.sax.saxutils import escape
 
-from core.dignity.engine.acceptance_cases import ACCEPTANCE_CASES
+from core.dignity.engine.config import (
+    ROBOT_ACTIONS,
+)
 from core.dignity.engine.graph import (
-    STRATEGY_TO_ROUTE,
     DignityState,
     build_initial_state,
     normalize_decision,
@@ -26,6 +29,7 @@ from core.dignity.engine.prompts import (
     build_memory_reply_user_prompt,
 )
 from core.dignity.engine.state_updates import merge_dignity_memory
+from core.dignity.engine.rules import strategy_to_eye_expression, strategy_to_robot_action
 from core.handle.sendAudioHandle import send_stt_message
 from core.utils.dialogue import Message
 from core.utils.util import extract_json_from_string
@@ -34,6 +38,8 @@ TAG = __name__
 SERVER_ROOT = Path(__file__).resolve().parents[2]
 LOG_DIR = SERVER_ROOT / "data" / "dignity_logs"
 MEMORY_DIR = SERVER_ROOT / "data" / "dignity_memory"
+MEDIA_DIR = SERVER_ROOT / "data" / "hospice_media"
+DOCUMENT_DIR = MEDIA_DIR / "dignity_documents"
 
 
 class ConnectionLLMDecisionModel:
@@ -120,37 +126,36 @@ def _get_decision_model(conn):
 
 def _state_payload(state: Optional[DignityState]) -> Dict[str, Any]:
     if not state:
+        strategy = "continue_deeper"
         return {
             "current_stage": "rapport",
-            "strategy": "continue_deeper",
-            "route": "continue",
-            "next_action": "ask_opening_question",
+            "strategy": strategy,
             "robot_action": "listening",
+            "robot_action_enum": ROBOT_ACTIONS,
             "eye_expression": "soft_smile",
             "reply": "",
+            "turn_count": 0,
+            "followup_count": 0,
             "emotion_state": {"mood": "calm", "engagement": "medium"},
             "dignity_memory": {},
+            "transcript": [],
         }
 
     decision_model = state.get("decision_model")
+    strategy = str(state.get("strategy") or "continue_deeper")
+    robot_action = _normalize_robot_action(strategy_to_robot_action(strategy))
+    current_stage = state.get("current_stage", "rapport")
     return {
-        "current_stage": state.get("current_stage", "rapport"),
-        "detected_stage": state.get("detected_stage", state.get("current_stage", "rapport")),
-        "strategy": state.get("strategy", "continue_deeper"),
-        "route": state.get("route", "continue"),
-        "next_action": state.get("next_action", "ask_followup"),
-        "robot_action": state.get("robot_action", "listening"),
-        "eye_expression": state.get("eye_expression", "attentive"),
+        "current_stage": current_stage,
+        "strategy": strategy,
+        "robot_action": robot_action,
+        "robot_action_enum": ROBOT_ACTIONS,
+        "eye_expression": strategy_to_eye_expression(strategy),
         "reply": state.get("reply", ""),
-        "should_advance_stage": state.get("should_advance_stage", False),
-        "stage_turn_count": state.get("stage_turn_count", 0),
         "followup_count": state.get("followup_count", 0),
-        "completed_themes": state.get("completed_themes", []),
         "turn_count": state.get("turn_count", 0),
-        "stage_goal": state.get("stage_goal", ""),
         "emotion_state": state.get("emotion_state", {"mood": "calm", "engagement": "medium"}),
         "dignity_memory": state.get("dignity_memory", {}),
-        "asked_questions": state.get("asked_questions", []),
         "transcript": state.get("transcript", []),
         "raw_decision": getattr(decision_model, "last_raw_decision", None),
         "raw_llm_content": getattr(decision_model, "last_raw_content", ""),
@@ -158,6 +163,35 @@ def _state_payload(state: Optional[DignityState]) -> Dict[str, Any]:
         "raw_memory_content": getattr(decision_model, "last_raw_memory_content", ""),
         "response_latency_ms": state.get("response_latency_ms"),
     }
+
+
+def _normalize_robot_action(value: Any) -> str:
+    action = str(value or "listening").strip()
+    return action if action in ROBOT_ACTIONS else "listening"
+
+
+async def send_robot_action_event(
+    conn,
+    source_event: str,
+    data: Optional[Dict[str, Any]] = None,
+) -> None:
+    data = data or {}
+    if "robot_action" not in data:
+        return
+    robot_action = _normalize_robot_action(data.get("robot_action"))
+    payload = {
+        "type": "client_action",
+        "action": "robot_action",
+        "source": "dignity",
+        "source_event": source_event,
+        "session_id": conn.session_id,
+        "robot_action": robot_action,
+        "robot_action_enum": ROBOT_ACTIONS,
+        "eye_expression": data.get("eye_expression", ""),
+        "current_stage": data.get("current_stage", ""),
+        "strategy": data.get("strategy", ""),
+    }
+    await conn.websocket.send(json.dumps(payload, ensure_ascii=False))
 
 
 async def send_dignity_event(conn, event: str, data: Optional[Dict[str, Any]] = None) -> None:
@@ -168,6 +202,7 @@ async def send_dignity_event(conn, event: str, data: Optional[Dict[str, Any]] = 
         "data": data or {},
     }
     await conn.websocket.send(json.dumps(payload, ensure_ascii=False))
+    await send_robot_action_event(conn, event, data)
 
 
 def _write_dignity_log(
@@ -262,6 +297,8 @@ async def stop_dignity_mode(conn) -> None:
     conn.dignity_active = False
     conn.logger.bind(tag=TAG).info("尊严访谈模式已关闭")
     payload = _state_payload(conn.dignity_state)
+    payload["robot_action"] = "idle"
+    payload["eye_expression"] = "calm"
     _write_dignity_log(conn, "mode_stopped", payload)
     await send_dignity_event(conn, "mode_stopped", payload)
 
@@ -308,32 +345,6 @@ async def run_dignity_debug_turn(conn, text: str) -> None:
     _schedule_background_state_update(conn, state, "debug")
 
 
-async def run_dignity_acceptance_cases(conn) -> None:
-    _ensure_dignity_runtime(conn)
-    await send_dignity_event(conn, "debug_cases_started", {"count": len(ACCEPTANCE_CASES)})
-
-    try:
-        loop = asyncio.get_running_loop()
-        results = await loop.run_in_executor(conn.executor, _run_acceptance_cases, conn)
-    except Exception as exc:
-        conn.logger.bind(tag=TAG).error(f"尊严访谈批量用例失败: {exc}")
-        await send_dignity_event(conn, "error", {"message": "尊严访谈批量用例运行失败。"})
-        return
-
-    passed = sum(1 for item in results if item.get("passed"))
-    _write_dignity_log(
-        conn,
-        "debug_cases_complete",
-        {"turn_count": len(results), "reply": f"{passed}/{len(results)}"},
-        source="debug",
-    )
-    await send_dignity_event(
-        conn,
-        "debug_cases_complete",
-        {"count": len(results), "passed": passed, "results": results},
-    )
-
-
 async def generate_dignity_document(conn, msg_json: Optional[Dict[str, Any]] = None) -> None:
     _ensure_dignity_runtime(conn)
     msg_json = msg_json or {}
@@ -356,7 +367,7 @@ async def generate_dignity_document(conn, msg_json: Optional[Dict[str, Any]] = N
         loop = asyncio.get_running_loop()
         document = await loop.run_in_executor(
             conn.executor,
-            _run_dignity_document_generation,
+            _run_dignity_document_draft,
             conn,
             memory,
         )
@@ -368,10 +379,45 @@ async def generate_dignity_document(conn, msg_json: Optional[Dict[str, Any]] = N
     payload = {
         "patient_id": _memory_key(conn),
         "document": document,
+        "document_status": "draft",
         "dignity_memory": memory,
     }
     _write_dignity_log(conn, "document_generated", {"reply": document[:200]})
     await send_dignity_event(conn, "document_complete", payload)
+
+
+async def confirm_dignity_document(conn, msg_json: Optional[Dict[str, Any]] = None) -> None:
+    _ensure_dignity_runtime(conn)
+    msg_json = msg_json or {}
+    conn.dignity_patient_id = msg_json.get("patient_id") or conn.dignity_patient_id
+    document = (msg_json.get("document") or "").strip()
+    if not document:
+        await send_dignity_event(conn, "document_error", {"message": "请先生成并确认文档内容。"})
+        return
+
+    await send_dignity_event(conn, "document_confirm_started", {})
+    try:
+        loop = asyncio.get_running_loop()
+        filename, url = await loop.run_in_executor(
+            conn.executor,
+            _write_dignity_docx,
+            conn,
+            document,
+        )
+    except Exception as exc:
+        conn.logger.bind(tag=TAG).error(f"尊严访谈 Word 文档保存失败: {exc}")
+        await send_dignity_event(conn, "document_error", {"message": "Word 文档保存失败。"})
+        return
+
+    payload = {
+        "patient_id": _memory_key(conn),
+        "document": document,
+        "document_status": "confirmed",
+        "document_url": url,
+        "document_filename": filename,
+    }
+    _write_dignity_log(conn, "document_confirmed", {"reply": document[:200]})
+    await send_dignity_event(conn, "document_confirmed", payload)
 
 
 async def handle_dignity_turn_if_active(conn, text: str) -> bool:
@@ -506,41 +552,94 @@ def _run_background_state_update(conn, state: DignityState) -> DignityState:
     return next_state
 
 
-def _run_dignity_document_generation(conn, memory: Dict[str, Any]) -> str:
+def _run_dignity_document_draft(conn, memory: Dict[str, Any]) -> str:
     model = _get_decision_model(conn)
     return model.generate_dignity_document(memory).strip()
 
 
-def _run_acceptance_cases(conn):
-    results = []
-    for case in ACCEPTANCE_CASES:
-        state = build_initial_state(
-            session_id=f"{conn.session_id}:{case['case_id']}",
-            decision_model=_get_decision_model(conn),
-        )
-        state = run_text_turn(state, case["patient_text"])
-        strategy = state.get("strategy", "")
-        expected_strategies = case.get("expected_strategy", [])
-        expected_route = STRATEGY_TO_ROUTE.get(strategy, "continue")
-        expected_stage = case.get("expected_stage")
-        passed = (
-            (state.get("current_stage") == expected_stage or state.get("detected_stage") == expected_stage)
-            and strategy in expected_strategies
-        )
-        results.append(
-            {
-                "case_id": case["case_id"],
-                "patient_text": case["patient_text"],
-                "passed": passed,
-                "expected": {
-                    "stage": case.get("expected_stage"),
-                    "strategy": expected_strategies,
-                    "route": expected_route,
-                },
-                "actual": _state_payload(state),
-            }
-        )
-    return results
+def _write_dignity_docx(conn, markdown_text: str) -> Tuple[str, str]:
+    DOCUMENT_DIR.mkdir(parents=True, exist_ok=True)
+    filename = f"{_memory_key(conn)}_{datetime.now():%Y%m%d_%H%M%S}.docx"
+    path = DOCUMENT_DIR / filename
+
+    body_xml = []
+    lines = [line.rstrip() for line in (markdown_text or "").splitlines()]
+    for line in lines:
+        text = line.strip()
+        if not text:
+            continue
+        if text.startswith("# "):
+            body_xml.append(_docx_paragraph(text[2:].strip(), style="Title", align="center", font_size=32))
+        elif text.startswith("## "):
+            body_xml.append(_docx_paragraph(text[3:].strip(), style="Heading1", font_size=26))
+        elif re.fullmatch(r"\d{4}年\d{1,2}月\d{1,2}日星期[一二三四五六日天]", text):
+            body_xml.append(_docx_paragraph(text, align="center", font_size=20))
+        elif text.startswith(("- ", "* ")):
+            body_xml.append(_docx_paragraph(f"• {text[2:].strip()}"))
+        else:
+            body_xml.append(_docx_paragraph(text, first_line_indent=True))
+
+    _write_docx_package(path, "\n".join(body_xml))
+    return filename, f"/hospice-media/dignity_documents/{filename}"
+
+
+def _docx_paragraph(
+    text: str,
+    style: str = "",
+    align: str = "",
+    font_size: int = 22,
+    first_line_indent: bool = False,
+) -> str:
+    props = []
+    if style:
+        props.append(f'<w:pStyle w:val="{style}"/>')
+    if align:
+        props.append(f'<w:jc w:val="{align}"/>')
+    if first_line_indent:
+        props.append('<w:ind w:firstLine="440"/>')
+    props.append('<w:spacing w:line="360" w:lineRule="auto"/>')
+    ppr = f"<w:pPr>{''.join(props)}</w:pPr>"
+    safe_text = escape(text)
+    return (
+        f"<w:p>{ppr}<w:r><w:rPr><w:rFonts w:ascii=\"Microsoft YaHei\" "
+        f"w:eastAsia=\"Microsoft YaHei\"/><w:sz w:val=\"{font_size}\"/></w:rPr>"
+        f"<w:t xml:space=\"preserve\">{safe_text}</w:t></w:r></w:p>"
+    )
+
+
+def _write_docx_package(path: Path, body_xml: str) -> None:
+    document_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    {body_xml}
+    <w:sectPr>
+      <w:pgSz w:w="11906" w:h="16838"/>
+      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>
+    </w:sectPr>
+  </w:body>
+</w:document>"""
+    content_types = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+</Types>"""
+    rels = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>"""
+    styles = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>
+  <w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:pPr><w:jc w:val="center"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style>
+  <w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:rPr><w:b/><w:sz w:val="26"/></w:rPr></w:style>
+</w:styles>"""
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as docx:
+        docx.writestr("[Content_Types].xml", content_types)
+        docx.writestr("_rels/.rels", rels)
+        docx.writestr("word/document.xml", document_xml)
+        docx.writestr("word/styles.xml", styles)
 
 
 def _speak_dignity_reply(conn, reply: str) -> None:

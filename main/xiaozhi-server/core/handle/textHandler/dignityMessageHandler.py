@@ -2,9 +2,9 @@ from typing import Any, Dict
 import time
 
 from core.dignity.runtime import (
+    confirm_dignity_document,
     generate_dignity_document,
     reset_dignity_debug,
-    run_dignity_acceptance_cases,
     run_dignity_debug_turn,
     send_dignity_event,
     start_dignity_mode,
@@ -38,11 +38,11 @@ class DignityTextMessageHandler(TextMessageHandler):
         if action == "debug_reset":
             await reset_dignity_debug(conn)
             return
-        if action == "debug_cases":
-            await run_dignity_acceptance_cases(conn)
-            return
         if action == "generate_document":
             await generate_dignity_document(conn, msg_json)
+            return
+        if action == "confirm_document":
+            await confirm_dignity_document(conn, msg_json)
             return
 
         conn.logger.bind(tag=TAG).warning(f"未知尊严疗法动作: {action}")

@@ -2,32 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-from core.dignity.engine.types import Route, StageDefinition, StageId
-
-
-STRATEGY_TO_ROUTE: Dict[str, Route] = {
-    "continue_deeper": "continue",
-    "comfort": "continue",
-    "ask_photo_context": "continue",
-    "simple_followup": "continue",
-    "summarize_confirm": "continue",
-    "output_rewrite": "continue",
-    "switch_topic": "pause",
-    "pause": "pause",
-    "handoff_nurse": "safety",
-}
-
-STRATEGY_TO_NEXT_ACTION: Dict[str, str] = {
-    "continue_deeper": "ask_followup",
-    "comfort": "provide_comfort",
-    "ask_photo_context": "record_photo_clue",
-    "simple_followup": "ask_simple_followup",
-    "summarize_confirm": "summarize_and_confirm",
-    "output_rewrite": "boundary_safe_rewrite",
-    "switch_topic": "offer_topic_switch",
-    "pause": "offer_pause",
-    "handoff_nurse": "safety_support",
-}
+from core.dignity.engine.types import StageDefinition, StageId
 
 STRATEGY_TO_ROBOT_ACTION: Dict[str, str] = {
     "continue_deeper": "listening",
@@ -41,7 +16,17 @@ STRATEGY_TO_ROBOT_ACTION: Dict[str, str] = {
     "handoff_nurse": "nurse_alert",
 }
 
+ROBOT_ACTIONS: List[str] = [
+    "idle",
+    "listening",
+    "comfort",
+    "pause",
+    "nurse_alert",
+    "happy",
+]
+
 ROBOT_ACTION_TO_EYE_EXPRESSION: Dict[str, str] = {
+    "idle": "calm",
     "listening": "attentive",
     "comfort": "gentle",
     "pause": "calm",

@@ -131,6 +131,10 @@ wsHandler.onChatMessage = (text, isUser) => {
 
 wsHandler.onClientAction = (payload) => {
   window.dispatchEvent(new CustomEvent('xz:client-action', { detail: payload || {} }));
+  if (payload?.action === 'robot_action') {
+    window.dispatchEvent(new CustomEvent('xz:robot-action', { detail: payload || {} }));
+    return;
+  }
   window.dispatchEvent(new CustomEvent('xz:state', { detail: { state: 'idle' } }));
 };
 

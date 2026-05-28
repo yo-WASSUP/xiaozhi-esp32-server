@@ -89,7 +89,6 @@ function DecisionLine({ turn }) {
       <span>策略 {labelOf(STRATEGY_LABELS, turn.strategy)}</span>
       <span>情绪 {labelOf(MOOD_LABELS, turn.emotion_state?.mood)}</span>
       <span>投入 {labelOf(ENGAGEMENT_LABELS, turn.emotion_state?.engagement)}</span>
-      <span>推进 {turn.should_advance_stage ? '是' : '否'}</span>
       {formatLatency(responseLatencyOf(turn)) && <span>回复耗时 {formatLatency(responseLatencyOf(turn))}</span>}
     </div>
   );
@@ -130,15 +129,46 @@ function MemoryPanel({ memory }) {
   );
 }
 
-function DocumentPanel({ document, busy }) {
+function DocumentPanel({ document, documentUrl, busy, confirmBusy, onChange, onConfirm }) {
   if (!busy && !document) return null;
+  const canConfirm = !!String(document || '').trim() && !busy && !confirmBusy;
   return (
     <div style={documentPanelStyle}>
-      <div style={memoryTitleStyle}>生命访谈文档</div>
+      <div style={documentHeaderStyle}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ ...memoryTitleStyle, marginBottom: 2 }}>生命访谈文档</div>
+          {document && !documentUrl && !busy && (
+            <div style={{ color: C.inkFaint, fontSize: 11 }}>请核对事实并修改，确认后再生成 Word</div>
+          )}
+          {documentUrl && (
+            <div style={{ color: C.inkFaint, fontSize: 11 }}>已确认，可下载 Word</div>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {document && !documentUrl && !busy && (
+            <button onClick={() => onConfirm(document)} disabled={!canConfirm} style={confirmButtonStyle(canConfirm)}>
+              {confirmBusy ? '保存中' : '确认'}
+            </button>
+          )}
+          {documentUrl && (
+            <a href={documentUrl} download style={downloadLinkStyle}>
+              Word
+            </a>
+          )}
+        </div>
+      </div>
       {busy ? (
         <div style={{ color: C.inkFaint, fontSize: 12 }}>正在生成文档...</div>
       ) : (
-        <pre style={documentPreviewStyle}>{document}</pre>
+        <textarea
+          value={document}
+          onChange={e => onChange(e.target.value)}
+          readOnly={!!documentUrl}
+          style={{
+            ...documentEditorStyle,
+            background: documentUrl ? 'rgba(255,250,242,.54)' : 'rgba(255,250,242,.82)',
+          }}
+        />
       )}
     </div>
   );
@@ -190,12 +220,16 @@ export default function DignityDebugPanel({
   openingReply,
   busy,
   documentBusy,
+  documentConfirmBusy,
   document,
+  documentUrl,
   voiceMode,
   recording,
   onRunTurn,
   onReset,
   onGenerateDocument,
+  onConfirmDocument,
+  onDocumentChange,
   onToggleVoiceMode,
 }) {
   const [text, setText] = useState('');
@@ -268,7 +302,14 @@ export default function DignityDebugPanel({
           overflow: 'hidden',
           gridTemplateRows: document || documentBusy ? 'minmax(160px, 42%) minmax(0, 1fr)' : 'minmax(0, 1fr)',
         }}>
-          <DocumentPanel document={document} busy={documentBusy} />
+          <DocumentPanel
+            document={document}
+            documentUrl={documentUrl}
+            busy={documentBusy}
+            confirmBusy={documentConfirmBusy}
+            onChange={onDocumentChange}
+            onConfirm={onConfirmDocument}
+          />
           <MemoryPanel memory={status?.dignity_memory} />
         </div>
       </div>
@@ -354,8 +395,16 @@ const documentPanelStyle = {
   overflow: 'auto',
 };
 
-const documentPreviewStyle = {
-  margin: 0,
+const documentEditorStyle = {
+  width: '100%',
+  minHeight: 140,
+  height: 'calc(100% - 44px)',
+  resize: 'none',
+  boxSizing: 'border-box',
+  border: `1px solid ${C.mist}22`,
+  borderRadius: 6,
+  padding: '9px 10px',
+  outline: 'none',
   whiteSpace: 'pre-wrap',
   wordBreak: 'break-word',
   color: C.inkMid,
@@ -363,6 +412,37 @@ const documentPreviewStyle = {
   lineHeight: 1.6,
   fontFamily: 'Noto Sans SC',
 };
+
+const documentHeaderStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 10,
+  marginBottom: 8,
+};
+
+const downloadLinkStyle = {
+  border: `1px solid ${C.amber}66`,
+  borderRadius: 6,
+  padding: '4px 9px',
+  color: C.ink,
+  background: `${C.amber}20`,
+  fontSize: 12,
+  textDecoration: 'none',
+  whiteSpace: 'nowrap',
+};
+
+const confirmButtonStyle = (enabled) => ({
+  border: `1px solid ${enabled ? C.amber : C.mist}66`,
+  borderRadius: 6,
+  padding: '4px 9px',
+  color: enabled ? C.ink : C.inkFaint,
+  background: enabled ? `${C.amber}20` : 'rgba(255,250,242,.52)',
+  fontSize: 12,
+  cursor: enabled ? 'pointer' : 'not-allowed',
+  whiteSpace: 'nowrap',
+  fontFamily: 'Noto Sans SC',
+});
 
 const memoryTitleStyle = {
   fontSize: 14,
