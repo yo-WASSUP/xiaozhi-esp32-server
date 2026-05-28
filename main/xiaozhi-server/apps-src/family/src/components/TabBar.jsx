@@ -5,6 +5,7 @@ const TABS = [
   { id: 'message', icon: '💌', label: '发消息' },
   { id: 'call', icon: '📹', label: '通话' },
   { id: 'history', icon: '📊', label: '记录' },
+  { id: 'video', icon: '🎞️', label: '影像' },
 ];
 
 export default function TabBar({ tab, setTab }) {

@@ -131,6 +131,16 @@ export class WebSocketHandler {
             } else if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('xz:client-action', { detail: message }));
             }
+        } else if (message.type === 'vad') {
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('xz:voice-activity', {
+                    detail: {
+                        active: !!message.active,
+                        source: 'server',
+                        session_id: message.session_id || ''
+                    }
+                }));
+            }
         } else if (message.type === 'dignity') {
             log(`收到尊严疗法事件: ${JSON.stringify(message)}`, 'info');
             if (this.onDignityEvent) {

@@ -22,6 +22,7 @@ export default function App() {
   const [connected, setConnected] = useState(false);
   const [connectStatus, setConnectStatus] = useState('');
   const [recording, setRecording] = useState(false);
+  const [userSpeaking, setUserSpeaking] = useState(false);
   const [micOk, setMicOk]         = useState(false);
   const [assistantHold, setAssistantHold] = useState(false);
   const [contacts, setContacts]   = useState([]);
@@ -46,6 +47,7 @@ export default function App() {
   const callCommandRecognizerRef = useRef(null);
   const callCommandRecognizerActiveRef = useRef(false);
   const recordingRef = useRef(false);
+  const userSpeakingRef = useRef(false);
   const connectedRef = useRef(false);
   const micOkRef = useRef(false);
   const assistantHoldRef = useRef(false);
@@ -57,8 +59,10 @@ export default function App() {
   const dignityDebugTurnStartedAtRef = useRef(null);
   const mediaPlaybackRef = useRef(null);
   const ttsPlaybackAbortRef = useRef(false);
+  const speakingFallbackTimerRef = useRef(null);
 
   useEffect(() => { connectedRef.current = connected; }, [connected]);
+  useEffect(() => { userSpeakingRef.current = userSpeaking; }, [userSpeaking]);
   useEffect(() => { micOkRef.current = micOk; }, [micOk]);
   useEffect(() => { assistantHoldRef.current = assistantHold; }, [assistantHold]);
   useEffect(() => { inCallRef.current = inCall; }, [inCall]);
@@ -158,6 +162,9 @@ export default function App() {
       try { await window.XiaozhiClient.stopRecording(); } catch (_) { }
       recordingRef.current = false;
       setRecording(false);
+      userSpeakingRef.current = false;
+      setUserSpeaking(false);
+      setAiState('idle');
     }
   }, []);
 
@@ -171,13 +178,22 @@ export default function App() {
     if (!allowInCall && (assistantHoldRef.current || inCallRef.current)) return;
     try {
       const ok = await window.XiaozhiClient.startRecording({ callActive: allowInCall });
-      recordingRef.current = !!ok;
-      setRecording(!!ok);
+      const active = !!ok || !!window.XiaozhiClient.isRecording?.();
+      recordingRef.current = active;
+      setRecording(active);
+      if (active) {
+        setAiState('idle');
+        setConnectStatus('');
+      }
       if (!ok) setConnectStatus('麦克风没有开始工作，请重新连接后再试');
+      if (active) setConnectStatus('');
     } catch (err) {
       console.error('鑷姩鎷鹃煶澶辫触', err);
       recordingRef.current = false;
       setRecording(false);
+      userSpeakingRef.current = false;
+      setUserSpeaking(false);
+      setAiState('idle');
       setConnectStatus('麦克风启动失败：' + (err?.message || '未知错误'));
     }
   }, []);
@@ -536,10 +552,29 @@ const messageSpeechText = (contactName, message) => {
       if (!isConnected) {
         recordingRef.current = false;
         setRecording(false);
+        userSpeakingRef.current = false;
+        setUserSpeaking(false);
         scheduleReconnect();
       }
     };
-    const onState = e => setAiState(e.detail.state);
+    const onState = e => {
+      const nextState = e.detail?.state;
+      if (speakingFallbackTimerRef.current) {
+        clearTimeout(speakingFallbackTimerRef.current);
+        speakingFallbackTimerRef.current = null;
+      }
+      if (nextState === 'speaking') {
+        setAiState('speaking');
+        speakingFallbackTimerRef.current = setTimeout(() => {
+          speakingFallbackTimerRef.current = null;
+          setAiState('idle');
+        }, 18000);
+      } else if (nextState === 'idle') {
+        setAiState('idle');
+      } else if (nextState) {
+        setAiState(nextState);
+      }
+    };
     const onLlm   = e => {
       if (callStateRef.current === 'active' || inCallRef.current) {
         stopTtsPlayback();
@@ -558,9 +593,17 @@ const messageSpeechText = (contactName, message) => {
     };
     const onStt = e => {
       setLastHeard(e.detail?.text || '');
+      setUserSpeaking(false);
+      userSpeakingRef.current = false;
+      setAiState('speaking');
       if (dignityModeRef.current) {
         dignityLiveTurnStartedAtRef.current = performance.now();
       }
+    };
+    const onVoiceActivity = e => {
+      const active = !!e.detail?.active;
+      setUserSpeaking(active);
+      userSpeakingRef.current = active;
     };
     const onErr = e => setConnectStatus(e.detail?.message || e.detail?.error?.message || '连接模块初始化失败');
     const onDignity = e => {
@@ -665,6 +708,7 @@ const messageSpeechText = (contactName, message) => {
     window.addEventListener('xz:state', onState);
     window.addEventListener('xz:llm', onLlm);
     window.addEventListener('xz:stt', onStt);
+    window.addEventListener('xz:voice-activity', onVoiceActivity);
     window.addEventListener('xz:error', onErr);
     window.addEventListener('xz:dignity', onDignity);
     window.addEventListener('xz:ready', onReady);
@@ -674,6 +718,7 @@ const messageSpeechText = (contactName, message) => {
       window.removeEventListener('xz:state', onState);
       window.removeEventListener('xz:llm', onLlm);
       window.removeEventListener('xz:stt', onStt);
+      window.removeEventListener('xz:voice-activity', onVoiceActivity);
       window.removeEventListener('xz:error', onErr);
       window.removeEventListener('xz:dignity', onDignity);
       window.removeEventListener('xz:ready', onReady);
@@ -699,6 +744,7 @@ const messageSpeechText = (contactName, message) => {
   useEffect(() => () => {
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     if (callStateTimerRef.current) clearInterval(callStateTimerRef.current);
+    if (speakingFallbackTimerRef.current) clearTimeout(speakingFallbackTimerRef.current);
     stopCallCommandRecognizer();
     stopPlayback();
   }, [stopCallCommandRecognizer, stopPlayback]);
@@ -867,6 +913,7 @@ const messageSpeechText = (contactName, message) => {
             lastHeard={lastHeard}
             connected={connected}
             recording={recording}
+            userSpeaking={userSpeaking}
             dignityMode={dignityMode}
             dignityStatus={dignityStatus}
           />

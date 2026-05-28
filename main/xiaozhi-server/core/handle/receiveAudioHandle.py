@@ -20,6 +20,7 @@ async def handleAudioMessage(conn, audio):
         if not hasattr(conn, "vad_resume_task") or conn.vad_resume_task.done():
             conn.vad_resume_task = asyncio.create_task(resume_vad_detection(conn))
         return
+    await send_vad_state_if_changed(conn, have_voice)
     # manual 模式下不打断正在播放的内容
     if have_voice:
         if conn.client_is_speaking and conn.client_listen_mode != "manual":
@@ -28,6 +29,26 @@ async def handleAudioMessage(conn, audio):
     await no_voice_close_connect(conn, have_voice)
     # 接收音频
     await conn.asr.receive_audio(conn, audio, have_voice)
+
+
+async def send_vad_state_if_changed(conn, have_voice):
+    now = time.time()
+    active = bool(have_voice)
+    previous = getattr(conn, "last_vad_active", None)
+    last_sent_at = float(getattr(conn, "last_vad_event_at", 0) or 0)
+    if previous is active and now - last_sent_at < 0.7:
+        return
+    conn.last_vad_active = active
+    conn.last_vad_event_at = now
+    try:
+        await conn.websocket.send(
+            json.dumps(
+                {"type": "vad", "active": active, "session_id": conn.session_id},
+                ensure_ascii=False,
+            )
+        )
+    except Exception as exc:
+        conn.logger.bind(tag=TAG).debug(f"VAD状态事件发送失败: {exc}")
 
 
 async def resume_vad_detection(conn):

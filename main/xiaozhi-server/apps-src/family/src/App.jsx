@@ -5,6 +5,7 @@ import HomeScreen from './screens/HomeScreen';
 import MessageScreen from './screens/MessageScreen';
 import CallScreen from './screens/CallScreen';
 import HistoryScreen from './screens/HistoryScreen';
+import LegacyVideoScreen from './screens/LegacyVideoScreen';
 
 export default function App() {
   const [tab, setTab] = useState('home');
@@ -16,6 +17,7 @@ export default function App() {
         {tab === 'message' && <MessageScreen />}
         {tab === 'call'    && <CallScreen />}
         {tab === 'history' && <HistoryScreen />}
+        {tab === 'video'   && <LegacyVideoScreen />}
         <TabBar tab={tab} setTab={setTab} />
       </PaperBg>
     </div>

@@ -1,6 +1,6 @@
 import { C } from '../theme';
 import { InkMountains, InkReeds } from '../components/InkArt';
-import Orb from '../components/Orb';
+import RobotAvatar from '../components/RobotAvatar';
 import WaveBars from '../components/WaveBars';
 
 const STATUS_MAP = {
@@ -38,8 +38,9 @@ function formatLatency(ms) {
   return `${(value / 1000).toFixed(1)}s`;
 }
 
-export default function ChatScreen({ aiState, msg, lastHeard, connected, recording, dignityMode, dignityStatus }) {
-  const { label, dot, anim } = STATUS_MAP[aiState] || STATUS_MAP.idle;
+export default function ChatScreen({ aiState, msg, lastHeard, connected, recording, userSpeaking, dignityMode, dignityStatus }) {
+  const displayState = aiState === 'thinking' ? 'speaking' : (aiState === 'idle' && connected && recording && userSpeaking ? 'listening' : aiState);
+  const { label, dot, anim } = STATUS_MAP[displayState] || STATUS_MAP.idle;
   const stage = STAGE_LABELS[dignityStatus?.current_stage] || dignityStatus?.current_stage || '建立关系';
   const strategy = STRATEGY_LABELS[dignityStatus?.strategy] || dignityStatus?.strategy || '继续追问';
   const responseLatency = formatLatency(dignityStatus?.client_response_latency_ms ?? dignityStatus?.response_latency_ms);
@@ -70,12 +71,12 @@ export default function ChatScreen({ aiState, msg, lastHeard, connected, recordi
       {/* 主区：Orb + 文本 */}
       <div style={{ position: 'absolute', top: 72, bottom: 96, left: 0, right: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 28, zIndex: 5, padding: '0 42px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18 }}>
-          <Orb state={aiState} />
+          <RobotAvatar state={displayState} />
           <div style={{ fontSize: 12, color: C.inkFaint, letterSpacing: '.18em', fontFamily: 'Noto Sans SC', fontWeight: 300, minHeight: 18, transition: 'opacity .4s' }}>
-            {aiState === 'idle' && '· · ·'}
-            {aiState === 'listening' && '正在聆听'}
-            {aiState === 'thinking' && '稍等哦…'}
-            {aiState === 'speaking' && '说话中'}
+            {displayState === 'idle' && '· · ·'}
+            {displayState === 'listening' && '正在聆听'}
+            {displayState === 'thinking' && '稍等哦…'}
+            {displayState === 'speaking' && '回应中'}
           </div>
         </div>
         <div style={{ width: '100%', maxWidth: 440, textAlign: 'center' }}>

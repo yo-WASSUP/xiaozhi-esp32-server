@@ -89,7 +89,7 @@ const [
   playerMod,
   opusMod,
 ] = await Promise.all([
-  import(`${TEST}/core/network/websocket.js?v=0129`),
+  import(`${TEST}/core/network/websocket.js?v=0130`),
   import(`${TEST}/core/audio/recorder.js?v=0127`),
   import(`${TEST}/core/audio/player.js?v=0127`),
   import(`${TEST}/core/audio/opus-codec.js?v=0127`),
@@ -119,6 +119,9 @@ wsHandler.onSessionStateChange = (speaking) => {
 };
 
 wsHandler.onChatMessage = (text, isUser) => {
+  if (!isUser && typeof text === 'string' && text.includes('"type": "vad"')) {
+    return;
+  }
   if (isUser) {
     // 用户说话被识别出来：进入 thinking
     window.dispatchEvent(new CustomEvent('xz:stt', { detail: { text } }));
