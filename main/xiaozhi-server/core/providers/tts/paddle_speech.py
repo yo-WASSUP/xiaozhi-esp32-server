@@ -3,6 +3,7 @@ import wave
 import json
 import base64
 import asyncio
+import time
 import websockets
 import numpy as np
 from datetime import datetime
@@ -77,6 +78,8 @@ class TTSProvider(TTSProviderBase):
 
     async def text_streaming(self, text, output_file):
         try:
+            request_started_at = time.time()
+            first_audio_at = None
             # 使用 websockets 异步连接到 WebSocket 服务器
             async with websockets.connect(self.url) as ws:
                 # 发送开始请求
@@ -113,12 +116,18 @@ class TTSProvider(TTSProviderBase):
                             break
                         else:
                             # 拼接音频数据（base64 编码的 PCM 数据）
-                            audio_chunks += base64.b64decode(response.get("audio"))
+                            audio = response.get("audio")
+                            if audio:
+                                if first_audio_at is None:
+                                    first_audio_at = time.time()
+                                audio_chunks += base64.b64decode(audio)
                 except asyncio.TimeoutError:
                     raise Exception(f"WebSocket 超时：等待音频数据超过 {timeout_seconds} 秒")
 
                 # 将拼接后的 PCM 数据转换为 WAV 格式
+                synthesis_finished_at = time.time()
                 wav_data = await self.pcm_to_wav(audio_chunks)
+                wav_ready_at = time.time()
 
                 # 结束请求
                 end_request = {
@@ -130,6 +139,42 @@ class TTSProvider(TTSProviderBase):
 
                 # 接收结束响应避免服务抛出异常
                 await ws.recv()
+
+                first_audio_ms = (
+                    (first_audio_at - request_started_at) * 1000
+                    if first_audio_at
+                    else None
+                )
+                synthesis_ms = (synthesis_finished_at - request_started_at) * 1000
+                total_ms = (wav_ready_at - request_started_at) * 1000
+                duration_s = len(audio_chunks) / 2 / 24000 if audio_chunks else 0
+                llm_to_first_ms = None
+                if (
+                    getattr(self, "conn", None)
+                    and getattr(self.conn, "llm_first_token_time", None)
+                    and first_audio_at
+                ):
+                    llm_to_first_ms = (
+                        first_audio_at - self.conn.llm_first_token_time
+                    ) * 1000
+
+                latency_parts = []
+                if first_audio_ms is not None:
+                    latency_parts.append(f"首包: {first_audio_ms:.0f}ms")
+                if llm_to_first_ms is not None:
+                    latency_parts.append(
+                        f"LLM首包到TTS首包: {llm_to_first_ms:.0f}ms"
+                    )
+                latency_parts.extend(
+                    [
+                        f"合成: {synthesis_ms:.0f}ms",
+                        f"总耗时: {total_ms:.0f}ms",
+                        f"音频时长: {duration_s:.2f}s",
+                    ]
+                )
+                logger.bind(tag=TAG).info(
+                    f"【PaddleSpeechTTS性能】{', '.join(latency_parts)}, 文本: {(text or '')[:20]}..."
+                )
 
                 # 根据配置决定是否保存文件
                 if not self.delete_audio_file and self.save_path:

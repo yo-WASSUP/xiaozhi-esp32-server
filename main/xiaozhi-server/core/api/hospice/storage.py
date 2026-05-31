@@ -5,6 +5,8 @@ import sqlite3
 import json
 import os
 import time
+import uuid
+import random
 from datetime import datetime, date
 from config.logger import setup_logging
 
@@ -80,6 +82,29 @@ class SessionLogger:
                 "UPDATE family_message SET contact_name = sender_name "
                 "WHERE contact_name IS NULL AND sender_role = 'family'"
             )
+        if "family_id" not in cols:
+            cursor.execute("ALTER TABLE family_message ADD COLUMN family_id TEXT")
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS pairing_code (
+                code TEXT PRIMARY KEY,
+                device_id TEXT NOT NULL,
+                expires_at INTEGER NOT NULL,
+                used_at INTEGER,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS family_binding (
+                family_id TEXT PRIMARY KEY,
+                device_id TEXT NOT NULL,
+                family_name TEXT NOT NULL,
+                relationship TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                revoked_at DATETIME
+            )
+        """)
 
         conn.commit()
         conn.close()
@@ -237,13 +262,18 @@ class SessionLogger:
                             file_path: str = None,
                             sender_role: str = "family",
                             duration_ms: int = None,
-                            contact_name: str = None):
+                            contact_name: str = None,
+                            family_id: str = None):
         """保存一条消息（家属发给患者 或 患者发给家属）
 
         contact_name 是会话键：这条消息属于"患者 <-> 哪位家属"这条会话线。
         - 家属发送时：若未指定，默认取 sender_name（该家属自己的名字）。
         - 患者发送时：必须指定（回复的是哪位家属）。
         """
+        if family_id and not contact_name:
+            binding = self.get_family_binding(device_id, family_id)
+            if binding:
+                contact_name = binding.get("family_name")
         if contact_name is None and sender_role == "family":
             contact_name = sender_name
         try:
@@ -251,9 +281,9 @@ class SessionLogger:
             cursor = conn.cursor()
             cursor.execute(
                 """INSERT INTO family_message
-                   (device_id, sender_name, sender_role, message_type, content, file_path, duration_ms, contact_name)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (device_id, sender_name, sender_role, message_type, content, file_path, duration_ms, contact_name)
+                   (device_id, sender_name, sender_role, message_type, content, file_path, duration_ms, contact_name, family_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (device_id, sender_name, sender_role, message_type, content, file_path, duration_ms, contact_name, family_id)
             )
             conn.commit()
             msg_id = cursor.lastrowid
@@ -272,7 +302,8 @@ class SessionLogger:
 
     def get_family_messages(self, device_id: str, limit: int = 50,
                             sender_role: str = None,
-                            contact_name: str = None) -> list:
+                            contact_name: str = None,
+                            family_id: str = None) -> list:
         """获取消息列表；可按 sender_role 和/或 contact_name 过滤"""
         try:
             conn = sqlite3.connect(self.db_path)
@@ -286,6 +317,9 @@ class SessionLogger:
             if contact_name:
                 clauses.append("contact_name = ?")
                 params.append(contact_name)
+            if family_id:
+                clauses.append("family_id = ?")
+                params.append(family_id)
             sql = (
                 "SELECT * FROM family_message WHERE "
                 + " AND ".join(clauses)
@@ -320,13 +354,14 @@ class SessionLogger:
             cursor.execute(
                 """
                 SELECT fm.contact_name,
+                       fm.family_id,
                        fm.message_type  AS last_type,
                        fm.content       AS last_content,
                        fm.sender_role   AS last_sender_role,
                        fm.sender_name   AS last_sender_name,
                        fm.created_at    AS last_time,
                        (SELECT COUNT(*) FROM family_message
-                        WHERE device_id = ? AND contact_name = fm.contact_name
+                        WHERE device_id = ? AND IFNULL(family_id, contact_name) = IFNULL(fm.family_id, fm.contact_name)
                           AND sender_role = 'family' AND IFNULL(played,0) = 0
                        ) AS unread
                 FROM family_message fm
@@ -334,7 +369,7 @@ class SessionLogger:
                   AND fm.id = (
                       SELECT MAX(id) FROM family_message
                       WHERE device_id = fm.device_id
-                        AND contact_name = fm.contact_name
+                        AND IFNULL(family_id, contact_name) = IFNULL(fm.family_id, fm.contact_name)
                   )
                 ORDER BY fm.created_at DESC
                 """,
@@ -347,18 +382,27 @@ class SessionLogger:
             logger.bind(tag=TAG).error(f"获取联系人失败: {e}")
             return []
 
-    def mark_thread_read(self, device_id: str, contact_name: str) -> int:
+    def mark_thread_read(self, device_id: str, contact_name: str = None, family_id: str = None) -> int:
         """把某个联系人会话中所有家属消息标记为已读，返回更新条数"""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
-            cursor.execute(
-                """UPDATE family_message
-                   SET played = 1, read_at = CURRENT_TIMESTAMP
-                   WHERE device_id = ? AND contact_name = ?
-                     AND sender_role = 'family' AND IFNULL(played,0) = 0""",
-                (device_id, contact_name),
-            )
+            if family_id:
+                cursor.execute(
+                    """UPDATE family_message
+                       SET played = 1, read_at = CURRENT_TIMESTAMP
+                       WHERE device_id = ? AND family_id = ?
+                         AND sender_role = 'family' AND IFNULL(played,0) = 0""",
+                    (device_id, family_id),
+                )
+            else:
+                cursor.execute(
+                    """UPDATE family_message
+                       SET played = 1, read_at = CURRENT_TIMESTAMP
+                       WHERE device_id = ? AND contact_name = ?
+                         AND sender_role = 'family' AND IFNULL(played,0) = 0""",
+                    (device_id, contact_name),
+                )
             conn.commit()
             changed = cursor.rowcount
             conn.close()
@@ -382,6 +426,91 @@ class SessionLogger:
         except Exception as e:
             logger.bind(tag=TAG).error(f"标记已读失败: {e}")
             return False
+
+    def create_pairing_code(self, device_id: str, ttl_seconds: int = 600) -> dict:
+        code = f"{random.randint(0, 999999):06d}"
+        expires_at = int(time.time()) + ttl_seconds
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM pairing_code WHERE device_id = ? OR expires_at < ?", (device_id, int(time.time())))
+            cursor.execute(
+                "INSERT INTO pairing_code (code, device_id, expires_at) VALUES (?, ?, ?)",
+                (code, device_id, expires_at),
+            )
+            conn.commit()
+            conn.close()
+            return {"code": code, "device_id": device_id, "expires_at": expires_at}
+        except Exception as e:
+            logger.bind(tag=TAG).error(f"创建配对码失败: {e}")
+            return {}
+
+    def bind_family(self, code: str, family_name: str, relationship: str = None) -> dict:
+        now = int(time.time())
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM pairing_code WHERE code = ? AND used_at IS NULL AND expires_at >= ?",
+                (code, now),
+            )
+            row = cursor.fetchone()
+            if not row:
+                conn.close()
+                return {}
+            family_id = uuid.uuid4().hex
+            device_id = row["device_id"]
+            cursor.execute(
+                """INSERT INTO family_binding
+                   (family_id, device_id, family_name, relationship)
+                   VALUES (?, ?, ?, ?)""",
+                (family_id, device_id, family_name, relationship),
+            )
+            cursor.execute("UPDATE pairing_code SET used_at = ? WHERE code = ?", (now, code))
+            conn.commit()
+            cursor.execute("SELECT * FROM family_binding WHERE family_id = ?", (family_id,))
+            binding = dict(cursor.fetchone())
+            conn.close()
+            return binding
+        except Exception as e:
+            logger.bind(tag=TAG).error(f"绑定家属失败: {e}")
+            return {}
+
+    def get_family_binding(self, device_id: str, family_id: str) -> dict:
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM family_binding WHERE device_id = ? AND family_id = ? AND revoked_at IS NULL",
+                (device_id, family_id),
+            )
+            row = cursor.fetchone()
+            conn.close()
+            return dict(row) if row else {}
+        except Exception as e:
+            logger.bind(tag=TAG).error(f"获取家属绑定失败: {e}")
+            return {}
+
+    def get_family_bindings(self, device_id: str) -> list:
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(
+                """SELECT family_id, family_name, relationship, created_at
+                   FROM family_binding
+                   WHERE device_id = ? AND revoked_at IS NULL
+                   ORDER BY created_at DESC""",
+                (device_id,),
+            )
+            rows = [dict(row) for row in cursor.fetchall()]
+            conn.close()
+            return rows
+        except Exception as e:
+            logger.bind(tag=TAG).error(f"获取家属列表失败: {e}")
+            return []
 
 
 # 全局单例

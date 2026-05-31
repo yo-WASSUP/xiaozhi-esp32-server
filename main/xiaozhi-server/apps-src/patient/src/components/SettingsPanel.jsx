@@ -108,6 +108,9 @@ export default function SettingsPanel({ open, onClose }) {
   const [previewUrl, setPreviewUrl] = useState('');
   const [busy, setBusy] = useState('');
   const [tip, setTip] = useState('');
+  const [pairingCode, setPairingCode] = useState('');
+  const [pairingExpiresAt, setPairingExpiresAt] = useState(0);
+  const [families, setFamilies] = useState([]);
 
   const recorderRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -141,8 +144,42 @@ export default function SettingsPanel({ open, onClose }) {
     }
   };
 
+  const loadFamilies = async () => {
+    try {
+      const r = await fetch(`/api/hospice/pairing/families?device_id=${encodeURIComponent(DEVICE_ID)}`);
+      const j = await r.json();
+      setFamilies(Array.isArray(j.families) ? j.families : []);
+    } catch (_) {
+      setFamilies([]);
+    }
+  };
+
+  const createPairingCode = async () => {
+    setBusy('pairing');
+    setTip('');
+    try {
+      const r = await fetch('/api/hospice/pairing/code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_id: DEVICE_ID }),
+      });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || '生成配对码失败');
+      setPairingCode(j.code || '');
+      setPairingExpiresAt(j.expires_at || 0);
+      setTip('配对码已生成，请让家属端输入。');
+    } catch (e) {
+      setTip(`生成配对码失败：${e?.message || '未知错误'}`);
+    } finally {
+      setBusy('');
+    }
+  };
+
   useEffect(() => {
-    if (open) loadConfig();
+    if (open) {
+      loadConfig();
+      loadFamilies();
+    }
     return () => {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       clearInterval(timerRef.current);
@@ -493,6 +530,27 @@ export default function SettingsPanel({ open, onClose }) {
           {!configured && (
             <div style={{ ...sectionStyle, color: C.red, fontSize: 13 }}>配置未完成：{missingConfig.join('、')}</div>
           )}
+
+          <div style={sectionStyle}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+              <div>
+                <div style={{ fontSize: 17, color: C.ink }}>家属配对</div>
+                <div style={{ fontSize: 12, color: C.inkFaint, marginTop: 3 }}>生成一次性配对码，让家属端绑定这位患者。</div>
+              </div>
+              <button disabled={!!busy} onClick={createPairingCode} style={buttonStyle('primary', true)}>
+                {busy === 'pairing' ? '生成中...' : '生成配对码'}
+              </button>
+            </div>
+            {pairingCode && (
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, padding: 12, borderRadius: 8, background: `${C.sage}12`, marginBottom: 10 }}>
+                <div style={{ fontSize: 34, letterSpacing: '.18em', color: C.ink, fontFamily: 'Noto Sans SC', fontVariantNumeric: 'tabular-nums' }}>{pairingCode}</div>
+                <div style={{ fontSize: 12, color: C.inkFaint }}>10 分钟内有效{pairingExpiresAt ? `，到期时间 ${new Date(pairingExpiresAt * 1000).toLocaleTimeString()}` : ''}</div>
+              </div>
+            )}
+            <div style={{ fontSize: 13, color: C.inkFaint, lineHeight: 1.7 }}>
+              {families.length === 0 ? '还没有绑定家属。' : `已绑定：${families.map(item => item.family_name).join('、')}`}
+            </div>
+          </div>
 
           <div style={sectionStyle}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>

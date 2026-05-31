@@ -74,6 +74,7 @@ class HospiceMessagesMixin:
             duration_ms = data.get("duration_ms")
             file_path = data.get("file_path")
             contact_name = data.get("contact_name")
+            family_id = data.get("family_id")
 
             row = self.session_logger.save_family_message(
                 device_id=device_id,
@@ -84,6 +85,7 @@ class HospiceMessagesMixin:
                 sender_role=sender_role,
                 duration_ms=duration_ms,
                 contact_name=contact_name,
+                family_id=family_id,
             )
 
             if row:
@@ -107,8 +109,9 @@ class HospiceMessagesMixin:
         limit = int(request.query.get("limit", "50"))
         sender_role = request.query.get("sender_role")
         contact_name = request.query.get("contact_name")
+        family_id = request.query.get("family_id")
         messages = self.session_logger.get_family_messages(
-            device_id, limit, sender_role, contact_name
+            device_id, limit, sender_role, contact_name, family_id
         )
         return web.json_response(messages, headers=self._cors_headers())
 
@@ -130,14 +133,15 @@ class HospiceMessagesMixin:
         try:
             device_id = request.query.get("device_id", "default")
             contact_name = request.query.get("contact_name")
-            if not contact_name:
-                return web.json_response({"success": False, "error": "contact_name required"},
+            family_id = request.query.get("family_id")
+            if not contact_name and not family_id:
+                return web.json_response({"success": False, "error": "contact_name or family_id required"},
                                          status=400, headers=self._cors_headers())
-            n = self.session_logger.mark_thread_read(device_id, contact_name)
+            n = self.session_logger.mark_thread_read(device_id, contact_name, family_id)
             if n > 0:
                 self.broker.publish(device_id, {
                     "event": "message.read",
-                    "data": {"contact_name": contact_name, "count": n},
+                    "data": {"contact_name": contact_name, "family_id": family_id, "count": n},
                 })
             return web.json_response({"success": True, "count": n}, headers=self._cors_headers())
         except Exception as e:
@@ -197,6 +201,49 @@ class HospiceMessagesMixin:
         device_id = request.query.get("device_id", "default")
         conversations = self.session_logger.get_today_conversations(device_id)
         return web.json_response(conversations, headers=self._cors_headers())
+
+    async def handle_pairing_code(self, request):
+        """POST /api/hospice/pairing/code body: {device_id}"""
+        try:
+            data = await request.json()
+            device_id = (data.get("device_id") or "").strip()
+            if not device_id:
+                return web.json_response({"success": False, "error": "device_id required"},
+                                         status=400, headers=self._cors_headers())
+            item = self.session_logger.create_pairing_code(device_id)
+            if not item:
+                raise RuntimeError("create pairing code failed")
+            return web.json_response({"success": True, **item}, headers=self._cors_headers())
+        except Exception as e:
+            return web.json_response({"success": False, "error": str(e)},
+                                     status=500, headers=self._cors_headers())
+
+    async def handle_pairing_bind(self, request):
+        """POST /api/hospice/pairing/bind body: {code, family_name, relationship?}"""
+        try:
+            data = await request.json()
+            code = "".join(ch for ch in str(data.get("code") or "") if ch.isdigit())
+            family_name = (data.get("family_name") or "").strip()
+            relationship = (data.get("relationship") or "").strip()
+            if len(code) != 6:
+                return web.json_response({"success": False, "error": "配对码需要 6 位数字"},
+                                         status=400, headers=self._cors_headers())
+            if not family_name:
+                return web.json_response({"success": False, "error": "请输入家属称呼"},
+                                         status=400, headers=self._cors_headers())
+            binding = self.session_logger.bind_family(code, family_name, relationship or None)
+            if not binding:
+                return web.json_response({"success": False, "error": "配对码无效或已过期"},
+                                         status=400, headers=self._cors_headers())
+            return web.json_response({"success": True, "binding": binding}, headers=self._cors_headers())
+        except Exception as e:
+            return web.json_response({"success": False, "error": str(e)},
+                                     status=500, headers=self._cors_headers())
+
+    async def handle_pairing_families(self, request):
+        device_id = request.query.get("device_id", "default")
+        rows = self.session_logger.get_family_bindings(device_id)
+        return web.json_response({"success": True, "families": rows}, headers=self._cors_headers())
 
     # ── 生命回顾视频接口 ──
 

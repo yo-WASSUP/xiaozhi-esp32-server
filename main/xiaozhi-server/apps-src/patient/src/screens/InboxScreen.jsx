@@ -11,17 +11,22 @@ export default function InboxScreen({ contacts, refreshContacts, eventTick, maxU
   const [thread, setThread] = useState([]);
   const [busy, setBusy] = useState(false);
   const scrollRef = useRef(null);
+  const contactKey = (contact) => contact?.family_id || contact?.contact_name || '';
 
   // 默认选中第一个联系人
   useEffect(() => {
-    if (!selected && contacts.length > 0) setSelected(contacts[0].contact_name);
+    if (!selected && contacts.length > 0) setSelected(contactKey(contacts[0]));
     // eslint-disable-next-line
   }, [contacts.length]);
 
   const loadThread = async (name) => {
     if (!name) { setThread([]); return; }
     try {
-      const r = await fetch(`/api/hospice/messages?device_id=${encodeURIComponent(DEVICE_ID)}&contact_name=${encodeURIComponent(name)}&limit=200`);
+      const active = contacts.find(c => contactKey(c) === name);
+      const familyParam = active?.family_id
+        ? `family_id=${encodeURIComponent(active.family_id)}`
+        : `contact_name=${encodeURIComponent(name)}`;
+      const r = await fetch(`/api/hospice/messages?device_id=${encodeURIComponent(DEVICE_ID)}&${familyParam}&limit=200`);
       const list = await r.json();
       setThread(list.slice().reverse().map(m => ({
         id: m.id,
@@ -58,13 +63,14 @@ export default function InboxScreen({ contacts, refreshContacts, eventTick, maxU
 
   const sendText = async (content) => {
     if (!selected) return;
+    const active = contacts.find(c => contactKey(c) === selected);
     setBusy(true);
     try {
       await fetch('/api/hospice/message', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           device_id: DEVICE_ID, sender_role: 'patient', sender_name: PATIENT_NAME,
-          contact_name: selected, type: 'text', content,
+          family_id: active?.family_id, contact_name: active?.contact_name || selected, type: 'text', content,
         }),
       });
       await loadThread(selected);
@@ -75,6 +81,7 @@ export default function InboxScreen({ contacts, refreshContacts, eventTick, maxU
 
   const sendVoice = async (blob, ext, secs) => {
     if (!selected) return;
+    const active = contacts.find(c => contactKey(c) === selected);
     setBusy(true);
     try {
       const fd = new FormData();
@@ -86,7 +93,7 @@ export default function InboxScreen({ contacts, refreshContacts, eventTick, maxU
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           device_id: DEVICE_ID, sender_role: 'patient', sender_name: PATIENT_NAME,
-          contact_name: selected, type: 'voice',
+          family_id: active?.family_id, contact_name: active?.contact_name || selected, type: 'voice',
           content: `语音 ${secs}s`, file_path: uj.url, duration_ms: secs * 1000,
         }),
       });
@@ -98,6 +105,7 @@ export default function InboxScreen({ contacts, refreshContacts, eventTick, maxU
 
   const sendMedia = async (file) => {
     if (!selected) return;
+    const active = contacts.find(c => contactKey(c) === selected);
     const isVideo = file.type.startsWith('video/');
     const isImage = file.type.startsWith('image/');
     if (!isVideo && !isImage) {
@@ -115,7 +123,7 @@ export default function InboxScreen({ contacts, refreshContacts, eventTick, maxU
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           device_id: DEVICE_ID, sender_role: 'patient', sender_name: PATIENT_NAME,
-          contact_name: selected, type: isVideo ? 'video' : 'photo',
+          family_id: active?.family_id, contact_name: active?.contact_name || selected, type: isVideo ? 'video' : 'photo',
           content: file.name || (isVideo ? '视频' : '照片'), file_path: uj.url,
         }),
       });
@@ -125,7 +133,7 @@ export default function InboxScreen({ contacts, refreshContacts, eventTick, maxU
     finally { setBusy(false); }
   };
 
-  const activeContact = contacts.find(c => c.contact_name === selected);
+  const activeContact = contacts.find(c => contactKey(c) === selected);
 
   return (
     <div style={{ position: 'relative', height: '100%', zIndex: 5, display: 'flex', animation: 'slideLeft .4s ease' }}>
@@ -144,11 +152,11 @@ export default function InboxScreen({ contacts, refreshContacts, eventTick, maxU
               还没有家人的消息<br />等家人发来问候
             </div>
           ) : contacts.map(c => (
-            <ContactItem key={c.contact_name} c={c}
-              active={c.contact_name === selected}
+            <ContactItem key={contactKey(c)} c={c}
+              active={contactKey(c) === selected}
               onClick={() => {
-                setSelected(c.contact_name);
-                onOpenContact && onOpenContact(c.contact_name);
+                setSelected(contactKey(c));
+                onOpenContact && onOpenContact(c.contact_name, c.family_id);
               }} />
           ))}
         </div>
@@ -167,7 +175,7 @@ export default function InboxScreen({ contacts, refreshContacts, eventTick, maxU
                 与 {activeContact.contact_name} 的消息
               </div>
               {(activeContact.unread || 0) > 0 && (
-                <button onClick={() => onOpenContact && onOpenContact(activeContact.contact_name)}
+                <button onClick={() => onOpenContact && onOpenContact(activeContact.contact_name, activeContact.family_id)}
                   style={{ border: `1px solid ${C.amber}55`, background: `${C.amber}14`, color: C.amber, borderRadius: 14, padding: '6px 12px', fontSize: 12, fontFamily: 'Noto Sans SC', cursor: 'pointer' }}>
                   标记已听
                 </button>

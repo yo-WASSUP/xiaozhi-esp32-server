@@ -91,10 +91,13 @@ export default function App() {
     return [];
   }, []);
 
-  const markThreadRead = useCallback(async (contactName) => {
-    if (!contactName) return;
+  const markThreadRead = useCallback(async (contactName, familyId = '') => {
+    if (!contactName && !familyId) return;
     try {
-      await fetch(`/api/hospice/thread/read?device_id=${encodeURIComponent(DEVICE_ID)}&contact_name=${encodeURIComponent(contactName)}`, { method: 'POST' });
+      const params = new URLSearchParams({ device_id: DEVICE_ID });
+      if (familyId) params.set('family_id', familyId);
+      else params.set('contact_name', contactName);
+      await fetch(`/api/hospice/thread/read?${params.toString()}`, { method: 'POST' });
       await loadContacts();
       setEventTick(t => t + 1);
     } catch (e) { console.error('鏍囪宸茶澶辫触', e); }
@@ -427,8 +430,11 @@ export default function App() {
     }
   }, [connectXiaozhi]);
 
-  const loadThreadMessages = useCallback(async (contactName, limit = 80) => {
-    const r = await fetch(`/api/hospice/messages?device_id=${encodeURIComponent(DEVICE_ID)}&contact_name=${encodeURIComponent(contactName)}&limit=${limit}`);
+  const loadThreadMessages = useCallback(async (contactName, limit = 80, familyId = '') => {
+    const params = new URLSearchParams({ device_id: DEVICE_ID, limit: String(limit) });
+    if (familyId) params.set('family_id', familyId);
+    else params.set('contact_name', contactName);
+    const r = await fetch(`/api/hospice/messages?${params.toString()}`);
     const list = await r.json();
     return (Array.isArray(list) ? list : []).slice().reverse();
   }, []);
@@ -488,7 +494,7 @@ const messageSpeechText = (contactName, message) => {
         return;
       }
 
-      const messages = await loadThreadMessages(contact.contact_name);
+      const messages = await loadThreadMessages(contact.contact_name, 80, contact.family_id || '');
       const familyMessages = messages.filter(m => (m.sender_role || 'family') === 'family');
       const unreadMessages = familyMessages.filter(m => !m.played);
       const messagesToRead = unreadMessages.length > 0 ? unreadMessages : familyMessages.slice(-3);
@@ -505,7 +511,7 @@ const messageSpeechText = (contactName, message) => {
           await sleep(300);
         }
       }
-      await markThreadRead(contact.contact_name);
+      await markThreadRead(contact.contact_name, contact.family_id || '');
     } catch (err) {
       console.error('鏀跺惉瀹跺睘娑堟伅澶辫触', err);
       await speakAndWait('消息暂时读不了，请稍后再试。');

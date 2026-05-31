@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { C } from '../theme';
-import { DEVICE_ID, SENDER_NAME } from '../constants';
+import { DEVICE_ID, FAMILY_ID, SENDER_NAME } from '../constants';
 import { fmtTime } from '../utils/time';
 import Bubble from '../components/Bubble';
 
@@ -30,7 +30,7 @@ export default function MessageScreen() {
   const loadMessages = async () => {
     try {
       // 只拉当前家属与患者之间的这条会话线（contact_name = 自己的名字）
-      const r = await fetch(`/api/hospice/messages?device_id=${encodeURIComponent(DEVICE_ID)}&contact_name=${encodeURIComponent(SENDER_NAME)}&limit=100`);
+      const r = await fetch(`/api/hospice/messages?device_id=${encodeURIComponent(DEVICE_ID)}&family_id=${encodeURIComponent(FAMILY_ID)}&limit=100`);
       const list = await r.json();
       setSent(list.slice().reverse().map(m => ({
         id: m.id,
@@ -85,7 +85,7 @@ export default function MessageScreen() {
     if (!text.trim() || busy) return;
     setBusy(true);
     try {
-      await postMessage({ device_id: DEVICE_ID, sender_role: 'family', sender_name: SENDER_NAME, type: 'text', content: text });
+      await postMessage({ device_id: DEVICE_ID, family_id: FAMILY_ID, sender_role: 'family', sender_name: SENDER_NAME, type: 'text', content: text });
       setText('');
       loadMessages();
     } catch (e) { toast('⚠ ' + e.message); }
@@ -130,7 +130,7 @@ export default function MessageScreen() {
       const ext = (mr.mimeType || '').includes('ogg') ? '.ogg' : (mr.mimeType || '').includes('mp4') ? '.m4a' : '.webm';
       const up = await uploadFile(blob, `voice-${Date.now()}${ext}`);
       await postMessage({
-        device_id: DEVICE_ID, sender_role: 'family', sender_name: SENDER_NAME,
+        device_id: DEVICE_ID, family_id: FAMILY_ID, sender_role: 'family', sender_name: SENDER_NAME,
         type: 'voice', content: `语音 ${secs}s`, file_path: up.url, duration_ms: secs * 1000,
       });
       setRecSecs(0);
@@ -166,7 +166,7 @@ export default function MessageScreen() {
     try {
       const up = await uploadFile(file, file.name);
       await postMessage({
-        device_id: DEVICE_ID, sender_role: 'family', sender_name: SENDER_NAME,
+        device_id: DEVICE_ID, family_id: FAMILY_ID, sender_role: 'family', sender_name: SENDER_NAME,
         type: isVideo ? 'video' : 'photo', content: file.name, file_path: up.url,
       });
       loadMessages();
