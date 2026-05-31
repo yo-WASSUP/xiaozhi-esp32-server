@@ -766,7 +766,7 @@ const messageSpeechText = (contactName, message) => {
       role: 'patient',
       onIncoming: ({ fromName, callType }) => {
         setIncoming({
-          caller: { from: fromName || '瀹朵汉', avatar: '馃懁' },
+          caller: { from: fromName || '家人', avatar: '家' },
           callType,
         });
         setCallState('incoming');

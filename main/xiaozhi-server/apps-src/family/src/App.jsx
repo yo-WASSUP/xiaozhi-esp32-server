@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import PaperBg from './components/PaperBg';
 import TabBar from './components/TabBar';
-import HomeScreen from './screens/HomeScreen';
 import MessageScreen from './screens/MessageScreen';
 import CallScreen from './screens/CallScreen';
 import HistoryScreen from './screens/HistoryScreen';
@@ -10,7 +9,7 @@ import PairingScreen from './screens/PairingScreen';
 import { hasPairing } from './constants';
 
 export default function App() {
-  const [tab, setTab] = useState('home');
+  const [tab, setTab] = useState('message');
 
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden' }}>
@@ -19,7 +18,6 @@ export default function App() {
           <PairingScreen />
         ) : (
           <>
-            {tab === 'home'    && <HomeScreen setTab={setTab} />}
             {tab === 'message' && <MessageScreen />}
             {tab === 'call'    && <CallScreen />}
             {tab === 'history' && <HistoryScreen />}

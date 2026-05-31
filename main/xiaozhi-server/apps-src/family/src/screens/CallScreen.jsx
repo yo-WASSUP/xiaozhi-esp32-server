@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { C } from '../theme';
 import { DEVICE_ID, SENDER_NAME } from '../constants';
 import Card from '../components/Card';
-import SLabel from '../components/SLabel';
 
 export default function CallScreen() {
   const [callState, setCallState] = useState('idle'); // idle | calling | connecting | active
@@ -74,10 +73,11 @@ export default function CallScreen() {
 
   const fmt = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 
-  const dial = async () => {
+  const dial = async (nextCallType) => {
+    setCallType(nextCallType);
     setSecs(0);
     try {
-      await clientRef.current.placeCall({ callType, fromName: SENDER_NAME });
+      await clientRef.current.placeCall({ callType: nextCallType, fromName: SENDER_NAME });
     } catch (e) {
       setFlash('⚠ 无法使用摄像头/麦克风: ' + e.message);
       setTimeout(() => setFlash(''), 3000);
@@ -105,34 +105,18 @@ export default function CallScreen() {
       </Card>
 
       <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-        {[['video', '视频通话', '📹', C.amber], ['voice', '语音通话', '📞', C.sage]].map(([t, l, ic, cl]) => (
-          <button key={t} onClick={() => setCallType(t)} style={{ flex: 1, padding: '18px 12px', borderRadius: 20, border: `1.5px solid ${callType === t ? cl + '66' : C.mist + '30'}`, background: callType === t ? `${cl}14` : 'transparent', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, transition: 'all .2s' }}>
+        {[
+          ['video', '视频通话', '📹', C.amber],
+          ['voice', '语音通话', '📞', C.sage],
+        ].map(([t, l, ic, cl]) => (
+          <button key={t} onClick={() => dial(t)} style={{ flex: 1, padding: '20px 12px', borderRadius: 20, border: `1.5px solid ${cl}66`, background: `${cl}14`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, transition: 'all .2s', boxShadow: `0 4px 18px ${cl}22` }}>
             <span style={{ fontSize: 32 }}>{ic}</span>
-            <span style={{ fontSize: 14, color: callType === t ? cl : C.inkFaint, fontFamily: 'Noto Sans SC', fontWeight: callType === t ? 400 : 300 }}>{l}</span>
+            <span style={{ fontSize: 15, color: cl, fontFamily: 'Noto Sans SC', fontWeight: 400 }}>{l}</span>
           </button>
         ))}
       </div>
 
-      <button onClick={dial} style={{ width: '100%', padding: '18px', borderRadius: 20, border: 'none', background: `linear-gradient(135deg,${C.sage}cc,${C.green}cc)`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, boxShadow: `0 4px 20px ${C.sage}44` }}>
-        <span style={{ fontSize: 26 }}>{callType === 'video' ? '📹' : '📞'}</span>
-        <span style={{ fontSize: 18, color: 'white', fontFamily: 'Noto Sans SC', fontWeight: 400, letterSpacing: '.06em' }}>发起{callType === 'video' ? '视频' : '语音'}通话</span>
-      </button>
-
       {flash && <div style={{ marginTop: 12, padding: '8px 14px', borderRadius: 10, background: flash.startsWith('⚠') ? `${C.red}22` : `${C.sage}22`, fontSize: 13, color: flash.startsWith('⚠') ? C.red : C.sage, fontFamily: 'Noto Sans SC', fontWeight: 300, textAlign: 'center' }}>{flash}</div>}
-
-      <div style={{ marginTop: 24 }}>
-        <SLabel>最近通话</SLabel>
-        {[{ icon: '📹', label: '视频通话', time: '昨天 19:42', dur: '18:34' }, { icon: '📞', label: '语音通话', time: '前天 11:20', dur: '7:02' }].map((r, i) => (
-          <Card key={i} style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-            <span style={{ fontSize: 22 }}>{r.icon}</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, color: C.ink, fontFamily: 'Noto Sans SC', fontWeight: 300 }}>{r.label}</div>
-              <div style={{ fontSize: 12, color: C.inkFaint, fontFamily: 'Noto Sans SC', fontWeight: 300, marginTop: 1 }}>{r.time}</div>
-            </div>
-            <div style={{ fontSize: 12, color: C.inkFaint, fontFamily: 'Noto Sans SC', fontWeight: 300 }}>{r.dur}</div>
-          </Card>
-        ))}
-      </div>
     </div>
   );
 

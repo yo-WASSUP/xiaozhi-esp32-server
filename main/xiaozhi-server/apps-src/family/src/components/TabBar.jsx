@@ -1,7 +1,6 @@
 import { C } from '../theme';
 
 const TABS = [
-  { id: 'home', icon: '🏠', label: '主页' },
   { id: 'message', icon: '💌', label: '发消息' },
   { id: 'call', icon: '📹', label: '通话' },
   { id: 'history', icon: '📊', label: '记录' },
