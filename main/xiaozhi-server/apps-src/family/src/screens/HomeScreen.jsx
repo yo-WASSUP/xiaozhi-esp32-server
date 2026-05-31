@@ -50,9 +50,9 @@ export default function HomeScreen({ setTab }) {
         {today && today.conversation_count > 0 ? (
           <>
             <div style={{ fontSize: 15, color: C.ink, fontFamily: 'Noto Serif SC,serif', fontWeight: 300, lineHeight: 1.9, letterSpacing: '.03em' }}>
-              父亲今天和小暖进行了
+              家人今天和小暖进行了
               <span style={{ color: C.amber }}> {today.conversation_count} </span>
-              轮对话{today.patient_message_count > 0 && <>，其中父亲说了 <span style={{ color: C.amber }}>{today.patient_message_count}</span> 次</>}。
+              轮对话{today.patient_message_count > 0 && <>，其中家人说了 <span style={{ color: C.amber }}>{today.patient_message_count}</span> 次</>}。
               {today.dominant_mood && today.dominant_mood !== '无数据' && (
                 <> 主要情绪是 <span style={{ color: moodMeta(today.dominant_mood).color }}>{moodMeta(today.dominant_mood).label}</span>。</>
               )}

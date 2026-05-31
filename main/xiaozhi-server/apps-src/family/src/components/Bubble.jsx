@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { C } from '../theme';
 
-/** 单条消息气泡（右=自己/家属，左=父亲/患者） */
+/** 单条消息气泡（右=自己/家属，左=家人/患者） */
 export default function Bubble({ m, isMine }) {
   const [playing, setPlaying] = useState(false);
   const audioRef = useRef(null);

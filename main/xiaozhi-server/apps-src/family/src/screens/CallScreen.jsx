@@ -89,13 +89,13 @@ export default function CallScreen() {
 
   if (callState === 'idle') return (
     <div style={{ position: 'absolute', top: 0, bottom: 80, left: 0, right: 0, overflow: 'auto', padding: '52px 16px 24px', animation: 'fadeUp .4s ease' }}>
-      <div style={{ fontSize: 22, color: C.ink, fontFamily: 'Noto Serif SC,serif', fontWeight: 300, letterSpacing: '.06em', marginBottom: 4 }}>联系父亲</div>
-      <div style={{ fontSize: 13, color: C.inkFaint, fontFamily: 'Noto Sans SC', fontWeight: 300, marginBottom: 24 }}>小暖会协助父亲接听通话</div>
+      <div style={{ fontSize: 22, color: C.ink, fontFamily: 'Noto Serif SC,serif', fontWeight: 300, letterSpacing: '.06em', marginBottom: 4 }}>联系家人</div>
+      <div style={{ fontSize: 13, color: C.inkFaint, fontFamily: 'Noto Sans SC', fontWeight: 300, marginBottom: 24 }}>小暖会协助家人接听通话</div>
 
       <Card style={{ padding: '18px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 14 }}>
         <div style={{ width: 54, height: 54, borderRadius: '50%', background: `radial-gradient(circle at 33% 30%,${C.amber}cc,#b87340aa)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>👴</div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 17, color: C.ink, fontFamily: 'Noto Sans SC', fontWeight: 400, marginBottom: 3 }}>父亲</div>
+          <div style={{ fontSize: 17, color: C.ink, fontFamily: 'Noto Sans SC', fontWeight: 400, marginBottom: 3 }}>家人</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: C.sage, boxShadow: `0 0 6px ${C.sage}` }} />
             <span style={{ fontSize: 13, color: C.sage, fontFamily: 'Noto Sans SC', fontWeight: 300 }}>在线 · 正在休息</span>
@@ -129,7 +129,7 @@ export default function CallScreen() {
         <div style={{ width: 100, height: 100, borderRadius: '50%', background: `radial-gradient(circle at 33% 30%,${C.amber}cc,#b87340aa)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 44 }}>👴</div>
       </div>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 26, color: 'rgba(255,255,255,.88)', fontFamily: 'Noto Serif SC,serif', fontWeight: 300, marginBottom: 6 }}>正在呼叫父亲…</div>
+        <div style={{ fontSize: 26, color: 'rgba(255,255,255,.88)', fontFamily: 'Noto Serif SC,serif', fontWeight: 300, marginBottom: 6 }}>正在呼叫家人…</div>
         <div style={{ fontSize: 14, color: 'rgba(255,255,255,.4)', fontFamily: 'Noto Sans SC', fontWeight: 300 }}>等待对方接听</div>
       </div>
       <button onClick={hangup} style={{ width: 70, height: 70, borderRadius: '50%', background: '#c0484a', border: 'none', cursor: 'pointer', fontSize: 28, marginTop: 16, boxShadow: '0 4px 20px rgba(192,72,74,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>📵</button>
@@ -155,7 +155,7 @@ export default function CallScreen() {
           </>
         )}
         <div style={{ position: 'absolute', top: 20, left: 0, right: 0, textAlign: 'center', zIndex: 2 }}>
-          <div style={{ fontSize: 20, color: 'rgba(255,255,255,.88)', fontFamily: 'Noto Serif SC,serif', fontWeight: 300, marginBottom: 4, textShadow: '0 2px 8px rgba(0,0,0,.5)' }}>父亲</div>
+          <div style={{ fontSize: 20, color: 'rgba(255,255,255,.88)', fontFamily: 'Noto Serif SC,serif', fontWeight: 300, marginBottom: 4, textShadow: '0 2px 8px rgba(0,0,0,.5)' }}>家人</div>
           <div style={{ fontSize: 14, color: 'rgba(255,255,255,.55)', fontFamily: 'Noto Sans SC', fontWeight: 300, letterSpacing: '.1em', textShadow: '0 2px 8px rgba(0,0,0,.5)' }}>
             {callState === 'connecting' ? '接通中…' : fmt(secs)}
           </div>

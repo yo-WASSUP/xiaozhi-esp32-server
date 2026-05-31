@@ -148,6 +148,44 @@ class SessionLogger:
             logger.bind(tag=TAG).error(f"获取今日对话失败: {e}")
             return []
 
+    def get_conversations_by_date(self, device_id: str, day: str) -> list:
+        """Get conversation records for one yyyy-mm-dd date."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(
+                """SELECT * FROM conversation_log
+                   WHERE device_id = ? AND DATE(timestamp) = ?
+                   ORDER BY timestamp ASC""",
+                (device_id, day)
+            )
+            rows = [dict(row) for row in cursor.fetchall()]
+            conn.close()
+            return rows
+        except Exception as e:
+            logger.bind(tag=TAG).error(f"获取指定日期对话失败: {e}")
+            return []
+
+    def get_latest_conversation_date(self, device_id: str):
+        """Get the latest date that has conversation records for a device."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                """SELECT DATE(timestamp) FROM conversation_log
+                   WHERE device_id = ?
+                   ORDER BY timestamp DESC
+                   LIMIT 1""",
+                (device_id,)
+            )
+            row = cursor.fetchone()
+            conn.close()
+            return row[0] if row else None
+        except Exception as e:
+            logger.bind(tag=TAG).error(f"获取最近对话日期失败: {e}")
+            return None
+
     def get_today_emotions(self, device_id: str) -> list:
         """获取今日情绪变化"""
         try:
@@ -168,6 +206,27 @@ class SessionLogger:
             return rows
         except Exception as e:
             logger.bind(tag=TAG).error(f"获取今日情绪失败: {e}")
+            return []
+
+    def get_emotions_by_date(self, device_id: str, day: str) -> list:
+        """Get emotion records for one yyyy-mm-dd date."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(
+                """SELECT timestamp, emotion_mood, emotion_intensity
+                   FROM conversation_log
+                   WHERE device_id = ? AND DATE(timestamp) = ?
+                   AND emotion_mood IS NOT NULL
+                   ORDER BY timestamp ASC""",
+                (device_id, day)
+            )
+            rows = [dict(row) for row in cursor.fetchall()]
+            conn.close()
+            return rows
+        except Exception as e:
+            logger.bind(tag=TAG).error(f"获取指定日期情绪失败: {e}")
             return []
 
     def get_emotion_trend(self, device_id: str, days: int = 7) -> list:

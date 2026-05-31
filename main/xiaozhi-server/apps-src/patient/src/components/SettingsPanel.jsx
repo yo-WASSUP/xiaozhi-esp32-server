@@ -520,7 +520,7 @@ export default function SettingsPanel({ open, onClose }) {
       <div style={{ width: 520, maxWidth: '94vw', height: '100%', background: '#fffaf2', boxShadow: '-10px 0 32px rgba(30,24,16,.18)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '20px 24px', borderBottom: `1px solid ${C.mist}22`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ fontSize: 22, color: C.ink, fontFamily: 'Noto Serif SC,serif' }}>声音设置</div>
+            <div style={{ fontSize: 22, color: C.ink, fontFamily: 'Noto Serif SC,serif' }}>设置</div>
             <div style={{ fontSize: 12, color: statusTone(settings.status, settings.active), marginTop: 4, fontFamily: 'Noto Sans SC' }}>{currentStatus}</div>
           </div>
           <button onClick={onClose} style={{ ...buttonStyle(), width: 38, height: 38, borderRadius: '50%', padding: 0, fontSize: 20 }}>×</button>

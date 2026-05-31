@@ -29,7 +29,14 @@ export function useEmotionData() {
   useEffect(() => {
     load();
     const id = setInterval(load, 60000);
-    return () => clearInterval(id);
+    const onRefresh = () => load();
+    window.addEventListener('focus', onRefresh);
+    document.addEventListener('visibilitychange', onRefresh);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('focus', onRefresh);
+      document.removeEventListener('visibilitychange', onRefresh);
+    };
   }, []);
 
   return { trend, today, loading, reload: load };

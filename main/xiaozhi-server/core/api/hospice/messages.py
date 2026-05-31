@@ -1,6 +1,7 @@
 """Summary, emotion, chat, and read-state endpoints for the hospice API."""
 import asyncio
 import json
+from datetime import date
 
 from aiohttp import web
 from config.logger import setup_logging
@@ -17,8 +18,18 @@ class HospiceMessagesMixin:
         summary = self.session_logger.get_summary_today(device_id)
 
         if not summary:
+            summary_date = date.today().isoformat()
             conversations = self.session_logger.get_today_conversations(device_id)
             emotions = self.session_logger.get_today_emotions(device_id)
+            is_today = True
+
+            if not conversations:
+                latest_date = self.session_logger.get_latest_conversation_date(device_id)
+                if latest_date:
+                    summary_date = latest_date
+                    conversations = self.session_logger.get_conversations_by_date(device_id, latest_date)
+                    emotions = self.session_logger.get_emotions_by_date(device_id, latest_date)
+                    is_today = latest_date == date.today().isoformat()
 
             patient_msgs = [c for c in conversations if c["role"] == "patient"]
 
@@ -28,13 +39,16 @@ class HospiceMessagesMixin:
                 mood_counts[mood] = mood_counts.get(mood, 0) + 1
 
             summary = {
-                "date": __import__("datetime").date.today().isoformat(),
+                "date": summary_date,
                 "device_id": device_id,
                 "conversation_count": len(conversations),
                 "patient_message_count": len(patient_msgs),
                 "dominant_mood": max(mood_counts, key=mood_counts.get) if mood_counts else "无数据",
                 "mood_distribution": mood_counts,
-                "summary": f"今日共进行了 {len(patient_msgs)} 轮对话。" if patient_msgs else "今日暂无对话记录。",
+                "summary": (
+                    f"{'今日' if is_today else '最近一次记录'}共进行了 {len(patient_msgs)} 轮对话。"
+                    if patient_msgs else "暂无对话记录。"
+                ),
             }
 
         return web.json_response(summary, headers=self._cors_headers())

@@ -34,7 +34,7 @@ export default function MessageScreen() {
       const list = await r.json();
       setSent(list.slice().reverse().map(m => ({
         id: m.id,
-        from: m.sender_role === 'patient' ? '父亲' : (m.sender_name || '你'),
+        from: m.sender_role === 'patient' ? '家人' : (m.sender_name || '你'),
         role: m.sender_role || 'family',
         type: m.message_type,
         content: m.content,
@@ -178,8 +178,8 @@ export default function MessageScreen() {
     <div style={{ position: 'absolute', top: 0, bottom: 80, left: 0, right: 0, display: 'flex', flexDirection: 'column', animation: 'fadeUp .4s ease' }}>
       {/* 顶部标题 */}
       <div style={{ padding: '44px 20px 12px', borderBottom: `0.5px solid ${C.mist}22` }}>
-        <div style={{ fontSize: 20, color: C.ink, fontFamily: 'Noto Serif SC,serif', fontWeight: 300, letterSpacing: '.06em' }}>和父亲的对话</div>
-        <div style={{ fontSize: 12, color: C.inkFaint, fontFamily: 'Noto Sans SC', fontWeight: 300, marginTop: 2 }}>消息会在小暖陪伴时播报给父亲</div>
+        <div style={{ fontSize: 20, color: C.ink, fontFamily: 'Noto Serif SC,serif', fontWeight: 300, letterSpacing: '.06em' }}>和家人的对话</div>
+        <div style={{ fontSize: 12, color: C.inkFaint, fontFamily: 'Noto Sans SC', fontWeight: 300, marginTop: 2 }}>消息会在小暖陪伴时播报给家人</div>
       </div>
 
       {/* 聊天流 */}
