@@ -40,6 +40,7 @@ LOG_DIR = SERVER_ROOT / "data" / "dignity_logs"
 MEMORY_DIR = SERVER_ROOT / "data" / "dignity_memory"
 MEDIA_DIR = SERVER_ROOT / "data" / "hospice_media"
 DOCUMENT_DIR = MEDIA_DIR / "dignity_documents"
+DOCUMENT_SOURCE_DIR = DOCUMENT_DIR / "sources"
 
 
 class ConnectionLLMDecisionModel:
@@ -382,6 +383,7 @@ async def generate_dignity_document(conn, msg_json: Optional[Dict[str, Any]] = N
         "document_status": "draft",
         "dignity_memory": memory,
     }
+    _save_dignity_document_source(conn, document, "draft")
     _write_dignity_log(conn, "document_generated", {"reply": document[:200]})
     await send_dignity_event(conn, "document_complete", payload)
 
@@ -416,6 +418,7 @@ async def confirm_dignity_document(conn, msg_json: Optional[Dict[str, Any]] = No
         "document_url": url,
         "document_filename": filename,
     }
+    _save_dignity_document_source(conn, document, "confirmed", url, filename)
     _write_dignity_log(conn, "document_confirmed", {"reply": document[:200]})
     await send_dignity_event(conn, "document_confirmed", payload)
 
@@ -581,6 +584,33 @@ def _write_dignity_docx(conn, markdown_text: str) -> Tuple[str, str]:
 
     _write_docx_package(path, "\n".join(body_xml))
     return filename, f"/hospice-media/dignity_documents/{filename}"
+
+
+def _save_dignity_document_source(
+    conn,
+    document: str,
+    status: str,
+    document_url: str = "",
+    document_filename: str = "",
+) -> None:
+    try:
+        DOCUMENT_SOURCE_DIR.mkdir(parents=True, exist_ok=True)
+        patient_id = _memory_key(conn)
+        payload = {
+            "patient_id": patient_id,
+            "document": document,
+            "document_status": status,
+            "document_url": document_url,
+            "document_filename": document_filename,
+            "updated_at": datetime.now().isoformat(timespec="seconds"),
+        }
+        latest_path = DOCUMENT_SOURCE_DIR / f"{patient_id}_latest.json"
+        with latest_path.open("w", encoding="utf-8") as file:
+            json.dump(payload, file, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        logger = getattr(conn, "logger", None)
+        if logger:
+            logger.bind(tag=TAG).debug(f"生命文档源文件保存失败: {exc}")
 
 
 def _docx_paragraph(

@@ -5,6 +5,7 @@ import time
 import queue
 import asyncio
 import traceback
+import wave
 import websockets
 import yaml
 from asyncio import Task
@@ -33,6 +34,9 @@ class TTSProvider(TTSProviderBase):
         self.ws = None
         self._monitor_task = None
         self.last_active_time = None
+        self.open_timeout = float(config.get("open_timeout", 30) or 30)
+        self.handshake_retries = int(config.get("handshake_retries", 3) or 3)
+        self.handshake_retry_delay = float(config.get("handshake_retry_delay", 1.5) or 1.5)
 
         # 模型和音色配置
         self.model = config.get("model", "cosyvoice-v2")
@@ -43,6 +47,7 @@ class TTSProvider(TTSProviderBase):
         self.base_model = self.model
         self.instruction = config.get("instruction")
         self.base_instruction = self.instruction
+        self.save_path = config.get("save_path")
 
         # 音频参数配置
         self.format = config.get("format", "pcm")
@@ -124,6 +129,28 @@ class TTSProvider(TTSProviderBase):
         parts.clear()
         return text
 
+    async def _connect_ws(self):
+        last_error = None
+        for attempt in range(1, max(1, self.handshake_retries) + 1):
+            try:
+                return await websockets.connect(
+                    self.ws_url,
+                    additional_headers=self.header,
+                    ping_interval=30,
+                    ping_timeout=20,
+                    close_timeout=10,
+                    open_timeout=self.open_timeout,
+                    max_size=10 * 1024 * 1024,
+                )
+            except Exception as exc:
+                last_error = exc
+                logger.bind(tag=TAG).warning(
+                    f"AliBL TTS WebSocket handshake failed {attempt}/{self.handshake_retries}: {exc}"
+                )
+                if attempt < self.handshake_retries:
+                    await asyncio.sleep(self.handshake_retry_delay * attempt)
+        raise last_error
+
     async def _ensure_connection(self):
         """确保WebSocket连接可用，支持60秒内连接复用"""
         try:
@@ -134,13 +161,7 @@ class TTSProvider(TTSProviderBase):
                 return self.ws
             logger.bind(tag=TAG).info("开始建立新连接...")
 
-            self.ws = await websockets.connect(
-                self.ws_url,
-                additional_headers=self.header,
-                ping_interval=30,
-                ping_timeout=10,
-                close_timeout=10,
-            )
+            self.ws = await self._connect_ws()
 
             logger.bind(tag=TAG).info("WebSocket连接建立成功")
             self.last_active_time = current_time
@@ -464,21 +485,21 @@ class TTSProvider(TTSProviderBase):
             # 创建事件循环
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+            if not hasattr(self, "opus_encoder") or self.opus_encoder is None:
+                self.opus_encoder = opus_encoder_utils.OpusEncoderUtils(
+                    sample_rate=self.conn.sample_rate,
+                    channels=1,
+                    frame_size_ms=60,
+                )
 
             # 生成会话ID
             session_id = uuid.uuid4().hex
             # 存储音频数据
             audio_data = []
+            pcm_chunks = []
 
             async def _generate_audio():
-                ws = await websockets.connect(
-                    self.ws_url,
-                    additional_headers=self.header,
-                    ping_interval=30,
-                    ping_timeout=10,
-                    close_timeout=10,
-                    max_size=10 * 1024 * 1024,
-                )
+                ws = await self._connect_ws()
 
                 try:
                     # 发送run-task消息启动会话
@@ -547,6 +568,7 @@ class TTSProvider(TTSProviderBase):
                     while not task_finished:
                         msg = await ws.recv()
                         if isinstance(msg, (bytes, bytearray)):
+                            pcm_chunks.append(bytes(msg))
                             self.opus_encoder.encode_pcm_to_opus_stream(
                                 msg,
                                 end_of_stream=False,
@@ -575,6 +597,15 @@ class TTSProvider(TTSProviderBase):
             # 运行异步任务
             loop.run_until_complete(_generate_audio())
             loop.close()
+
+            if self.save_path and not self.delete_audio_file and pcm_chunks:
+                os.makedirs(os.path.dirname(self.save_path) or ".", exist_ok=True)
+                with wave.open(self.save_path, "wb") as wav_file:
+                    wav_file.setnchannels(1)
+                    wav_file.setsampwidth(2)
+                    wav_file.setframerate(int(getattr(self.conn, "sample_rate", 24000)))
+                    wav_file.writeframes(b"".join(pcm_chunks))
+                return self.save_path
 
             return audio_data
 
