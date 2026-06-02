@@ -38,8 +38,9 @@ function formatLatency(ms) {
   return `${(value / 1000).toFixed(1)}s`;
 }
 
-export default function ChatScreen({ aiState, msg, lastHeard, connected, recording, userSpeaking, dignityMode, dignityStatus }) {
-  const displayState = aiState === 'thinking' ? 'speaking' : (aiState === 'idle' && connected && recording && userSpeaking ? 'listening' : aiState);
+export default function ChatScreen({ aiState, msg, lastHeard, connected, recording, userSpeaking, dignityMode, dignityStatus, ordinaryVoiceAwake = true }) {
+  const standby = !dignityMode && !ordinaryVoiceAwake;
+  const displayState = standby ? 'idle' : (aiState === 'thinking' ? 'speaking' : (aiState === 'idle' && connected && recording && userSpeaking ? 'listening' : aiState));
   const { label, dot, anim } = STATUS_MAP[displayState] || STATUS_MAP.idle;
   const stage = STAGE_LABELS[dignityStatus?.current_stage] || dignityStatus?.current_stage || '建立关系';
   const strategy = STRATEGY_LABELS[dignityStatus?.strategy] || dignityStatus?.strategy || '继续追问';
@@ -54,7 +55,9 @@ export default function ChatScreen({ aiState, msg, lastHeard, connected, recordi
       <div style={{ position: 'absolute', top: 28, left: 0, right: 0, display: 'flex', justifyContent: 'center', zIndex: 5 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'center', padding: '0 32px' }}>
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: dot, boxShadow: `0 0 8px ${dot}`, animation: anim ? 'dotPulse 1.1s ease-in-out infinite' : 'none' }} />
-          <span style={{ fontSize: 14, color: dot, fontFamily: 'Noto Sans SC', fontWeight: 300, letterSpacing: '.08em', transition: 'color .6s' }}>{label}</span>
+          <span style={{ fontSize: 14, color: dot, fontFamily: 'Noto Sans SC', fontWeight: 300, letterSpacing: '.08em', transition: 'color .6s' }}>
+            {standby ? '请说“小暖”唤醒我' : label}
+          </span>
           {dignityMode && (
             <span style={{ fontSize: 12, color: dignityStatus?.strategy === 'handoff_nurse' ? C.red : C.inkFaint, fontFamily: 'Noto Sans SC', fontWeight: 300, letterSpacing: '.04em' }}>
               尊严疗法 · {stage} · {strategy}
@@ -91,7 +94,7 @@ export default function ChatScreen({ aiState, msg, lastHeard, connected, recordi
             </div>
           ) : (
             <div style={{ fontSize: 24, color: 'rgba(30,24,16,.24)', fontFamily: 'Noto Serif SC,serif', fontWeight: 300, letterSpacing: '.06em', lineHeight: 2.1 }}>
-              {dignityMode ? <>我们慢慢聊，<br />从重要的回忆开始</> : <>我一直在呢，<br />您直接说话就好</>}
+              {dignityMode ? <>我们慢慢聊，<br />从重要的回忆开始</> : standby ? <>我在待机，<br />请先说“小暖”</> : <>我一直在呢，<br />您直接说话就好</>}
             </div>
           )}
         </div>
@@ -103,7 +106,7 @@ export default function ChatScreen({ aiState, msg, lastHeard, connected, recordi
           <WaveBars state={aiState} />
         </div>
         <div style={{ minHeight: 18, maxWidth: 420, color: C.inkFaint, fontFamily: 'Noto Sans SC', fontSize: 12, fontWeight: 300, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {!connected ? '正在保持连接' : recording ? (lastHeard ? `刚听到：${lastHeard}` : '小暖正在听') : '小暖在线，稍后恢复聆听'}
+          {!connected ? '正在保持连接' : standby ? '待机中，说“小暖”后开始聊天，说“退下”回到待机' : recording ? (lastHeard ? `刚听到：${lastHeard}` : '小暖正在听') : '小暖在线，稍后恢复聆听'}
         </div>
       </div>
     </div>

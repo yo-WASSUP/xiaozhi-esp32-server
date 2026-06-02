@@ -18,6 +18,10 @@ window.XiaozhiClient = {
   sendClientState(payload) { return xiaozhiBridgeReady.then(c => c.sendClientState(payload)); },
   sendDignityAction(action, payload) { return xiaozhiBridgeReady.then(c => c.sendDignityAction(action, payload)); },
   sendText(text) { return xiaozhiBridgeReady.then(c => c.sendText(text)); },
+  initWakeWord(config) { return xiaozhiBridgeReady.then(c => c.initWakeWord(config)); },
+  startWakeWord() { return xiaozhiBridgeReady.then(c => c.startWakeWord()); },
+  stopWakeWord() { return xiaozhiBridgeReady.then(c => c.stopWakeWord()); },
+  releaseWakeWord() { return xiaozhiBridgeReady.then(c => c.releaseWakeWord()); },
   async startRecording(options) { return (await xiaozhiBridgeReady).startRecording(options); },
   stopRecording() { return xiaozhiBridgeReady.then(c => c.stopRecording()); },
   isConnected() { return false; },
@@ -98,10 +102,29 @@ const [
 const wsHandler = wsMod.getWebSocketHandler();
 const recorder = recMod.getAudioRecorder();
 const player = playerMod.getAudioPlayer();
+let wakeWordMod = null;
 
 // ── 4. 桥接回调：把原模块的回调转成 window 事件 ──────────
 let isConnected = false;
 let isRemoteSpeaking = false;
+
+function displayText(text) {
+  let value = text;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        value = parsed?.content || parsed?.text || value;
+      } catch (_) {
+        value = text;
+      }
+    }
+  } else if (value && typeof value === 'object') {
+    value = value.content || value.text || '';
+  }
+  return String(value || '').replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '').trim();
+}
 
 wsHandler.onConnectionStateChange = (connected) => {
   isConnected = connected;
@@ -122,13 +145,15 @@ wsHandler.onChatMessage = (text, isUser) => {
   if (!isUser && typeof text === 'string' && text.includes('"type": "vad"')) {
     return;
   }
+  const cleanText = displayText(text);
+  if (!cleanText) return;
   if (isUser) {
     // 用户说话被识别出来：进入 thinking
-    window.dispatchEvent(new CustomEvent('xz:stt', { detail: { text } }));
+    window.dispatchEvent(new CustomEvent('xz:stt', { detail: { text: cleanText } }));
     window.dispatchEvent(new CustomEvent('xz:state', { detail: { state: 'thinking' } }));
   } else {
     // AI 回复文本（可能在 TTS 开始前后）
-    window.dispatchEvent(new CustomEvent('xz:llm', { detail: { text } }));
+    window.dispatchEvent(new CustomEvent('xz:llm', { detail: { text: cleanText } }));
   }
 };
 
@@ -181,6 +206,27 @@ const realClient = {
 
   sendText(text) {
     return wsHandler.sendTextMessage(text);
+  },
+
+  async initWakeWord(config) {
+    wakeWordMod = wakeWordMod || await import('./patient-wakeword.js?v=1');
+    return await wakeWordMod.initPatientWakeWord(config);
+  },
+
+  async startWakeWord() {
+    if (!wakeWordMod) return false;
+    return await wakeWordMod.startPatientWakeWord();
+  },
+
+  async stopWakeWord() {
+    if (!wakeWordMod) return false;
+    return await wakeWordMod.stopPatientWakeWord();
+  },
+
+  async releaseWakeWord() {
+    if (!wakeWordMod) return false;
+    await wakeWordMod.releasePatientWakeWord();
+    return true;
   },
 
   async startRecording(options = {}) {

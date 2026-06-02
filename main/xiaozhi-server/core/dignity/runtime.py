@@ -289,6 +289,9 @@ async def start_dignity_mode(conn, msg_json: Optional[Dict[str, Any]] = None) ->
 
     conn.logger.bind(tag=TAG).info("尊严访谈模式已开启")
     payload = _state_payload(conn.dignity_state)
+    document_source = _load_dignity_document_source(conn)
+    if document_source:
+        payload.update(document_source)
     _write_dignity_log(conn, "mode_started", payload)
     await send_dignity_event(conn, "mode_started", payload)
 
@@ -611,6 +614,30 @@ def _save_dignity_document_source(
         logger = getattr(conn, "logger", None)
         if logger:
             logger.bind(tag=TAG).debug(f"生命文档源文件保存失败: {exc}")
+
+
+def _load_dignity_document_source(conn) -> Dict[str, Any]:
+    try:
+        latest_path = DOCUMENT_SOURCE_DIR / f"{_memory_key(conn)}_latest.json"
+        if not latest_path.exists():
+            return {}
+        with latest_path.open("r", encoding="utf-8") as file:
+            payload = json.load(file) or {}
+        document = payload.get("document") or ""
+        if not document:
+            return {}
+        return {
+            "document": document,
+            "document_status": payload.get("document_status") or "draft",
+            "document_url": payload.get("document_url") or "",
+            "document_filename": payload.get("document_filename") or "",
+            "document_updated_at": payload.get("updated_at") or "",
+        }
+    except Exception as exc:
+        logger = getattr(conn, "logger", None)
+        if logger:
+            logger.bind(tag=TAG).debug(f"生命文档源文件读取失败: {exc}")
+        return {}
 
 
 def _docx_paragraph(

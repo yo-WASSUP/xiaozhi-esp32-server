@@ -6,9 +6,11 @@ import ConnectBar from './components/ConnectBar';
 import ChatScreen from './screens/ChatScreen';
 import InboxScreen from './screens/InboxScreen';
 import DignityDebugPanel from './screens/DignityDebugPanel';
+import DignityTherapyPanel from './screens/DignityTherapyPanel';
 import IncomingCallOverlay from './components/IncomingCallOverlay';
 import ActiveCallOverlay from './components/ActiveCallOverlay';
 import SettingsPanel from './components/SettingsPanel';
+import useFamilyMessageReader from './hooks/useFamilyMessageReader';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -28,6 +30,7 @@ export default function App() {
   const [contacts, setContacts]   = useState([]);
   const [eventTick, setEventTick] = useState(0);
   const [maxUploadMb, setMaxUploadMb] = useState(50);
+  const [patientWakeup, setPatientWakeup] = useState({ enabled: false, mode: 'sherpa_onnx_kws' });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [dignityMode, setDignityMode] = useState(false);
   const [dignityStatus, setDignityStatus] = useState(null);
@@ -39,6 +42,7 @@ export default function App() {
   const [dignityDocument, setDignityDocument] = useState('');
   const [dignityDocumentUrl, setDignityDocumentUrl] = useState('');
   const [dignityVoiceMode, setDignityVoiceMode] = useState(false);
+  const [ordinaryVoiceAwake, setOrdinaryVoiceAwake] = useState(true);
 
   const connectingRef = useRef(false);
   const initStartedRef = useRef(false);
@@ -55,9 +59,10 @@ export default function App() {
   const incomingRef = useRef(null);
   const callStateRef = useRef('idle');
   const dignityModeRef = useRef(false);
+  const ordinaryVoiceAwakeRef = useRef(false);
   const dignityLiveTurnStartedAtRef = useRef(null);
   const dignityDebugTurnStartedAtRef = useRef(null);
-  const mediaPlaybackRef = useRef(null);
+  const patientWakeupRef = useRef({ enabled: false, mode: 'sherpa_onnx_kws' });
   const ttsPlaybackAbortRef = useRef(false);
   const speakingFallbackTimerRef = useRef(null);
 
@@ -69,16 +74,29 @@ export default function App() {
   useEffect(() => { incomingRef.current = incoming; }, [incoming]);
   useEffect(() => { callStateRef.current = callState; }, [callState]);
   useEffect(() => { dignityModeRef.current = dignityMode; }, [dignityMode]);
+  useEffect(() => { ordinaryVoiceAwakeRef.current = ordinaryVoiceAwake; }, [ordinaryVoiceAwake]);
+  useEffect(() => { patientWakeupRef.current = patientWakeup; }, [patientWakeup]);
 
-  // 鎷変竴娆￠厤缃紙涓婁紶涓婇檺锛?
+  // 拉一次配置（上传上限等）
   useEffect(() => {
     fetch('/api/hospice/config')
       .then(r => r.json())
-      .then(j => { if (j && j.upload_max_mb) setMaxUploadMb(j.upload_max_mb); })
+      .then(j => {
+        if (j && j.upload_max_mb) setMaxUploadMb(j.upload_max_mb);
+        if (j && j.patient_wakeup) {
+          setPatientWakeup(j.patient_wakeup);
+          const wakeupEnabled = j.patient_wakeup.enabled === true
+            && String(j.patient_wakeup.mode || '').toLowerCase() === 'sherpa_onnx_kws';
+          setOrdinaryVoiceAwake(!wakeupEnabled);
+          ordinaryVoiceAwakeRef.current = !wakeupEnabled;
+        }
+      })
       .catch(() => { });
   }, []);
 
   const unread = contacts.reduce((s, c) => s + (c.unread || 0), 0);
+  const dignityDebugEnabled = new URLSearchParams(window.location.search).get('dignity_debug') === '1';
+  const kwsWakeupEnabled = patientWakeup?.enabled === true && String(patientWakeup?.mode || '').toLowerCase() === 'sherpa_onnx_kws';
 
   const loadContacts = useCallback(async () => {
     try {
@@ -100,18 +118,25 @@ export default function App() {
       await fetch(`/api/hospice/thread/read?${params.toString()}`, { method: 'POST' });
       await loadContacts();
       setEventTick(t => t + 1);
-    } catch (e) { console.error('鏍囪宸茶澶辫触', e); }
+    } catch (e) { console.error('标记已读失败', e); }
   }, [loadContacts]);
 
-  const stopPlayback = useCallback(() => {
-    if (mediaPlaybackRef.current) {
-      try {
-        mediaPlaybackRef.current.pause();
-        mediaPlaybackRef.current.src = '';
-      } catch (_) { }
-      mediaPlaybackRef.current = null;
+  const unbindFamily = useCallback(async (familyId) => {
+    if (!familyId) return false;
+    try {
+      const params = new URLSearchParams({ device_id: DEVICE_ID, family_id: familyId });
+      const r = await fetch(`/api/hospice/pairing/bindings?${params.toString()}`, { method: 'DELETE' });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.success) throw new Error(j.error || '解绑失败');
+      await loadContacts();
+      setEventTick(t => t + 1);
+      return true;
+    } catch (e) {
+      console.error('解绑家属失败', e);
+      setConnectStatus(e.message || '解绑家属失败');
+      return false;
     }
-  }, []);
+  }, [loadContacts]);
 
   const stopTtsPlayback = useCallback(async () => {
     ttsPlaybackAbortRef.current = true;
@@ -122,7 +147,7 @@ export default function App() {
         body: JSON.stringify({ device_id: DEVICE_ID }),
       });
     } catch (e) {
-      console.error('鍋滄TTS澶辫触', e);
+      console.error('停止TTS失败', e);
     }
   }, []);
 
@@ -141,22 +166,10 @@ export default function App() {
       }
       return true;
     } catch (e) {
-      console.error('TTS鎾姤澶辫触', e);
+      console.error('TTS播报失败', e);
       return false;
     }
   }, []);
-
-  const playAudioFile = useCallback((url) => new Promise((resolve) => {
-    if (!url) { resolve(); return; }
-    const audio = new Audio(url);
-    mediaPlaybackRef.current = audio;
-    audio.onended = () => { mediaPlaybackRef.current = null; resolve(); };
-    audio.onerror = () => { mediaPlaybackRef.current = null; resolve(); };
-    audio.play().catch(() => {
-      mediaPlaybackRef.current = null;
-      resolve();
-    });
-  }), []);
 
   const pauseAssistantListening = useCallback(async () => {
     setAssistantHold(true);
@@ -168,6 +181,36 @@ export default function App() {
       userSpeakingRef.current = false;
       setUserSpeaking(false);
       setAiState('idle');
+    }
+  }, []);
+
+  const stopNormalRecording = useCallback(async () => {
+    if (recordingRef.current && window.XiaozhiClient) {
+      try { await window.XiaozhiClient.stopRecording(); } catch (_) { }
+      recordingRef.current = false;
+      setRecording(false);
+    }
+    userSpeakingRef.current = false;
+    setUserSpeaking(false);
+    setAiState('idle');
+  }, []);
+
+  const startWakeWordListening = useCallback(async () => {
+    if (!window.XiaozhiClient || typeof window.XiaozhiClient.startWakeWord !== 'function') return false;
+    try {
+      return await window.XiaozhiClient.startWakeWord();
+    } catch (e) {
+      console.error('唤醒词监听启动失败', e);
+      return false;
+    }
+  }, []);
+
+  const stopWakeWordListening = useCallback(async () => {
+    if (!window.XiaozhiClient || typeof window.XiaozhiClient.stopWakeWord !== 'function') return false;
+    try {
+      return await window.XiaozhiClient.stopWakeWord();
+    } catch (_) {
+      return false;
     }
   }, []);
 
@@ -191,7 +234,7 @@ export default function App() {
       if (!ok) setConnectStatus('麦克风没有开始工作，请重新连接后再试');
       if (active) setConnectStatus('');
     } catch (err) {
-      console.error('鑷姩鎷鹃煶澶辫触', err);
+      console.error('自动拾音失败', err);
       recordingRef.current = false;
       setRecording(false);
       userSpeakingRef.current = false;
@@ -227,12 +270,12 @@ export default function App() {
 
   const toggleDignityMode = useCallback(async () => {
     if (!connectedRef.current) {
-      setConnectStatus('璇峰厛杩炴帴灏忔殩锛屽啀鍒囨崲灏婁弗鐤楁硶妯″紡');
+      setConnectStatus('请先连接小暖，再切换尊严疗法模式');
       return;
     }
     const nextAction = dignityMode ? 'stop' : 'start';
     const ok = await sendDignityAction(nextAction, { patient_id: DEVICE_ID });
-    if (!ok) setConnectStatus('灏婁弗鐤楁硶妯″紡鍒囨崲澶辫触锛岃绋嶅悗鍐嶈瘯');
+    if (!ok) setConnectStatus('尊严疗法模式切换失败，请稍后再试');
   }, [dignityMode, sendDignityAction]);
 
   const runDignityDebugTurn = useCallback(async (text) => {
@@ -256,7 +299,7 @@ export default function App() {
   }, [sendDignityAction]);
 
 
-  const normalizeCommandText = (text) => String(text || '').replace(/[\s锛屻€傦紒锛熴€?.!?]/g, '');
+  const normalizeCommandText = (text) => String(text || '').replace(/[\s,，。.!！?？、：:；;]/g, '');
 
   const generateDignityDocument = useCallback(async () => {
     setDignityDocumentBusy(true);
@@ -282,6 +325,10 @@ export default function App() {
       setConnectStatus('生命访谈 Word 保存请求发送失败');
     }
   }, [sendDignityAction]);
+
+  const updateDignityDocument = useCallback((nextDocument) => {
+    setDignityDocument(nextDocument);
+  }, []);
 
   const toggleDignityVoiceMode = useCallback(async () => {
     if (!dignityMode) return;
@@ -382,7 +429,7 @@ export default function App() {
   const connectXiaozhi = useCallback(async () => {
     if (!window.XiaozhiClient || connectingRef.current || connectedRef.current) return;
     connectingRef.current = true;
-    setConnectStatus('姝ｅ湪杩炴帴灏忔殩...');
+    setConnectStatus('正在连接小暖...');
     try {
       const ok = await Promise.race([
         window.XiaozhiClient.connect(),
@@ -430,126 +477,27 @@ export default function App() {
     }
   }, [connectXiaozhi]);
 
-  const loadThreadMessages = useCallback(async (contactName, limit = 80, familyId = '') => {
-    const params = new URLSearchParams({ device_id: DEVICE_ID, limit: String(limit) });
-    if (familyId) params.set('family_id', familyId);
-    else params.set('contact_name', contactName);
-    const r = await fetch(`/api/hospice/messages?${params.toString()}`);
-    const list = await r.json();
-    return (Array.isArray(list) ? list : []).slice().reverse();
-  }, []);
+  const { announceUnread, readFamilyMessages, speakAndWait, stopPlayback } = useFamilyMessageReader({
+    loadContacts,
+    markThreadRead,
+    pauseAssistantListening,
+    resumeAssistantAndStart,
+    speakViaTts,
+    ttsPlaybackAbortRef,
+  });
 
-const messageSpeechText = (contactName, message) => {
-    if (message.message_type === 'text') return `${contactName}说：${message.content || ''}`;
-    if (message.message_type === 'photo') return `${contactName}发来一张照片。`;
-    if (message.message_type === 'video') return `${contactName}发来一个视频。`;
-    if (message.message_type === 'voice') return `${contactName}发来一段语音。`;
-    return `${contactName}发来一条消息。`;
-  };
-
-  const estimateSpeechMs = useCallback((text) => {
-    const len = String(text || '').replace(/\s+/g, '').length;
-    return Math.min(10000, Math.max(1200, len * 180));
-  }, []);
-
-  const waitForTts = useCallback(async (ms) => {
-    let remaining = Math.max(0, ms || 0);
-    while (remaining > 0 && !ttsPlaybackAbortRef.current) {
-      const chunk = Math.min(200, remaining);
-      await sleep(chunk);
-      remaining -= chunk;
-    }
-  }, []);
-
-  const speakAndWait = useCallback(async (text) => {
-    const content = (text || '').trim();
-    if (!content || ttsPlaybackAbortRef.current) return;
-    await speakViaTts(content);
-    if (ttsPlaybackAbortRef.current) return;
-    await waitForTts(estimateSpeechMs(content));
-  }, [estimateSpeechMs, speakViaTts, waitForTts]);
-
-  const readFamilyMessages = useCallback(async (targetName) => {
-    ttsPlaybackAbortRef.current = false;
-    await pauseAssistantListening();
-    stopPlayback();
-    try {
-      const latestContacts = await loadContacts();
-      const normalizedTarget = (targetName || '').trim();
-      let contact = null;
-      if (normalizedTarget) {
-        contact = latestContacts.find(c => c.contact_name && (
-          c.contact_name === normalizedTarget ||
-          c.contact_name.includes(normalizedTarget) ||
-          normalizedTarget.includes(c.contact_name)
-        ));
-      }
-      if (!contact) contact = latestContacts.find(c => (c.unread || 0) > 0);
-      if (!contact && normalizedTarget) {
-        await speakAndWait(`没有找到${normalizedTarget}的消息。`);
-        return;
-      }
-      if (!contact) {
-        await speakAndWait('现在没有新的家人消息。');
-        return;
-      }
-
-      const messages = await loadThreadMessages(contact.contact_name, 80, contact.family_id || '');
-      const familyMessages = messages.filter(m => (m.sender_role || 'family') === 'family');
-      const unreadMessages = familyMessages.filter(m => !m.played);
-      const messagesToRead = unreadMessages.length > 0 ? unreadMessages : familyMessages.slice(-3);
-      if (messagesToRead.length === 0) {
-        await speakAndWait(`${contact.contact_name}还没有发来消息。`);
-        return;
-      }
-
-      await speakAndWait(`${contact.contact_name}给您发来${messagesToRead.length}条消息。`);
-      for (const message of messagesToRead) {
-        await speakAndWait(messageSpeechText(contact.contact_name, message));
-        if (message.message_type === 'voice' && message.file_path) {
-          await playAudioFile(message.file_path);
-          await sleep(300);
-        }
-      }
-      await markThreadRead(contact.contact_name, contact.family_id || '');
-    } catch (err) {
-      console.error('鏀跺惉瀹跺睘娑堟伅澶辫触', err);
-      await speakAndWait('消息暂时读不了，请稍后再试。');
-    } finally {
-      await resumeAssistantAndStart();
-    }
-  }, [loadContacts, loadThreadMessages, markThreadRead, pauseAssistantListening, playAudioFile, resumeAssistantAndStart, speakAndWait, stopPlayback]);
-
-  const announceUnread = useCallback(async () => {
-    ttsPlaybackAbortRef.current = false;
-    await pauseAssistantListening();
-    try {
-      const latestContacts = await loadContacts();
-      const unreadContacts = latestContacts.filter(c => (c.unread || 0) > 0);
-      const total = unreadContacts.reduce((sum, c) => sum + (c.unread || 0), 0);
-      if (total === 0) {
-        await speakAndWait('现在没有新的家人消息。');
-        return;
-      }
-      const names = unreadContacts.map(c => `${c.contact_name}${c.unread}条`).join('，');
-      await speakAndWait(`您有${total}条新的家人消息，来自${names}。`);
-    } finally {
-      await resumeAssistantAndStart();
-    }
-  }, [loadContacts, pauseAssistantListening, resumeAssistantAndStart, speakAndWait]);
-
-  // 鑱旂郴浜哄垪琛?+ SSE 璁㈤槄
+  // 联系人列表 + SSE 订阅
   useEffect(() => {
     loadContacts();
     const es = new EventSource(`/api/hospice/message/stream?device_id=${encodeURIComponent(DEVICE_ID)}`);
     const bump = () => { loadContacts(); setEventTick(t => t + 1); };
     es.addEventListener('message.new', bump);
     es.addEventListener('message.read', bump);
-    es.onerror = () => { /* 娴忚鍣ㄨ嚜鍔ㄩ噸杩?*/ };
+    es.onerror = () => { /* 浏览器自动重试 */ };
     return () => es.close();
   }, [loadContacts]);
 
-  // 妗ユ帴 XiaozhiClient 浜嬩欢锛坈onnection / state / llm / stt / ready锛?
+  // 桥接 XiaozhiClient 事件（connection / state / llm / stt / ready）
   useEffect(() => {
     const onConn  = e => {
       const isConnected = !!e.detail.connected;
@@ -611,6 +559,29 @@ const messageSpeechText = (contactName, message) => {
       setUserSpeaking(active);
       userSpeakingRef.current = active;
     };
+    const onWakeWordDetected = async (e) => {
+      if (!connectedRef.current || !micOkRef.current || dignityModeRef.current || inCallRef.current) return;
+      setOrdinaryVoiceAwake(true);
+      ordinaryVoiceAwakeRef.current = true;
+      setConnectStatus('');
+      setMsg('我在呢，您说。');
+      await speakViaTts('我在呢，您说。');
+      await stopWakeWordListening();
+      await startListening();
+      window.dispatchEvent(new CustomEvent('xz:client-action', {
+        detail: {
+          type: 'client_action',
+          action: 'patient_voice_wakeup',
+          text: e.detail?.label || 'wakeword',
+          source: 'kws',
+        },
+      }));
+    };
+    const onWakeWordState = (e) => {
+      if (e.detail?.state === 'error') {
+        setConnectStatus(e.detail?.message || '本地唤醒词模型未就绪');
+      }
+    };
     const onErr = e => setConnectStatus(e.detail?.message || e.detail?.error?.message || '连接模块初始化失败');
     const onDignity = e => {
       const detail = e.detail || {};
@@ -621,13 +592,25 @@ const messageSpeechText = (contactName, message) => {
         setDignityVoiceMode(false);
         setDignityStatus(data);
         setDignityOpeningReply(data.reply || '');
+        setDignityDocument(data.document || '');
+        setDignityDocumentUrl(data.document_url || '');
+        setDignityDocumentConfirmBusy(false);
         if (data.reply) setMsg(data.reply);
         void pauseAssistantListening();
       } else if (event === 'mode_stopped') {
         setDignityMode(false);
         setDignityVoiceMode(false);
         setDignityStatus(data);
-        void resumeAssistantAndStart();
+        if (kwsWakeupEnabled) {
+          setOrdinaryVoiceAwake(false);
+          ordinaryVoiceAwakeRef.current = false;
+          setUserSpeaking(false);
+          userSpeakingRef.current = false;
+          resumeAssistantListening();
+          void stopNormalRecording();
+        } else {
+          void resumeAssistantAndStart();
+        }
       } else if (event === 'turn_result' || event === 'nurse_alert') {
         const nextData = attachClientLatency(data, dignityLiveTurnStartedAtRef);
         setDignityStatus(nextData);
@@ -686,14 +669,14 @@ const messageSpeechText = (contactName, message) => {
         setDignityDocumentBusy(false);
         setDignityDocumentConfirmBusy(false);
         setDignityDocumentUrl('');
-        setConnectStatus(data.message || '鐢熷懡璁胯皥鏂囨。鐢熸垚澶辫触');
+        setConnectStatus(data.message || '生命访谈文档生成失败');
       } else if (event === 'error') {
         dignityLiveTurnStartedAtRef.current = null;
         dignityDebugTurnStartedAtRef.current = null;
         setDignityDebugBusy(false);
         setDignityDocumentBusy(false);
         setDignityDocumentConfirmBusy(false);
-        setConnectStatus(data.message || '灏婁弗鐤楁硶妯″紡澶勭悊澶辫触');
+        setConnectStatus(data.message || '尊严疗法模式处理失败');
       }
     };
     const onReady = async () => {
@@ -706,7 +689,7 @@ const messageSpeechText = (contactName, message) => {
         if (ok) connectXiaozhi();
         else setConnectStatus('请允许麦克风权限后重试');
       } catch (err) {
-        console.error('XiaozhiClient init 澶辫触', err);
+        console.error('XiaozhiClient init 失败', err);
         setConnectStatus('连接模块初始化失败：' + (err?.message || '未知错误'));
       }
     };
@@ -715,6 +698,8 @@ const messageSpeechText = (contactName, message) => {
     window.addEventListener('xz:llm', onLlm);
     window.addEventListener('xz:stt', onStt);
     window.addEventListener('xz:voice-activity', onVoiceActivity);
+    window.addEventListener('xz:wakeword-detected', onWakeWordDetected);
+    window.addEventListener('xz:wakeword-state', onWakeWordState);
     window.addEventListener('xz:error', onErr);
     window.addEventListener('xz:dignity', onDignity);
     window.addEventListener('xz:ready', onReady);
@@ -725,15 +710,41 @@ const messageSpeechText = (contactName, message) => {
       window.removeEventListener('xz:llm', onLlm);
       window.removeEventListener('xz:stt', onStt);
       window.removeEventListener('xz:voice-activity', onVoiceActivity);
+      window.removeEventListener('xz:wakeword-detected', onWakeWordDetected);
+      window.removeEventListener('xz:wakeword-state', onWakeWordState);
       window.removeEventListener('xz:error', onErr);
       window.removeEventListener('xz:dignity', onDignity);
       window.removeEventListener('xz:ready', onReady);
     };
-  }, [connectXiaozhi, pauseAssistantListening, resumeAssistantAndStart, scheduleReconnect, stopTtsPlayback]);
+  }, [connectXiaozhi, kwsWakeupEnabled, pauseAssistantListening, resumeAssistantAndStart, resumeAssistantListening, scheduleReconnect, speakViaTts, startListening, stopNormalRecording, stopTtsPlayback, stopWakeWordListening]);
 
   useEffect(() => {
-    if (connected && micOk && !assistantHold && !inCall && (!dignityMode || dignityVoiceMode)) startListening();
-  }, [assistantHold, connected, dignityMode, dignityVoiceMode, inCall, micOk, startListening]);
+    if (!connected || !micOk || assistantHold || inCall) return;
+    if (dignityMode) {
+      if (dignityVoiceMode) startListening();
+      return;
+    }
+    if (kwsWakeupEnabled && !ordinaryVoiceAwake) {
+      stopNormalRecording();
+      startWakeWordListening();
+      return;
+    }
+    startListening();
+  }, [assistantHold, connected, dignityMode, dignityVoiceMode, inCall, kwsWakeupEnabled, micOk, ordinaryVoiceAwake, startListening, startWakeWordListening, stopNormalRecording]);
+
+  useEffect(() => {
+    if (!kwsWakeupEnabled) {
+      setOrdinaryVoiceAwake(true);
+      ordinaryVoiceAwakeRef.current = true;
+      stopWakeWordListening();
+      return;
+    }
+    if (!window.XiaozhiClient || typeof window.XiaozhiClient.initWakeWord !== 'function') return;
+    window.XiaozhiClient.initWakeWord(patientWakeup).catch((e) => {
+      console.error('唤醒词模型初始化失败', e);
+      setConnectStatus('本地唤醒词模型初始化失败：' + (e?.message || '未知错误'));
+    });
+  }, [kwsWakeupEnabled, patientWakeup, stopWakeWordListening]);
 
   useEffect(() => {
     if (dignityMode && !dignityVoiceMode) pauseAssistantListening();
@@ -753,9 +764,12 @@ const messageSpeechText = (contactName, message) => {
     if (speakingFallbackTimerRef.current) clearTimeout(speakingFallbackTimerRef.current);
     stopCallCommandRecognizer();
     stopPlayback();
+    if (window.XiaozhiClient && typeof window.XiaozhiClient.releaseWakeWord === 'function') {
+      window.XiaozhiClient.releaseWakeWord();
+    }
   }, [stopCallCommandRecognizer, stopPlayback]);
 
-  // 鈹€鈹€ 閫氳瘽锛圵ebRTC锛?鈹€鈹€
+  // 通话（WebRTC）
   const callRef = useRef(null);
   const [localStream, setLocalStream]   = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
@@ -775,7 +789,7 @@ const messageSpeechText = (contactName, message) => {
       onLocalStream:  (s) => setLocalStream(s),
       onRemoteStream: (s) => setRemoteStream(s),
       onState: (s) => {
-        // 鐘舵€?connecting / active 鏃讹細鎶婃潵鐢垫诞灞傚垏鎹负閫氳瘽娴眰
+        // 状态为 connecting / active 时，把来电浮层切换为通话浮层
         if (s === 'connecting' || s === 'active') {
           pauseAssistantListening().finally(async () => {
             await setCallCommandMode(true);
@@ -882,18 +896,41 @@ const messageSpeechText = (contactName, message) => {
         await stopTtsPlayback();
         stopPlayback();
         await resumeAssistantAndStart();
+      } else if (action === 'patient_voice_wakeup') {
+        setOrdinaryVoiceAwake(true);
+        ordinaryVoiceAwakeRef.current = true;
+        setConnectStatus('');
+        if (detail.source === 'kws') return;
+        if (detail.reply) {
+          setMsg(detail.reply);
+          await speakViaTts(detail.reply);
+        }
+      } else if (action === 'patient_voice_sleep') {
+        if (!kwsWakeupEnabled) return;
+        setOrdinaryVoiceAwake(false);
+        ordinaryVoiceAwakeRef.current = false;
+        setAiState('idle');
+        setMsg(null);
+        setLastHeard('');
+        setUserSpeaking(false);
+        userSpeakingRef.current = false;
+        await stopTtsPlayback();
+        stopPlayback();
+        if (kwsWakeupEnabled && !dignityModeRef.current && !inCallRef.current) {
+          await stopNormalRecording();
+          await startWakeWordListening();
+        }
       }
     };
     window.addEventListener('xz:client-action', onClientAction);
     return () => window.removeEventListener('xz:client-action', onClientAction);
-  }, [announceUnread, pauseAssistantListening, readFamilyMessages, resumeAssistantAndStart, speakAndWait, stopPlayback, stopTtsPlayback]);
+  }, [announceUnread, kwsWakeupEnabled, pauseAssistantListening, readFamilyMessages, resumeAssistantAndStart, speakAndWait, speakViaTts, startWakeWordListening, stopNormalRecording, stopPlayback, stopTtsPlayback]);
 
   return (
     <PaperBg>
       <TopBar
         connected={connected}
         recording={recording}
-        unread={unread}
         micOk={micOk}
         connectStatus={connectStatus}
         onOpenSettings={() => setSettingsOpen(true)}
@@ -922,10 +959,11 @@ const messageSpeechText = (contactName, message) => {
             userSpeaking={userSpeaking}
             dignityMode={dignityMode}
             dignityStatus={dignityStatus}
+            ordinaryVoiceAwake={ordinaryVoiceAwake || !kwsWakeupEnabled}
           />
         </section>
         <section style={{ position: 'relative', minWidth: 0, overflow: 'hidden', background: 'rgba(255,250,242,0.28)' }}>
-          {dignityMode ? (
+          {dignityMode && dignityDebugEnabled ? (
             <DignityDebugPanel
               turns={dignityTurns}
               status={dignityStatus}
@@ -941,11 +979,27 @@ const messageSpeechText = (contactName, message) => {
               onReset={resetDignityDebug}
               onGenerateDocument={generateDignityDocument}
               onConfirmDocument={confirmDignityDocument}
-              onDocumentChange={setDignityDocument}
+              onDocumentChange={updateDignityDocument}
+              onToggleVoiceMode={toggleDignityVoiceMode}
+            />
+          ) : dignityMode ? (
+            <DignityTherapyPanel
+              status={dignityStatus}
+              openingReply={dignityOpeningReply}
+              documentBusy={dignityDocumentBusy}
+              documentConfirmBusy={dignityDocumentConfirmBusy}
+              document={dignityDocument}
+              documentUrl={dignityDocumentUrl}
+              voiceMode={dignityVoiceMode}
+              recording={recording}
+              onReset={resetDignityDebug}
+              onGenerateDocument={generateDignityDocument}
+              onConfirmDocument={confirmDignityDocument}
+              onDocumentChange={updateDignityDocument}
               onToggleVoiceMode={toggleDignityVoiceMode}
             />
           ) : (
-            <InboxScreen contacts={contacts} refreshContacts={loadContacts} eventTick={eventTick} maxUploadMb={maxUploadMb} onOpenContact={markThreadRead} />
+            <InboxScreen contacts={contacts} refreshContacts={loadContacts} eventTick={eventTick} maxUploadMb={maxUploadMb} onOpenContact={markThreadRead} onUnbindContact={unbindFamily} />
           )}
         </section>
       </main>

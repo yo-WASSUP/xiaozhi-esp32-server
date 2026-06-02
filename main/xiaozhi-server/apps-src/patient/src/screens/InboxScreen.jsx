@@ -6,18 +6,26 @@ import ContactItem from '../components/ContactItem';
 import ChatBubble from '../components/ChatBubble';
 import ReplyBar from '../components/ReplyBar';
 
-export default function InboxScreen({ contacts, refreshContacts, eventTick, maxUploadMb, onOpenContact }) {
+export default function InboxScreen({ contacts, refreshContacts, eventTick, maxUploadMb, onOpenContact, onUnbindContact }) {
   const [selected, setSelected] = useState(null);
   const [thread, setThread] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [unbindBusy, setUnbindBusy] = useState(false);
   const scrollRef = useRef(null);
   const contactKey = (contact) => contact?.family_id || contact?.contact_name || '';
 
   // 默认选中第一个联系人
   useEffect(() => {
-    if (!selected && contacts.length > 0) setSelected(contactKey(contacts[0]));
+    if (!selected && contacts.length > 0) {
+      setSelected(contactKey(contacts[0]));
+      return;
+    }
+    if (selected && !contacts.some(c => contactKey(c) === selected)) {
+      setSelected(contacts.length > 0 ? contactKey(contacts[0]) : null);
+      setThread([]);
+    }
     // eslint-disable-next-line
-  }, [contacts.length]);
+  }, [contacts, selected]);
 
   const loadThread = async (name) => {
     if (!name) { setThread([]); return; }
@@ -135,6 +143,22 @@ export default function InboxScreen({ contacts, refreshContacts, eventTick, maxU
 
   const activeContact = contacts.find(c => contactKey(c) === selected);
 
+  const unbindActiveContact = async () => {
+    if (!activeContact?.family_id || !onUnbindContact || unbindBusy) return;
+    if (!window.confirm(`确定解除与 ${activeContact.contact_name} 的绑定吗？解除后对方需要重新配对才能继续联系。`)) return;
+    setUnbindBusy(true);
+    try {
+      const ok = await onUnbindContact(activeContact.family_id);
+      if (ok) {
+        setThread([]);
+        setSelected(null);
+        refreshContacts && refreshContacts();
+      }
+    } finally {
+      setUnbindBusy(false);
+    }
+  };
+
   return (
     <div style={{ position: 'relative', height: '100%', zIndex: 5, display: 'flex', animation: 'slideLeft .4s ease' }}>
 
@@ -170,16 +194,27 @@ export default function InboxScreen({ contacts, refreshContacts, eventTick, maxU
           </div>
         ) : (
           <>
-            <div style={{ padding: '18px 28px', borderBottom: `0.5px solid ${C.mist}22`, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <div style={{ padding: '18px 28px', borderBottom: `0.5px solid ${C.mist}22`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
               <div style={{ fontSize: 20, fontFamily: 'Noto Serif SC,serif', fontWeight: 400, color: C.ink, letterSpacing: '.06em' }}>
                 与 {activeContact.contact_name} 的消息
               </div>
-              {(activeContact.unread || 0) > 0 && (
-                <button onClick={() => onOpenContact && onOpenContact(activeContact.contact_name, activeContact.family_id)}
-                  style={{ border: `1px solid ${C.amber}55`, background: `${C.amber}14`, color: C.amber, borderRadius: 14, padding: '6px 12px', fontSize: 12, fontFamily: 'Noto Sans SC', cursor: 'pointer' }}>
-                  标记已听
-                </button>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                {(activeContact.unread || 0) > 0 && (
+                  <button onClick={() => onOpenContact && onOpenContact(activeContact.contact_name, activeContact.family_id)}
+                    style={{ border: `1px solid ${C.amber}55`, background: `${C.amber}14`, color: C.amber, borderRadius: 14, padding: '6px 12px', fontSize: 12, fontFamily: 'Noto Sans SC', cursor: 'pointer' }}>
+                    标记已听
+                  </button>
+                )}
+                {activeContact.family_id && (
+                  <button
+                    onClick={unbindActiveContact}
+                    disabled={unbindBusy}
+                    style={{ border: `1px solid ${C.red}44`, background: `${C.red}10`, color: C.red, borderRadius: 14, padding: '6px 12px', fontSize: 12, fontFamily: 'Noto Sans SC', cursor: unbindBusy ? 'not-allowed' : 'pointer', opacity: unbindBusy ? .55 : 1 }}
+                  >
+                    {unbindBusy ? '解绑中' : '解绑'}
+                  </button>
+                )}
+              </div>
             </div>
             <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '18px 28px 22px' }}>
               {thread.length === 0 && (

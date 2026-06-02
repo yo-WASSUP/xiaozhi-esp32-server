@@ -141,8 +141,18 @@ class ASRProviderBase(ABC):
                 if speaker_name:
                     logger.bind(tag=TAG).info(f"识别说话人: {speaker_name}")
 
-                # 转换为 JSON 字符串用于下游
-                enhanced_text = json.dumps(raw_text, ensure_ascii=False)
+                # 下游普通聊天只需要正文；说话人识别存在时保留必要元数据。
+                if speaker_name:
+                    enhanced_text = json.dumps(
+                        {
+                            "content": raw_text.get("content", ""),
+                            "language": raw_text.get("language", "zh"),
+                            "speaker": speaker_name,
+                        },
+                        ensure_ascii=False,
+                    )
+                else:
+                    enhanced_text = raw_text.get("content", "")
                 content_for_length_check = raw_text.get("content", "")
             else:
                 # 其他 ASR 返回的纯文本

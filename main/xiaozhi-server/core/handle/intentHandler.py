@@ -67,6 +67,9 @@ async def handle_user_intent(conn, text):
     except Exception as e:
         conn.logger.bind(tag=TAG).error(f"尊严疗法模式处理失败: {e}")
 
+    if await handle_hospice_patient_sleep(conn, text, filtered_text):
+        return True
+
     if conn.intent_type == "function_call":
         # 使用支持function calling的聊天方法,不再进行意图分析
         return False
@@ -78,6 +81,42 @@ async def handle_user_intent(conn, text):
     conn.sentence_id = str(uuid.uuid4().hex)
     # 处理各种意图
     return await process_intent_result(conn, intent_result, text)
+
+
+async def _send_patient_voice_action(conn, action, text, **extra):
+    await conn.websocket.send(
+        json.dumps(
+            {
+                "type": "client_action",
+                "action": action,
+                "text": text,
+                **extra,
+            },
+            ensure_ascii=False,
+        )
+    )
+
+
+async def handle_hospice_patient_sleep(conn, original_text, filtered_text):
+    hospice_config = conn.config.get("hospice", {}) or {}
+    if not hospice_config or not hospice_config.get("enable_patient_wakeup", True):
+        return False
+
+    sleep_commands = []
+    for item in hospice_config.get("patient_sleep_commands") or []:
+        _, value = remove_punctuation_and_length(str(item or ""))
+        if value:
+            sleep_commands.append(value)
+    sleep_commands = sorted(set(sleep_commands), key=len, reverse=True)
+    text = filtered_text or ""
+
+    if any(command and command in text for command in sleep_commands):
+        conn.logger.bind(tag=TAG).info("患者端普通聊天进入待机")
+        await send_stt_message(conn, original_text)
+        await _send_patient_voice_action(conn, "patient_voice_sleep", original_text)
+        return True
+
+    return False
 
 
 async def check_direct_exit(conn, text):

@@ -469,9 +469,30 @@ export default function SettingsPanel({ open, onClose }) {
       if (!j.success) throw new Error(j.error || '启用失败');
       applySettings(j.settings || {});
       setVoiceId(id);
-      setTip('已启用。重新连接后生效。');
+      setTip(j.applied_online ? '已启用，当前在线设备已生效。' : '已启用。');
     } catch (e) {
       setTip(`启用失败：${e?.message || '未知错误'}`);
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const resetDefaultVoice = async () => {
+    setBusy('reset');
+    setTip('正在切换到默认音色...');
+    try {
+      const r = await fetch('/api/hospice/voice-clone/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_id: DEVICE_ID }),
+      });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || '切换失败');
+      applySettings(j.settings || {});
+      setVoiceId('');
+      setTip(j.applied_online ? '已切换到默认音色，当前在线设备已生效。' : '已切换到默认音色。');
+    } catch (e) {
+      setTip(`切换失败：${e?.message || '未知错误'}`);
     } finally {
       setBusy('');
     }
@@ -505,7 +526,7 @@ export default function SettingsPanel({ open, onClose }) {
   };
 
   const warn = tip.includes('失败') || tip.includes('缺少') || tip.includes('未完成') || tip.includes('无法') || tip.includes('不可用');
-  const currentStatus = settings.active ? '已启用' : statusLabel(settings.status);
+  const currentStatus = settings.active ? '已启用' : '默认音色';
   const sampleTooShort = !!blob && durationRef.current < MIN_RECORD_SECONDS;
   const canSubmit = configured && !!blob && !sampleTooShort && !recording && !busy;
 
@@ -623,6 +644,9 @@ export default function SettingsPanel({ open, onClose }) {
           <div style={sectionStyle}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
               <div style={{ fontSize: 16, color: C.ink, flex: 1 }}>已有声音</div>
+              <button disabled={!!busy || !settings.active} onClick={resetDefaultVoice} style={buttonStyle('normal', true, !!busy || !settings.active)}>
+                {busy === 'reset' ? '切换中' : '默认音色'}
+              </button>
               <button disabled={!!busy} onClick={refreshVoices} style={buttonStyle('normal', true)}>
                 {busy === 'refresh' ? '刷新中' : '刷新'}
               </button>

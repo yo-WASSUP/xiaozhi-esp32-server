@@ -66,6 +66,31 @@ prompt: |
 # ========== 安宁疗护会话日志配置 ==========
 hospice:
   enable_logging: true
+  # 普通聊天是否启用“先唤醒、再对话”的门控。
+  enable_patient_wakeup: true
+  # 患者端本地 sherpa-onnx KWS 唤醒词检测；不再提供 ASR 文本门控兜底。
+  patient_wakeup_mode: sherpa_onnx_kws
+  patient_wakeup_threshold: 0.50
+  patient_wakeup_sherpa_onnx:
+    runtime_path: "/wakeword/sherpa-onnx-kws.js"
+    model_dir: "/wakeword/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"
+    encoder: "encoder-epoch-12-avg-2-chunk-16-left-64.onnx"
+    decoder: "decoder-epoch-12-avg-2-chunk-16-left-64.onnx"
+    joiner: "joiner-epoch-12-avg-2-chunk-16-left-64.onnx"
+    tokens: "tokens.txt"
+    keywords: "keywords_xiaonuan.txt"
+    provider: "cpu"
+    num_threads: 2
+    sample_rate: 16000
+    feature_dim: 80
+    max_active_paths: 4
+  patient_sleep_commands:
+    - "退下"
+    - "退一下"
+    - "小暖退下"
+    - "先退下"
+    - "休息一下"
+    - "暂停聊天"
   db_path: data/hospice_sessions.db
   # summary_schedule: "22:00"  # 每日摘要定时任务，未启用
   upload_max_mb: 200            # 家属/患者发送媒体文件的大小上限

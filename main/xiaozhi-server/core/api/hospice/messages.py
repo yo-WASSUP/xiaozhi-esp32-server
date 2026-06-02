@@ -89,6 +89,12 @@ class HospiceMessagesMixin:
             file_path = data.get("file_path")
             contact_name = data.get("contact_name")
             family_id = data.get("family_id")
+            if family_id and not self.session_logger.get_family_binding(device_id, family_id):
+                return web.json_response(
+                    {"success": False, "error": "家属绑定已解除，请重新配对"},
+                    status=403,
+                    headers=self._cors_headers(),
+                )
 
             row = self.session_logger.save_family_message(
                 device_id=device_id,
@@ -130,9 +136,24 @@ class HospiceMessagesMixin:
         return web.json_response(messages, headers=self._cors_headers())
 
     async def handle_client_config(self, request):
-        """GET /api/hospice/config  返回前端需要知道的配置（目前：上传上限）"""
-        max_mb = int((self.config.get("hospice", {}) or {}).get("upload_max_mb", 50))
-        return web.json_response({"upload_max_mb": max_mb}, headers=self._cors_headers())
+        """GET /api/hospice/config  返回前端需要知道的配置。"""
+        hospice = self.config.get("hospice", {}) or {}
+        wakeup = hospice.get("patient_wakeup", {}) or {}
+        if not wakeup:
+            wakeup = {
+                "enabled": hospice.get("enable_patient_wakeup", True),
+                "mode": hospice.get("patient_wakeup_mode", "sherpa_onnx_kws"),
+                "threshold": hospice.get("patient_wakeup_threshold", 0.50),
+                "sherpa_onnx": hospice.get("patient_wakeup_sherpa_onnx", {}) or {},
+            }
+        max_mb = int(hospice.get("upload_max_mb", 50))
+        return web.json_response(
+            {
+                "upload_max_mb": max_mb,
+                "patient_wakeup": wakeup,
+            },
+            headers=self._cors_headers(),
+        )
 
     async def handle_get_contacts(self, request):
         """GET /api/hospice/contacts?device_id=xxx
@@ -258,6 +279,37 @@ class HospiceMessagesMixin:
         device_id = request.query.get("device_id", "default")
         rows = self.session_logger.get_family_bindings(device_id)
         return web.json_response({"success": True, "families": rows}, headers=self._cors_headers())
+
+    async def handle_pairing_unbind(self, request):
+        """DELETE /api/hospice/pairing/bindings?device_id=xxx&family_id=xxx"""
+        try:
+            device_id = (request.query.get("device_id") or "").strip()
+            family_id = (request.query.get("family_id") or "").strip()
+            if not device_id or not family_id:
+                try:
+                    data = await request.json()
+                except Exception:
+                    data = {}
+                device_id = device_id or (data.get("device_id") or "").strip()
+                family_id = family_id or (data.get("family_id") or "").strip()
+            if not device_id or not family_id:
+                return web.json_response(
+                    {"success": False, "error": "device_id and family_id required"},
+                    status=400,
+                    headers=self._cors_headers(),
+                )
+            binding = self.session_logger.revoke_family_binding(device_id, family_id)
+            if not binding:
+                return web.json_response(
+                    {"success": False, "error": "绑定不存在或已解除"},
+                    status=404,
+                    headers=self._cors_headers(),
+                )
+            self.broker.publish(device_id, {"event": "pairing.revoked", "data": binding})
+            return web.json_response({"success": True, "binding": binding}, headers=self._cors_headers())
+        except Exception as e:
+            return web.json_response({"success": False, "error": str(e)},
+                                     status=500, headers=self._cors_headers())
 
     # ── 生命回顾视频接口 ──
 

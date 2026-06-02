@@ -328,6 +328,28 @@ class HospiceVoiceMixin:
         self._save_voice_settings(settings)
         return current
 
+    def _clear_active_voice_settings(self, device_id):
+        settings = self._load_voice_settings()
+        current = settings.get(device_id, {})
+        voices = current.get("voices")
+        if not isinstance(voices, list):
+            voices = []
+        for item in voices:
+            if isinstance(item, dict):
+                item["active"] = False
+        current["voices"] = voices
+        current["active"] = False
+        current.pop("active_voice_id", None)
+        for key in (
+            "provider", "voice_id", "speaker_id", "alias", "model", "status",
+            "oss_object_key", "instruction", "resource_link",
+        ):
+            current.pop(key, None)
+        current["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        settings[device_id] = current
+        self._save_voice_settings(settings)
+        return current
+
     def _apply_active_voice_to_config(self, voice_settings):
         voice_id = voice_settings.get("voice_id") or voice_settings.get("speaker_id")
         selected = (self.config.get("selected_module") or {}).get("TTS")
@@ -337,15 +359,47 @@ class HospiceVoiceMixin:
         if not isinstance(tts_config, dict):
             return
         if tts_config.get("type") == "alibl_stream":
+            tts_config.setdefault("_hospice_default_model", tts_config.get("model"))
+            tts_config.setdefault("_hospice_default_instruction", tts_config.get("instruction"))
             if not voice_id:
                 tts_config.pop("private_voice", None)
-                tts_config.pop("instruction", None)
+                default_model = tts_config.get("_hospice_default_model")
+                default_instruction = tts_config.get("_hospice_default_instruction")
+                if default_model:
+                    tts_config["model"] = default_model
+                if default_instruction:
+                    tts_config["instruction"] = default_instruction
+                else:
+                    tts_config.pop("instruction", None)
                 return
             tts_config["private_voice"] = voice_id
             if voice_settings.get("model"):
                 tts_config["model"] = voice_settings["model"]
             if voice_settings.get("instruction"):
                 tts_config["instruction"] = voice_settings["instruction"]
+
+    async def _apply_voice_settings_to_active_connection(self, device_id, voice_settings):
+        conn = ConnectionHandler.get_active_connection(device_id)
+        if conn is None or getattr(conn, "tts", None) is None:
+            return False
+        conn.config = self.config
+        apply_settings = getattr(conn.tts, "_apply_hospice_voice_settings", None)
+        if callable(apply_settings):
+            apply_settings(conn)
+        close_ws = getattr(conn.tts, "close", None)
+        if callable(close_ws):
+            result = close_ws()
+            if asyncio.iscoroutine(result):
+                if conn.loop is asyncio.get_running_loop():
+                    await result
+                else:
+                    await asyncio.wrap_future(
+                        asyncio.run_coroutine_threadsafe(result, conn.loop)
+                    )
+        logger.bind(tag=TAG).info(
+            f"已同步在线 TTS 音色: device={device_id}, active={bool(voice_settings.get('active'))}"
+        )
+        return True
 
     def _safe_speaker_id(self, speaker_id):
         speaker_id = (speaker_id or "").strip()
@@ -723,8 +777,10 @@ class HospiceVoiceMixin:
             removed, settings, fallback = self._remove_device_voice_record(device_id, voice_id)
             if fallback and settings.get("active") and settings.get("voice_id"):
                 self._apply_active_voice_to_config(settings)
+                await self._apply_voice_settings_to_active_connection(device_id, settings)
             elif not fallback:
                 self._apply_active_voice_to_config({})
+                await self._apply_voice_settings_to_active_connection(device_id, {})
             return web.json_response(
                 {
                     "success": True,
@@ -757,7 +813,8 @@ class HospiceVoiceMixin:
                 "active": True,
             })
             self._apply_active_voice_to_config(settings)
-            return web.json_response({"success": True, "settings": settings}, headers=self._cors_headers())
+            applied_online = await self._apply_voice_settings_to_active_connection(device_id, settings)
+            return web.json_response({"success": True, "settings": settings, "applied_online": applied_online}, headers=self._cors_headers())
             speaker_id = self._safe_speaker_id(data.get("speaker_id"))
             clone_config = self._voice_clone_config()
             resource_id = data.get("resource_id") or clone_config.get("default_resource_id") or "seed-icl-2.0"
@@ -769,6 +826,21 @@ class HospiceVoiceMixin:
             })
             self._apply_active_voice_to_config(settings)
             return web.json_response({"success": True, "settings": settings}, headers=self._cors_headers())
+        except Exception as e:
+            return web.json_response({"success": False, "error": str(e)}, status=400, headers=self._cors_headers())
+
+    async def handle_voice_clone_reset(self, request):
+        """POST /api/hospice/voice-clone/reset body: {device_id}"""
+        try:
+            data = await request.json()
+            device_id = data.get("device_id") or "default"
+            settings = self._clear_active_voice_settings(device_id)
+            self._apply_active_voice_to_config({})
+            applied_online = await self._apply_voice_settings_to_active_connection(device_id, settings)
+            return web.json_response(
+                {"success": True, "settings": settings, "applied_online": applied_online},
+                headers=self._cors_headers(),
+            )
         except Exception as e:
             return web.json_response({"success": False, "error": str(e)}, status=400, headers=self._cors_headers())
 

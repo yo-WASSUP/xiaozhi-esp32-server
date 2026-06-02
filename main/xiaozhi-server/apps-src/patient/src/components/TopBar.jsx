@@ -18,7 +18,6 @@ function Clock() {
 export default function TopBar({
   connected,
   recording,
-  unread,
   micOk,
   connectStatus,
   onOpenSettings,
@@ -67,9 +66,6 @@ export default function TopBar({
         >
           {dignityMode ? '尊严疗法中' : '自然聊天'}
         </button>
-        <div style={{ color: unread > 0 ? C.amber : C.inkFaint, fontSize: 14, letterSpacing: '.08em' }}>
-          家人消息 {unread > 0 ? `${unread} 条未读` : '无未读'}
-        </div>
         {!micOk && (
           <div style={{ color: C.red, fontSize: 13, letterSpacing: '.06em' }}>需要麦克风权限</div>
         )}

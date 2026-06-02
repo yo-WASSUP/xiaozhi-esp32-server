@@ -5,6 +5,7 @@ from core.api.hospice.media import HospiceMediaMixin
 from core.api.hospice.messages import HospiceMessagesMixin
 from core.api.hospice.video import HospiceVideoMixin
 from core.api.hospice.voice import HospiceVoiceMixin
+from core.api.hospice.wakeword import HospiceWakeWordMixin
 
 
 class HospiceFamilyHandler(
@@ -13,6 +14,7 @@ class HospiceFamilyHandler(
     HospiceMediaMixin,
     HospiceCallsMixin,
     HospiceVideoMixin,
+    HospiceWakeWordMixin,
     HospiceBaseMixin,
 ):
     """Family/patient API handler composed from focused endpoint mixins."""

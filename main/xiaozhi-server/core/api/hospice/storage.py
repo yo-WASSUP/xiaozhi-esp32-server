@@ -394,13 +394,13 @@ class SessionLogger:
             return []
 
     def get_contacts(self, device_id: str) -> list:
-        """获取联系人列表（按 contact_name 聚合），包含最后一条消息与未读数。
+        """获取联系人列表，包含已绑定但尚未发消息的家属。
 
         返回：
         [
           {
-            contact_name, last_type, last_content, last_sender_role,
-            last_time, unread
+            family_id, contact_name, relationship, last_type, last_content,
+            last_sender_role, last_time, unread
           }, ...
         ]
         按 last_time 倒序。
@@ -409,30 +409,58 @@ class SessionLogger:
             conn = sqlite3.connect(self.db_path)
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            # 每个 contact 取 id 最大的那条作为"最后一条"
             cursor.execute(
                 """
-                SELECT fm.contact_name,
-                       fm.family_id,
-                       fm.message_type  AS last_type,
-                       fm.content       AS last_content,
-                       fm.sender_role   AS last_sender_role,
-                       fm.sender_name   AS last_sender_name,
-                       fm.created_at    AS last_time,
-                       (SELECT COUNT(*) FROM family_message
-                        WHERE device_id = ? AND IFNULL(family_id, contact_name) = IFNULL(fm.family_id, fm.contact_name)
-                          AND sender_role = 'family' AND IFNULL(played,0) = 0
-                       ) AS unread
-                FROM family_message fm
-                WHERE fm.device_id = ? AND fm.contact_name IS NOT NULL
-                  AND fm.id = (
-                      SELECT MAX(id) FROM family_message
-                      WHERE device_id = fm.device_id
-                        AND IFNULL(family_id, contact_name) = IFNULL(fm.family_id, fm.contact_name)
-                  )
-                ORDER BY fm.created_at DESC
+                SELECT *
+                FROM (
+                    SELECT fb.family_name AS contact_name,
+                           fb.family_id,
+                           fb.relationship,
+                           fb.created_at AS paired_at,
+                           fm.message_type AS last_type,
+                           fm.content AS last_content,
+                           fm.sender_role AS last_sender_role,
+                           fm.sender_name AS last_sender_name,
+                           fm.created_at AS last_time,
+                           (SELECT COUNT(*) FROM family_message
+                            WHERE device_id = fb.device_id AND family_id = fb.family_id
+                              AND sender_role = 'family' AND IFNULL(played,0) = 0
+                           ) AS unread
+                    FROM family_binding fb
+                    LEFT JOIN family_message fm
+                      ON fm.id = (
+                          SELECT MAX(id) FROM family_message
+                          WHERE device_id = fb.device_id AND family_id = fb.family_id
+                      )
+                    WHERE fb.device_id = ? AND fb.revoked_at IS NULL
+
+                    UNION ALL
+
+                    SELECT fm.contact_name,
+                           NULL AS family_id,
+                           NULL AS relationship,
+                           NULL AS paired_at,
+                           fm.message_type AS last_type,
+                           fm.content AS last_content,
+                           fm.sender_role AS last_sender_role,
+                           fm.sender_name AS last_sender_name,
+                           fm.created_at AS last_time,
+                           (SELECT COUNT(*) FROM family_message
+                            WHERE device_id = ? AND family_id IS NULL AND contact_name = fm.contact_name
+                              AND sender_role = 'family' AND IFNULL(played,0) = 0
+                           ) AS unread
+                    FROM family_message fm
+                    WHERE fm.device_id = ? AND fm.family_id IS NULL AND fm.contact_name IS NOT NULL
+                      AND fm.id = (
+                          SELECT MAX(id) FROM family_message
+                          WHERE device_id = fm.device_id
+                            AND family_id IS NULL
+                            AND contact_name = fm.contact_name
+                      )
+                )
+                ORDER BY COALESCE(last_time, paired_at) DESC
                 """,
-                (device_id, device_id),
+                (device_id, device_id, device_id),
             )
             rows = [dict(row) for row in cursor.fetchall()]
             conn.close()
@@ -570,6 +598,34 @@ class SessionLogger:
         except Exception as e:
             logger.bind(tag=TAG).error(f"获取家属列表失败: {e}")
             return []
+
+    def revoke_family_binding(self, device_id: str, family_id: str) -> dict:
+        """软解绑家属，保留历史消息。"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(
+                """SELECT family_id, device_id, family_name, relationship, created_at
+                   FROM family_binding
+                   WHERE device_id = ? AND family_id = ? AND revoked_at IS NULL""",
+                (device_id, family_id),
+            )
+            row = cursor.fetchone()
+            if not row:
+                conn.close()
+                return {}
+            binding = dict(row)
+            cursor.execute(
+                "UPDATE family_binding SET revoked_at = CURRENT_TIMESTAMP WHERE device_id = ? AND family_id = ?",
+                (device_id, family_id),
+            )
+            conn.commit()
+            conn.close()
+            return binding
+        except Exception as e:
+            logger.bind(tag=TAG).error(f"解绑家属失败: {e}")
+            return {}
 
 
 # 全局单例
