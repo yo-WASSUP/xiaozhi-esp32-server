@@ -40,6 +40,8 @@ def register_hospice_routes(app: web.Application, config: dict):
         web.get("/api/hospice/wakeword/ws", handler.handle_wakeword_ws),
         web.post("/api/hospice/upload", handler.handle_upload),
         web.get("/api/hospice/conversations/today", handler.handle_conversations_today),
+        web.post("/api/hospice/legacy-card/render", handler.handle_legacy_card_render),
+        web.post("/api/hospice/family-letter/render", handler.handle_family_letter_render),
         web.get("/api/hospice/video/source", handler.handle_video_source),
         web.post("/api/hospice/video/assets", handler.handle_video_assets),
         web.delete("/api/hospice/video/assets", handler.handle_video_asset_delete),

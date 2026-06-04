@@ -9,13 +9,16 @@ export default function LegacyVideoScreen() {
   const [memoryReady, setMemoryReady] = useState(false);
   const [assets, setAssets] = useState([]);
   const [storyboard, setStoryboard] = useState([]);
-  const [narrationVoice, setNarrationVoice] = useState('longlaoyi_v3');
+  const [narrationMode, setNarrationMode] = useState('longlaoyi_v3');
+  const [musicMode, setMusicMode] = useState('default');
   const [task, setTask] = useState(null);
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState('');
   const fileRef = useRef(null);
 
   const selectedCount = useMemo(() => assets.filter(item => item.selected).length, [assets]);
+  const visualAssets = useMemo(() => assets.filter(item => item.type !== 'audio'), [assets]);
+  const musicAssets = useMemo(() => assets.filter(item => item.type === 'audio'), [assets]);
   const canStoryboard = document.trim() || memoryReady;
   const hasStoryboard = storyboard.length > 0;
 
@@ -62,7 +65,7 @@ export default function LegacyVideoScreen() {
     try {
       const uploaded = [];
       for (const file of files) {
-        if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) continue;
+        if (!file.type.startsWith('image/') && !file.type.startsWith('video/') && !file.type.startsWith('audio/')) continue;
         uploaded.push(await uploadAsset(file));
       }
       setAssets(items => uniqueAssets([...uploaded, ...items]));
@@ -106,6 +109,7 @@ export default function LegacyVideoScreen() {
       setStoryboard(items => items.map(scene => (
         scene.media_url === asset.url ? { ...scene, media_url: '', media_type: '' } : scene
       )));
+      if (musicMode === asset.url) setMusicMode('default');
     } catch (err) {
       toast(err.message || '删除失败');
     }
@@ -113,7 +117,7 @@ export default function LegacyVideoScreen() {
 
   const generateStoryboard = async () => {
     if (!canStoryboard) {
-      toast('患者端还没有可用的生命文档');
+      toast('患者端还没有可用的人生故事');
       return;
     }
     setBusy(true);
@@ -125,7 +129,7 @@ export default function LegacyVideoScreen() {
         body: JSON.stringify({
           device_id: DEVICE_ID,
           document,
-          assets: assets.filter(item => item.selected),
+          assets: visualAssets.filter(item => item.selected),
         }),
       });
       const j = await r.json();
@@ -150,10 +154,19 @@ export default function LegacyVideoScreen() {
     }
     setBusy(true);
     try {
+      const hasVoiceover = narrationMode !== 'none';
+      const hasMusic = musicMode !== 'none';
       const r = await fetch('/api/hospice/video/render', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ device_id: DEVICE_ID, storyboard, narration_voice: narrationVoice }),
+        body: JSON.stringify({
+          device_id: DEVICE_ID,
+          storyboard,
+          voiceover: hasVoiceover,
+          narration_voice: hasVoiceover ? narrationMode : '',
+          background_music: hasMusic,
+          music_url: hasMusic && musicMode !== 'default' ? musicMode : '',
+        }),
       });
       const j = await r.json();
       if (!j.success) throw new Error(j.error || '视频生成失败');
@@ -182,7 +195,7 @@ export default function LegacyVideoScreen() {
       </header>
 
       <div style={statusRowStyle}>
-        <StatusPill active={canStoryboard} label={document ? (documentStatus === 'confirmed' ? '文档已确认' : '文档草稿') : (memoryReady ? '记忆可用' : '等待文档')} />
+        <StatusPill active={canStoryboard} label={document ? (documentStatus === 'confirmed' ? '故事已确认' : '故事草稿') : (memoryReady ? '记忆可用' : '等待故事')} />
         <StatusPill active={selectedCount > 0} label={`${selectedCount} 个素材`} />
         <StatusPill active={hasStoryboard} label={`${storyboard.length || 0} 个分镜`} />
       </div>
@@ -191,13 +204,13 @@ export default function LegacyVideoScreen() {
         <div style={sectionHeadStyle}>
           <div>
             <div style={sectionTitleStyle}>素材</div>
-            <div style={mutedStyle}>图片和视频会按标签匹配到分镜</div>
+            <div style={mutedStyle}>图片和视频会按标签匹配到分镜，音频可作为背景音乐</div>
           </div>
         </div>
 
         <button onClick={() => fileRef.current?.click()} disabled={busy} style={uploadDropStyle}>
           <span style={uploadIconStyle}>＋</span>
-          <span style={uploadTextStyle}>上传照片或视频</span>
+          <span style={uploadTextStyle}>上传照片、视频或音乐</span>
         </button>
 
         <div style={assetScrollerStyle}>
@@ -219,7 +232,7 @@ export default function LegacyVideoScreen() {
       <section style={bandStyle}>
         <div style={sectionHeadStyle}>
           <div>
-            <div style={sectionTitleStyle}>生命文档</div>
+            <div style={sectionTitleStyle}>人生故事</div>
             <div style={mutedStyle}>{document ? `${document.length} 字` : '患者端生成后自动读取'}</div>
           </div>
           {documentUrl && <a href={documentUrl} download style={smallLinkStyle}>Word</a>}
@@ -251,7 +264,7 @@ export default function LegacyVideoScreen() {
                 key={`${scene.title}-${index}`}
                 scene={scene}
                 index={index}
-                assets={assets}
+                assets={visualAssets}
                 onChange={(patch) => updateScene(index, patch)}
                 onDelete={() => deleteScene(index)}
               />
@@ -261,12 +274,43 @@ export default function LegacyVideoScreen() {
           <div style={emptyPanelStyle}>分镜生成后会出现在这里</div>
         )}
 
-        <div style={voiceRowStyle}>
-          <span style={voiceLabelStyle}>旁白音色</span>
-          <select value={narrationVoice} onChange={e => setNarrationVoice(e.target.value)} style={voiceSelectStyle}>
-            <option value="longlaoyi_v3">女声 · 老年</option>
-            <option value="longlaobo_v3">男声 · 老年</option>
-          </select>
+        <div style={optionPanelStyle}>
+          <div style={optionGroupStyle}>
+            <div style={optionTitleStyle}>旁白</div>
+            <div style={segmentGridStyle}>
+              <button type="button" onClick={() => setNarrationMode('none')} style={optionButtonStyle(narrationMode === 'none')}>
+                无旁白
+              </button>
+              <button type="button" onClick={() => setNarrationMode('longlaoyi_v3')} style={optionButtonStyle(narrationMode === 'longlaoyi_v3')}>
+                女声
+              </button>
+              <button type="button" onClick={() => setNarrationMode('longlaobo_v3')} style={optionButtonStyle(narrationMode === 'longlaobo_v3')}>
+                男声
+              </button>
+            </div>
+          </div>
+          <div style={optionGroupStyle}>
+            <div style={optionTitleStyle}>背景音乐</div>
+            <div style={musicGridStyle}>
+              <button type="button" onClick={() => setMusicMode('none')} style={optionButtonStyle(musicMode === 'none')}>
+                无音乐
+              </button>
+              <button type="button" onClick={() => setMusicMode('default')} style={optionButtonStyle(musicMode === 'default')}>
+                默认音乐
+              </button>
+              {musicAssets.map(asset => (
+                <button
+                  key={asset.url}
+                  type="button"
+                  onClick={() => setMusicMode(asset.url)}
+                  style={optionButtonStyle(musicMode === asset.url)}
+                  title={asset.label || asset.file_name}
+                >
+                  {asset.label || asset.file_name}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         <button onClick={renderVideo} disabled={busy || !hasStoryboard} style={renderButtonStyle(hasStoryboard)}>
@@ -282,7 +326,7 @@ export default function LegacyVideoScreen() {
       )}
 
       {flash && <div style={toastStyle}>{flash}</div>}
-      <input ref={fileRef} type="file" accept="image/*,video/*" multiple onChange={onPickFiles} style={{ display: 'none' }} />
+      <input ref={fileRef} type="file" accept="image/*,video/*,audio/*" multiple onChange={onPickFiles} style={{ display: 'none' }} />
     </div>
   );
 }
@@ -295,7 +339,12 @@ function AssetCard({ asset, busy, onChange, onSave, onDelete }) {
   return (
     <div style={assetCardStyle(asset.selected)}>
       <div style={assetPreviewWrapStyle}>
-        {asset.type === 'video' ? (
+        {asset.type === 'audio' ? (
+          <div style={audioPreviewStyle}>
+            <div style={audioIconStyle}>♪</div>
+            <audio src={asset.url} controls preload="metadata" style={audioControlStyle} />
+          </div>
+        ) : asset.type === 'video' ? (
           <video src={asset.url} controls preload="metadata" style={previewMediaStyle} />
         ) : (
           <img src={asset.url} alt={asset.label || asset.file_name} style={previewMediaStyle} />
@@ -386,6 +435,9 @@ const assetScrollerStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-
 const assetCardStyle = (selected) => ({ minWidth: 0, overflow: 'hidden', border: `1px solid ${selected ? C.amber : C.mist}55`, borderRadius: 8, background: selected ? `${C.amber}14` : 'rgba(255,250,242,.64)' });
 const assetPreviewWrapStyle = { position: 'relative', aspectRatio: '1 / 1', background: 'rgba(30,24,16,.12)' };
 const previewMediaStyle = { display: 'block', width: '100%', height: '100%', objectFit: 'cover' };
+const audioPreviewStyle = { width: '100%', height: '100%', display: 'grid', alignContent: 'center', justifyItems: 'center', gap: 12, padding: 12, boxSizing: 'border-box', background: 'rgba(122,148,128,.12)' };
+const audioIconStyle = { width: 44, height: 44, borderRadius: 999, display: 'grid', placeItems: 'center', background: `${C.sage}26`, color: C.ink, fontSize: 24, fontFamily: 'Noto Sans SC' };
+const audioControlStyle = { width: '100%', maxWidth: 132 };
 const assetSelectStyle = (selected) => ({ position: 'absolute', top: 8, right: 8, border: 0, borderRadius: 999, height: 26, padding: '0 9px', color: selected ? '#fff' : C.ink, background: selected ? C.sage : 'rgba(255,250,242,.88)', fontSize: 12, fontFamily: 'Noto Sans SC', cursor: 'pointer' });
 const assetBodyStyle = { padding: 8 };
 const compactInputStyle = { width: '100%', boxSizing: 'border-box', height: 34, border: `1px solid ${C.mist}33`, borderRadius: 6, padding: '0 8px', background: 'rgba(255,250,242,.86)', color: C.ink, fontFamily: 'Noto Sans SC', outline: 'none' };
@@ -402,9 +454,27 @@ const sceneTitleInputStyle = { ...compactInputStyle, fontWeight: 600 };
 const sceneDeleteStyle = { height: 30, border: 0, borderRadius: 6, background: 'rgba(148,65,47,.10)', color: '#813d32', fontSize: 12, fontFamily: 'Noto Sans SC', cursor: 'pointer' };
 const sceneTextStyle = { ...compactInputStyle, minHeight: 86, height: 'auto', resize: 'vertical', lineHeight: 1.5, padding: 9 };
 const selectStyle = { ...compactInputStyle, color: C.inkMid };
-const voiceRowStyle = { display: 'grid', gridTemplateColumns: '72px 1fr', alignItems: 'center', gap: 10, marginTop: 12 };
-const voiceLabelStyle = { color: C.inkFaint, fontSize: 13, fontFamily: 'Noto Sans SC' };
-const voiceSelectStyle = { ...compactInputStyle, color: C.inkMid };
+const optionPanelStyle = { display: 'grid', gap: 14, marginTop: 12, padding: 10, borderRadius: 8, border: `1px solid ${C.mist}24`, background: 'rgba(255,250,242,.45)' };
+const optionGroupStyle = { display: 'grid', gap: 8 };
+const optionTitleStyle = { color: C.inkMid, fontSize: 13, fontFamily: 'Noto Sans SC', fontWeight: 600 };
+const segmentGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 };
+const musicGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 };
+const optionButtonStyle = (active) => ({
+  minWidth: 0,
+  height: 40,
+  border: `1px solid ${active ? C.amber : C.mist}66`,
+  borderRadius: 8,
+  padding: '0 8px',
+  background: active ? `${C.amber}26` : 'rgba(255,250,242,.76)',
+  color: active ? C.ink : C.inkMid,
+  fontFamily: 'Noto Sans SC',
+  fontSize: 13,
+  fontWeight: active ? 600 : 400,
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  cursor: 'pointer',
+});
 const renderButtonStyle = (enabled) => ({ width: '100%', height: 44, marginTop: 12, border: `1px solid ${enabled ? C.green : C.mist}66`, background: enabled ? 'rgba(90,144,112,.20)' : 'rgba(255,250,242,.58)', color: enabled ? C.ink : C.inkFaint, borderRadius: 8, fontFamily: 'Noto Sans SC', fontSize: 15, fontWeight: 600, cursor: enabled ? 'pointer' : 'default' });
 const videoStyle = { display: 'block', width: '100%', borderRadius: 8, background: '#111', marginTop: 10 };
 const smallLinkStyle = { display: 'inline-flex', alignItems: 'center', height: 34, padding: '0 12px', borderRadius: 8, border: `1px solid ${C.amber}66`, color: C.ink, background: `${C.amber}20`, textDecoration: 'none', fontSize: 13, fontFamily: 'Noto Sans SC', whiteSpace: 'nowrap' };

@@ -363,7 +363,7 @@ async def generate_dignity_document(conn, msg_json: Optional[Dict[str, Any]] = N
         memory = merge_dignity_memory(memory, state_memory)
 
     if not any(isinstance(items, list) and items for items in memory.values()):
-        await send_dignity_event(conn, "document_error", {"message": "还没有可生成文档的访谈记忆。"})
+        await send_dignity_event(conn, "document_error", {"message": "还没有可生成人生故事的访谈记忆。"})
         return
 
     await send_dignity_event(conn, "document_started", {})
@@ -376,8 +376,8 @@ async def generate_dignity_document(conn, msg_json: Optional[Dict[str, Any]] = N
             memory,
         )
     except Exception as exc:
-        conn.logger.bind(tag=TAG).error(f"尊严访谈文档生成失败: {exc}")
-        await send_dignity_event(conn, "document_error", {"message": "生命访谈文档生成失败。"})
+        conn.logger.bind(tag=TAG).error(f"尊严访谈人生故事生成失败: {exc}")
+        await send_dignity_event(conn, "document_error", {"message": "人生故事生成失败。"})
         return
 
     payload = {
@@ -397,7 +397,7 @@ async def confirm_dignity_document(conn, msg_json: Optional[Dict[str, Any]] = No
     conn.dignity_patient_id = msg_json.get("patient_id") or conn.dignity_patient_id
     document = (msg_json.get("document") or "").strip()
     if not document:
-        await send_dignity_event(conn, "document_error", {"message": "请先生成并确认文档内容。"})
+        await send_dignity_event(conn, "document_error", {"message": "请先生成并确认人生故事内容。"})
         return
 
     await send_dignity_event(conn, "document_confirm_started", {})
@@ -410,8 +410,8 @@ async def confirm_dignity_document(conn, msg_json: Optional[Dict[str, Any]] = No
             document,
         )
     except Exception as exc:
-        conn.logger.bind(tag=TAG).error(f"尊严访谈 Word 文档保存失败: {exc}")
-        await send_dignity_event(conn, "document_error", {"message": "Word 文档保存失败。"})
+        conn.logger.bind(tag=TAG).error(f"尊严访谈人生故事 Word 保存失败: {exc}")
+        await send_dignity_event(conn, "document_error", {"message": "人生故事 Word 保存失败。"})
         return
 
     payload = {
@@ -613,7 +613,7 @@ def _save_dignity_document_source(
     except Exception as exc:
         logger = getattr(conn, "logger", None)
         if logger:
-            logger.bind(tag=TAG).debug(f"生命文档源文件保存失败: {exc}")
+            logger.bind(tag=TAG).debug(f"人生故事源文件保存失败: {exc}")
 
 
 def _load_dignity_document_source(conn) -> Dict[str, Any]:
@@ -636,7 +636,7 @@ def _load_dignity_document_source(conn) -> Dict[str, Any]:
     except Exception as exc:
         logger = getattr(conn, "logger", None)
         if logger:
-            logger.bind(tag=TAG).debug(f"生命文档源文件读取失败: {exc}")
+            logger.bind(tag=TAG).debug(f"人生故事源文件读取失败: {exc}")
         return {}
 
 

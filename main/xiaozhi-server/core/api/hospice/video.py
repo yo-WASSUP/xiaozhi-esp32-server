@@ -21,7 +21,8 @@ logger = setup_logging()
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi", ".ogv", ".3gp"}
-ASSET_EXTS = IMAGE_EXTS | VIDEO_EXTS
+AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"}
+ASSET_EXTS = IMAGE_EXTS | VIDEO_EXTS | AUDIO_EXTS
 
 
 class HospiceVideoMixin:
@@ -324,7 +325,7 @@ def _list_video_assets(server_root: Path, patient_id: str) -> list:
         if not path.is_file() or path.suffix.lower() not in ASSET_EXTS:
             continue
         ext = path.suffix.lower()
-        media_type = "video" if ext in VIDEO_EXTS else "image"
+        media_type = _asset_media_type(ext)
         item_meta = meta.get(path.name, {}) if isinstance(meta.get(path.name), dict) else {}
         assets.append({
             "url": f"/hospice-media/dignity_videos/assets/{patient_id}/{path.name}",
@@ -344,7 +345,7 @@ async def _save_video_asset(server_root: Path, device_id: str, field, config: di
         content_type = (field.headers.get("Content-Type") or "").split(";")[0].strip().lower()
         ext = mimetypes.guess_extension(content_type) or ".bin"
     if ext not in ASSET_EXTS:
-        raise ValueError("only image or video files are supported")
+        raise ValueError("only image, video, or audio files are supported")
 
     max_mb = int((config.get("hospice", {}) or {}).get("upload_max_mb", 50))
     max_bytes = max_mb * 1024 * 1024
@@ -368,7 +369,7 @@ async def _save_video_asset(server_root: Path, device_id: str, field, config: di
                 raise ValueError(f"file too large, max {max_mb}MB")
             file.write(chunk)
 
-    media_type = "video" if ext in VIDEO_EXTS else "image"
+    media_type = _asset_media_type(ext)
     meta = _load_asset_meta(server_root, patient_id)
     meta[safe_name] = {
         "label": filename or safe_name,
@@ -428,8 +429,16 @@ def _update_video_asset_label(server_root: Path, device_id: str, url: str, label
     ext = path.suffix.lower()
     return {
         "url": url,
-        "type": "video" if ext in VIDEO_EXTS else "image",
+        "type": _asset_media_type(ext),
         "label": current["label"],
         "file_name": path.name,
         "selected": True,
     }
+
+
+def _asset_media_type(ext: str) -> str:
+    if ext in VIDEO_EXTS:
+        return "video"
+    if ext in AUDIO_EXTS:
+        return "audio"
+    return "image"

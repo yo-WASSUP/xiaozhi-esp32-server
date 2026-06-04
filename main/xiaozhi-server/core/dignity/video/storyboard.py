@@ -101,9 +101,9 @@ def _create_llm_provider(config: Dict[str, Any]):
 def _smart_storyboard_system_prompt() -> str:
     return (
         "你是一名安宁疗护生命回顾影像导演。"
-        "你的任务是从生命文档中选择最适合做短片的关键内容，"
+        "你的任务是从人生故事中选择最适合做短片的关键内容，"
         "生成克制、温暖、适合家属观看的中文分镜。"
-        "不要逐字复述全文，不要编造文档没有的信息。"
+        "不要逐字复述全文，不要编造故事没有的信息。"
         "只输出 JSON，不要输出 Markdown。"
     )
 
@@ -111,10 +111,10 @@ def _smart_storyboard_system_prompt() -> str:
 def _smart_storyboard_user_prompt(document: str, memory: Dict[str, List[Any]]) -> str:
     memory_text = json.dumps(memory or {}, ensure_ascii=False)
     return f"""
-请把下面的生命文档整理成 {SMART_MIN_SCENES} 到 {SMART_MAX_SCENES} 个视频分镜。
+请把下面的人生故事整理成 {SMART_MIN_SCENES} 到 {SMART_MAX_SCENES} 个视频分镜。
 
 要求：
-1. 每个分镜代表一个清晰主题或人生片段，不要把文档所有句子都塞进去。
+1. 每个分镜代表一个清晰主题或人生片段，不要把故事所有句子都塞进去。
 2. 分镜顺序要自然：开场、人生经历、重要关系、珍视的事、给家人的话、收束。
 3. 每条 text 是旁白稿，建议 40 到 90 个中文字符，口语、温和、适合 TTS 朗读。
 4. title 控制在 4 到 12 个中文字符。
@@ -128,10 +128,10 @@ def _smart_storyboard_user_prompt(document: str, memory: Dict[str, List[Any]]) -
   ]
 }}
 
-生命文档：
+人生故事：
 {(document or "").strip()[:12000]}
 
-结构化记忆，可作为补充但不要优先于生命文档：
+结构化记忆，可作为补充但不要优先于人生故事：
 {memory_text[:4000]}
 """.strip()
 

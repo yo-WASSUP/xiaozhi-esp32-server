@@ -41,6 +41,12 @@ export default function App() {
   const [dignityDocumentConfirmBusy, setDignityDocumentConfirmBusy] = useState(false);
   const [dignityDocument, setDignityDocument] = useState('');
   const [dignityDocumentUrl, setDignityDocumentUrl] = useState('');
+  const [legacyCardBusy, setLegacyCardBusy] = useState(false);
+  const [legacyCard, setLegacyCard] = useState(null);
+  const [legacyCardImageUrl, setLegacyCardImageUrl] = useState('');
+  const [familyLetterBusy, setFamilyLetterBusy] = useState(false);
+  const [familyLetter, setFamilyLetter] = useState(null);
+  const [familyLetterImageUrl, setFamilyLetterImageUrl] = useState('');
   const [dignityVoiceMode, setDignityVoiceMode] = useState(false);
   const [ordinaryVoiceAwake, setOrdinaryVoiceAwake] = useState(true);
 
@@ -294,6 +300,12 @@ export default function App() {
     setDignityDocument('');
     setDignityDocumentUrl('');
     setDignityDocumentConfirmBusy(false);
+    setLegacyCard(null);
+    setLegacyCardImageUrl('');
+    setLegacyCardBusy(false);
+    setFamilyLetter(null);
+    setFamilyLetterImageUrl('');
+    setFamilyLetterBusy(false);
     const ok = await sendDignityAction('debug_reset');
     if (!ok) setConnectStatus('尊严疗法调试重置失败');
   }, [sendDignityAction]);
@@ -308,14 +320,14 @@ export default function App() {
     const ok = await sendDignityAction('generate_document', { patient_id: DEVICE_ID });
     if (!ok) {
       setDignityDocumentBusy(false);
-      setConnectStatus('生命访谈文档生成请求发送失败');
+      setConnectStatus('人生故事生成请求发送失败');
     }
   }, [sendDignityAction]);
 
   const confirmDignityDocument = useCallback(async (documentText) => {
     const document = String(documentText || '').trim();
     if (!document) {
-      setConnectStatus('请先生成并确认文档内容');
+      setConnectStatus('请先生成并确认人生故事内容');
       return;
     }
     setDignityDocumentConfirmBusy(true);
@@ -329,6 +341,62 @@ export default function App() {
   const updateDignityDocument = useCallback((nextDocument) => {
     setDignityDocument(nextDocument);
   }, []);
+
+  const generateLegacyCard = useCallback(async () => {
+    const memory = dignityStatus?.dignity_memory || {};
+    const hasMemory = Object.values(memory).some(items => Array.isArray(items) && items.length);
+    if (!hasMemory) {
+      setConnectStatus('还没有可生成传承故事卡片的访谈记忆');
+      return;
+    }
+    setLegacyCardBusy(true);
+    setLegacyCardImageUrl('');
+    try {
+      const r = await fetch('/api/hospice/legacy-card/render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_id: DEVICE_ID, memory }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.success) throw new Error(j.error || '传承故事卡片生成失败');
+      setLegacyCard(j.card || null);
+      setLegacyCardImageUrl(j.image_url || '');
+      setConnectStatus('');
+    } catch (err) {
+      console.error('legacy card generation failed', err);
+      setConnectStatus(err?.message || '传承故事卡片生成失败');
+    } finally {
+      setLegacyCardBusy(false);
+    }
+  }, [dignityStatus]);
+
+  const generateFamilyLetter = useCallback(async () => {
+    const memory = dignityStatus?.dignity_memory || {};
+    const hasMemory = Object.values(memory).some(items => Array.isArray(items) && items.length);
+    if (!hasMemory) {
+      setConnectStatus('还没有可生成家信的访谈记忆');
+      return;
+    }
+    setFamilyLetterBusy(true);
+    setFamilyLetterImageUrl('');
+    try {
+      const r = await fetch('/api/hospice/family-letter/render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_id: DEVICE_ID, memory }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.success) throw new Error(j.error || '家信生成失败');
+      setFamilyLetter(j.letter || null);
+      setFamilyLetterImageUrl(j.image_url || '');
+      setConnectStatus('');
+    } catch (err) {
+      console.error('family letter generation failed', err);
+      setConnectStatus(err?.message || '家信生成失败');
+    } finally {
+      setFamilyLetterBusy(false);
+    }
+  }, [dignityStatus]);
 
   const toggleDignityVoiceMode = useCallback(async () => {
     if (!dignityMode) return;
@@ -669,7 +737,7 @@ export default function App() {
         setDignityDocumentBusy(false);
         setDignityDocumentConfirmBusy(false);
         setDignityDocumentUrl('');
-        setConnectStatus(data.message || '生命访谈文档生成失败');
+        setConnectStatus(data.message || '人生故事生成失败');
       } else if (event === 'error') {
         dignityLiveTurnStartedAtRef.current = null;
         dignityDebugTurnStartedAtRef.current = null;
@@ -973,11 +1041,19 @@ export default function App() {
               documentConfirmBusy={dignityDocumentConfirmBusy}
               document={dignityDocument}
               documentUrl={dignityDocumentUrl}
+              legacyCardBusy={legacyCardBusy}
+              legacyCard={legacyCard}
+              legacyCardImageUrl={legacyCardImageUrl}
+              familyLetterBusy={familyLetterBusy}
+              familyLetter={familyLetter}
+              familyLetterImageUrl={familyLetterImageUrl}
               voiceMode={dignityVoiceMode}
               recording={recording}
               onRunTurn={runDignityDebugTurn}
               onReset={resetDignityDebug}
               onGenerateDocument={generateDignityDocument}
+              onGenerateLegacyCard={generateLegacyCard}
+              onGenerateFamilyLetter={generateFamilyLetter}
               onConfirmDocument={confirmDignityDocument}
               onDocumentChange={updateDignityDocument}
               onToggleVoiceMode={toggleDignityVoiceMode}
@@ -990,10 +1066,18 @@ export default function App() {
               documentConfirmBusy={dignityDocumentConfirmBusy}
               document={dignityDocument}
               documentUrl={dignityDocumentUrl}
+              legacyCardBusy={legacyCardBusy}
+              legacyCard={legacyCard}
+              legacyCardImageUrl={legacyCardImageUrl}
+              familyLetterBusy={familyLetterBusy}
+              familyLetter={familyLetter}
+              familyLetterImageUrl={familyLetterImageUrl}
               voiceMode={dignityVoiceMode}
               recording={recording}
               onReset={resetDignityDebug}
               onGenerateDocument={generateDignityDocument}
+              onGenerateLegacyCard={generateLegacyCard}
+              onGenerateFamilyLetter={generateFamilyLetter}
               onConfirmDocument={confirmDignityDocument}
               onDocumentChange={updateDignityDocument}
               onToggleVoiceMode={toggleDignityVoiceMode}

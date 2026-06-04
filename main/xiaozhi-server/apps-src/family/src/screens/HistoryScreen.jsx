@@ -5,7 +5,7 @@ import { useEmotionData } from '../hooks/useEmotionData';
 import Card from '../components/Card';
 import SLabel from '../components/SLabel';
 
-export default function HistoryScreen() {
+export default function HistoryScreen({ onUnbind, unbindBusy = false }) {
   const { trend, today, loading } = useEmotionData();
   const weekDays = padDays(trend, 7);
   const dataDays = weekDays.filter(d => d.count > 0);
@@ -71,6 +71,36 @@ export default function HistoryScreen() {
           </div>
         )}
       </Card>
+
+      {onUnbind && (
+        <Card style={{ padding: '18px', marginTop: 16 }}>
+          <SLabel>设备绑定</SLabel>
+          <div style={{ fontSize: 13, color: C.inkFaint, fontFamily: 'Noto Sans SC', fontWeight: 300, lineHeight: 1.7, marginTop: 8 }}>
+            需要重新配对家属端时，可以在这里解除当前绑定。
+          </div>
+          <button
+            onClick={onUnbind}
+            disabled={unbindBusy}
+            style={unbindButtonStyle(unbindBusy)}
+          >
+            {unbindBusy ? '解绑中' : '解除绑定'}
+          </button>
+        </Card>
+      )}
     </div>
   );
 }
+
+const unbindButtonStyle = (busy) => ({
+  width: '100%',
+  height: 40,
+  marginTop: 12,
+  border: `1px solid ${C.red}44`,
+  borderRadius: 8,
+  background: `${C.red}10`,
+  color: C.red,
+  fontSize: 13,
+  fontFamily: 'Noto Sans SC',
+  cursor: busy ? 'not-allowed' : 'pointer',
+  opacity: busy ? .55 : 1,
+});

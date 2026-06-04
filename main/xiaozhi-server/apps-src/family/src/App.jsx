@@ -7,7 +7,6 @@ import HistoryScreen from './screens/HistoryScreen';
 import LegacyVideoScreen from './screens/LegacyVideoScreen';
 import PairingScreen from './screens/PairingScreen';
 import { clearPairing, DEVICE_ID, FAMILY_ID, hasPairing } from './constants';
-import { C } from './theme';
 
 export default function App() {
   const [tab, setTab] = useState('message');
@@ -56,30 +55,9 @@ export default function App() {
           <PairingScreen />
         ) : (
           <>
-            <button
-              onClick={unbind}
-              disabled={unbindBusy}
-              style={{
-                position: 'absolute',
-                top: 18,
-                right: 18,
-                zIndex: 80,
-                border: `1px solid ${C.mist}55`,
-                borderRadius: 8,
-                background: 'rgba(255,255,255,.78)',
-                color: C.inkFaint,
-                padding: '7px 10px',
-                fontSize: 12,
-                fontFamily: 'Noto Sans SC',
-                cursor: unbindBusy ? 'not-allowed' : 'pointer',
-                opacity: unbindBusy ? .55 : 1,
-              }}
-            >
-              {unbindBusy ? '解绑中' : '解除绑定'}
-            </button>
             {tab === 'message' && <MessageScreen />}
             {tab === 'call'    && <CallScreen />}
-            {tab === 'history' && <HistoryScreen />}
+            {tab === 'history' && <HistoryScreen onUnbind={unbind} unbindBusy={unbindBusy} />}
             {tab === 'video'   && <LegacyVideoScreen />}
             <TabBar tab={tab} setTab={setTab} />
           </>

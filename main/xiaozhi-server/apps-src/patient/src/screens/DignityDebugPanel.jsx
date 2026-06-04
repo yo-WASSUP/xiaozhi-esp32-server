@@ -48,14 +48,14 @@ export default function DignityDebugPanel({
       <header style={headerStyle}>
         <div>
           <div style={titleStyle}>尊严访谈调试</div>
-          <div style={subStyle}>文本回合、结构化状态、记忆和文档调试保留在这里。</div>
+          <div style={subStyle}>文本回合、结构化状态、记忆和人生故事调试保留在这里。</div>
         </div>
         <div style={buttonRowStyle}>
           <button onClick={onToggleVoiceMode} disabled={busy} style={buttonStyle(voiceMode)}>
             {voiceMode ? (recording ? '语音中' : '语音') : '语音'}
           </button>
           <button onClick={onGenerateDocument} disabled={busy || documentBusy} style={buttonStyle(true)}>
-            {documentBusy ? '生成中' : '生成文档'}
+            {documentBusy ? '生成中' : '生成故事'}
           </button>
           <button onClick={onReset} disabled={busy} style={buttonStyle(false)}>重置</button>
         </div>
@@ -93,7 +93,7 @@ export default function DignityDebugPanel({
           {(document || documentBusy) && (
             <section style={panelStyle}>
               <div style={panelHeadStyle}>
-                <div style={panelTitleStyle}>生命文档</div>
+                <div style={panelTitleStyle}>人生故事</div>
                 {document && !documentUrl && (
                   <button onClick={() => onConfirmDocument(document)} disabled={documentConfirmBusy} style={smallButtonStyle}>
                     {documentConfirmBusy ? '保存中' : '确认'}
@@ -102,7 +102,7 @@ export default function DignityDebugPanel({
                 {documentUrl && <a href={documentUrl} download style={linkStyle}>Word</a>}
               </div>
               {documentBusy ? (
-                <div style={subStyle}>正在生成文档...</div>
+                <div style={subStyle}>正在生成人生故事...</div>
               ) : (
                 <textarea value={document} onChange={e => onDocumentChange(e.target.value)} readOnly={!!documentUrl} style={documentStyle} />
               )}
