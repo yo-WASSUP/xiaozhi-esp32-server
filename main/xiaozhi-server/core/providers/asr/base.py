@@ -17,6 +17,7 @@ from typing import Optional, Tuple, List, NamedTuple
 from core.providers.asr.dto.dto import InterfaceType
 from core.handle.receiveAudioHandle import startToChat
 from core.handle.reportHandle import enqueue_asr_report
+from core.dignity.interview_audio import save_pcm_audio_segment
 from core.utils.util import remove_punctuation_and_length
 from core.handle.receiveAudioHandle import handleAudioMessage
 import tempfile
@@ -174,6 +175,16 @@ class ASRProviderBase(ABC):
             self.stop_ws_connection()
 
             if text_len > 0:
+                if getattr(conn, "dignity_active", False):
+                    try:
+                        audio_segment = save_pcm_audio_segment(
+                            getattr(conn, "dignity_patient_id", None) or conn.headers.get("device-id"),
+                            pcm_data,
+                        )
+                        if audio_segment:
+                            conn.dignity_last_audio_segment = audio_segment
+                    except Exception as exc:
+                        logger.bind(tag=TAG).debug(f"尊严访谈原声音频保存失败: {exc}")
                 # 使用自定义模块进行上报
                 await startToChat(conn, enhanced_text)
                 audio_snapshot = asr_audio_task.copy()

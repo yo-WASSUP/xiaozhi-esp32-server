@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { C } from '../theme';
 
 function Clock() {
@@ -21,9 +21,35 @@ export default function TopBar({
   micOk,
   connectStatus,
   onOpenSettings,
+  onOpenAssistantTools,
   dignityMode,
   onToggleDignityMode,
 }) {
+  const pressTimerRef = useRef(null);
+  const longPressTriggeredRef = useRef(false);
+  const clearPressTimer = () => {
+    if (pressTimerRef.current) {
+      clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+  };
+  const beginSettingsPress = () => {
+    longPressTriggeredRef.current = false;
+    clearPressTimer();
+    pressTimerRef.current = setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      pressTimerRef.current = null;
+      if (onOpenAssistantTools) onOpenAssistantTools();
+    }, 1200);
+  };
+  const endSettingsPress = () => {
+    clearPressTimer();
+    if (longPressTriggeredRef.current) {
+      longPressTriggeredRef.current = false;
+      return;
+    }
+    onOpenSettings();
+  };
   const statusColor = connected && recording ? C.sage : connected ? C.amber : C.red;
   const statusText = connected && recording
     ? '小暖在线聆听'
@@ -73,7 +99,10 @@ export default function TopBar({
           <div style={{ color: C.inkFaint, fontSize: 12, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{connectStatus}</div>
         )}
         <button
-          onClick={onOpenSettings}
+          onPointerDown={beginSettingsPress}
+          onPointerUp={endSettingsPress}
+          onPointerLeave={clearPressTimer}
+          onPointerCancel={clearPressTimer}
           title="设置"
           style={{
             width: 38,

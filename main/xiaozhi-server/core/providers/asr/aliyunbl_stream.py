@@ -10,6 +10,7 @@ from core.providers.asr.base import ASRProviderBase
 from core.providers.asr.dto.dto import InterfaceType
 from core.handle.receiveAudioHandle import startToChat
 from core.handle.reportHandle import enqueue_asr_report
+from core.dignity.interview_audio import save_pcm_audio_segment
 from core.utils.util import remove_punctuation_and_length
 
 TAG = __name__
@@ -355,6 +356,17 @@ class ASRProvider(ASRProviderBase):
             # 立即触发对话，不等声纹
             text_len, _ = remove_punctuation_and_length(content_for_length_check)
             if text_len > 0:
+                if getattr(conn, "dignity_active", False):
+                    try:
+                        pcm_data = asr_audio_task if conn.audio_format == "pcm" else self.decode_opus(asr_audio_task)
+                        audio_segment = save_pcm_audio_segment(
+                            getattr(conn, "dignity_patient_id", None) or conn.headers.get("device-id"),
+                            pcm_data,
+                        )
+                        if audio_segment:
+                            conn.dignity_last_audio_segment = audio_segment
+                    except Exception as exc:
+                        logger.bind(tag=TAG).debug(f"尊严访谈原声音频保存失败: {exc}")
                 await startToChat(conn, enhanced_text)
                 enqueue_asr_report(conn, enhanced_text, asr_audio_task.copy())
 

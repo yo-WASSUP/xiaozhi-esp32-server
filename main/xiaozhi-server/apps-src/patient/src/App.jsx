@@ -7,12 +7,139 @@ import ChatScreen from './screens/ChatScreen';
 import InboxScreen from './screens/InboxScreen';
 import DignityDebugPanel from './screens/DignityDebugPanel';
 import DignityTherapyPanel from './screens/DignityTherapyPanel';
+import LegacyVideoScreen from './screens/LegacyVideoScreen';
 import IncomingCallOverlay from './components/IncomingCallOverlay';
 import ActiveCallOverlay from './components/ActiveCallOverlay';
 import SettingsPanel from './components/SettingsPanel';
+import InterviewAudioEditor from './components/InterviewAudioEditor';
 import useFamilyMessageReader from './hooks/useFamilyMessageReader';
+import { C } from './theme';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+function cleanReadableText(value) {
+  return String(value || '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, ' ')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/^[\s>*+-]+/gm, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/_([^_]+)_/g, '$1')
+    .replace(/[>#*_~|[\]{}]/g, '')
+    .replace(/-{3,}/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function readableJoin(parts) {
+  return parts.map(cleanReadableText).filter(Boolean).join('。');
+}
+
+function buildLegacyCardReadingText(card) {
+  if (!card) return '';
+  const parts = [
+    '我来为您读这张传承卡片。请您慢慢听，里面记录的是值得被记住的人生片段',
+    card.title,
+    card.subtitle,
+    card.intro,
+  ];
+  for (const section of card.sections || []) {
+    if (!section) continue;
+    parts.push(section.title);
+    parts.push(section.body);
+    if (section.quote) parts.push(`这一段里，有一句很重要的话：${section.quote}`);
+  }
+  if (card.wish) parts.push(`还有一个心愿：${card.wish}`);
+  if (card.closing) parts.push(card.closing);
+  parts.push('这张卡片就读到这里。谢谢您愿意把这些珍贵的记忆留下来');
+  return readableJoin(parts);
+}
+
+function buildFamilyLetterReadingText(letter) {
+  if (!letter) return '';
+  return readableJoin([
+    '我来为您读这封写给家人的信。您可以安心听，也可以随时让我停下来',
+    letter.title,
+    letter.subtitle,
+    letter.salutation,
+    ...(letter.paragraphs || []),
+    letter.signature,
+    letter.date,
+    '这封信读完了。愿这些话，能好好地陪伴您和家人',
+  ]);
+}
+
+function buildDignityReadingText(kind, payload) {
+  if (kind === 'document') {
+    const document = cleanReadableText(payload);
+    if (!document) return '';
+    return readableJoin([
+      '我来为您读这份人生故事。这里面整理了您刚才说过的重要经历和心里话。我们慢慢听',
+      document,
+      '人生故事读完了。这里的每一段经历，都值得被认真记住',
+    ]);
+  }
+  if (kind === 'card') return buildLegacyCardReadingText(payload);
+  if (kind === 'letter') return buildFamilyLetterReadingText(payload);
+  return '';
+}
+
+function interviewSegmentId(text, index = 0) {
+  let hash = 0;
+  const value = String(text || '');
+  for (let i = 0; i < value.length; i += 1) {
+    hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
+  }
+  return `seg_${String(index + 1).padStart(3, '0')}_${Math.abs(hash).toString(36)}`;
+}
+
+function normalizeInterviewSegments(segments) {
+  if (!Array.isArray(segments)) return [];
+  return segments
+    .map((item, index) => {
+      const text = String(item?.text || item?.patient || item?.patient_text || '').trim();
+      if (!text) return null;
+      return {
+        id: String(item?.id || interviewSegmentId(text, index)),
+        text,
+        speaker: item?.speaker || 'patient',
+        deleted: !!item?.deleted,
+        audio_url: item?.audio_url || '',
+        start_time: Number.isFinite(Number(item?.start_time)) ? Number(item.start_time) : undefined,
+        end_time: Number.isFinite(Number(item?.end_time)) ? Number(item.end_time) : undefined,
+      };
+    })
+    .filter(Boolean);
+}
+
+function segmentsFromTranscript(transcript) {
+  if (!Array.isArray(transcript)) return [];
+  return normalizeInterviewSegments(transcript.map((turn, index) => ({
+    id: turn?.id,
+    text: turn?.patient || turn?.patient_text || turn?.text,
+    speaker: turn?.speaker || 'patient',
+    audio_url: turn?.audio_url,
+    start_time: turn?.start_time,
+    end_time: turn?.end_time,
+    deleted: !!turn?.deleted,
+    index,
+  })));
+}
+
+function mergeInterviewSegments(current, incoming) {
+  const currentList = normalizeInterviewSegments(current);
+  const incomingList = normalizeInterviewSegments(incoming);
+  const byId = new Map(currentList.map(item => [item.id, item]));
+  for (const item of incomingList) {
+    const old = byId.get(item.id);
+    byId.set(item.id, old ? { ...item, deleted: old.deleted } : item);
+  }
+  return Array.from(byId.values());
+}
 
 export default function App() {
   const [aiState, setAiState]     = useState('idle');
@@ -47,8 +174,14 @@ export default function App() {
   const [familyLetterBusy, setFamilyLetterBusy] = useState(false);
   const [familyLetter, setFamilyLetter] = useState(null);
   const [familyLetterImageUrl, setFamilyLetterImageUrl] = useState('');
+  const [familyLetterTemplate, setFamilyLetterTemplate] = useState('warm');
+  const [interviewSegments, setInterviewSegments] = useState([]);
+  const [interviewAudioBusy, setInterviewAudioBusy] = useState(false);
   const [dignityVoiceMode, setDignityVoiceMode] = useState(false);
   const [ordinaryVoiceAwake, setOrdinaryVoiceAwake] = useState(true);
+  const [dignityReadingKind, setDignityReadingKind] = useState('');
+  const [assistantToolsOpen, setAssistantToolsOpen] = useState(false);
+  const [assistantToolView, setAssistantToolView] = useState('audio');
 
   const connectingRef = useRef(false);
   const initStartedRef = useRef(false);
@@ -300,6 +433,7 @@ export default function App() {
     setDignityDocument('');
     setDignityDocumentUrl('');
     setDignityDocumentConfirmBusy(false);
+    setDignityReadingKind('');
     setLegacyCard(null);
     setLegacyCardImageUrl('');
     setLegacyCardBusy(false);
@@ -342,6 +476,41 @@ export default function App() {
     setDignityDocument(nextDocument);
   }, []);
 
+  const loadDignityArtifacts = useCallback(async () => {
+    try {
+      const [cardRes, letterRes, audioRes] = await Promise.all([
+        fetch(`/api/hospice/legacy-card/latest?device_id=${encodeURIComponent(DEVICE_ID)}`),
+        fetch(`/api/hospice/family-letter/latest?device_id=${encodeURIComponent(DEVICE_ID)}`),
+        fetch(`/api/hospice/interview/audio-segments/latest?device_id=${encodeURIComponent(DEVICE_ID)}`),
+      ]);
+      const cardJson = await cardRes.json().catch(() => ({}));
+      const letterJson = await letterRes.json().catch(() => ({}));
+      const audioJson = await audioRes.json().catch(() => ({}));
+      if (cardRes.ok && cardJson.success && cardJson.card) {
+        setLegacyCard(cardJson.card);
+        setLegacyCardImageUrl(cardJson.image_url || '');
+      }
+      if (letterRes.ok && letterJson.success && letterJson.letter) {
+        setFamilyLetter(letterJson.letter);
+        setFamilyLetterImageUrl(letterJson.image_url || '');
+        if (letterJson.template) setFamilyLetterTemplate(letterJson.template);
+      }
+      if (audioRes.ok && audioJson.success) {
+        setInterviewSegments(items => mergeInterviewSegments(audioJson.segments || [], items));
+      }
+    } catch (err) {
+      console.error('load dignity artifacts failed', err);
+    }
+  }, []);
+
+  const updateLegacyCard = useCallback((nextCard) => {
+    setLegacyCard(nextCard);
+  }, []);
+
+  const updateFamilyLetter = useCallback((nextLetter) => {
+    setFamilyLetter(nextLetter);
+  }, []);
+
   const generateLegacyCard = useCallback(async () => {
     const memory = dignityStatus?.dignity_memory || {};
     const hasMemory = Object.values(memory).some(items => Array.isArray(items) && items.length);
@@ -370,6 +539,31 @@ export default function App() {
     }
   }, [dignityStatus]);
 
+  const saveLegacyCard = useCallback(async (cardDraft = legacyCard) => {
+    if (!cardDraft) {
+      setConnectStatus('还没有可保存的传承卡片内容');
+      return;
+    }
+    setLegacyCardBusy(true);
+    try {
+      const r = await fetch('/api/hospice/legacy-card/render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_id: DEVICE_ID, card: cardDraft }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.success) throw new Error(j.error || '传承卡片保存失败');
+      setLegacyCard(j.card || cardDraft);
+      setLegacyCardImageUrl(j.image_url || '');
+      setConnectStatus('');
+    } catch (err) {
+      console.error('legacy card save failed', err);
+      setConnectStatus(err?.message || '传承卡片保存失败');
+    } finally {
+      setLegacyCardBusy(false);
+    }
+  }, [legacyCard]);
+
   const generateFamilyLetter = useCallback(async () => {
     const memory = dignityStatus?.dignity_memory || {};
     const hasMemory = Object.values(memory).some(items => Array.isArray(items) && items.length);
@@ -383,12 +577,13 @@ export default function App() {
       const r = await fetch('/api/hospice/family-letter/render', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ device_id: DEVICE_ID, memory }),
+        body: JSON.stringify({ device_id: DEVICE_ID, memory, template: familyLetterTemplate }),
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.success) throw new Error(j.error || '家信生成失败');
       setFamilyLetter(j.letter || null);
       setFamilyLetterImageUrl(j.image_url || '');
+      if (j.template) setFamilyLetterTemplate(j.template);
       setConnectStatus('');
     } catch (err) {
       console.error('family letter generation failed', err);
@@ -396,7 +591,60 @@ export default function App() {
     } finally {
       setFamilyLetterBusy(false);
     }
-  }, [dignityStatus]);
+  }, [dignityStatus, familyLetterTemplate]);
+
+  const saveFamilyLetter = useCallback(async (letterDraft = familyLetter) => {
+    if (!letterDraft) {
+      setConnectStatus('还没有可保存的家信内容');
+      return;
+    }
+    setFamilyLetterBusy(true);
+    try {
+      const r = await fetch('/api/hospice/family-letter/render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_id: DEVICE_ID, letter: letterDraft, template: familyLetterTemplate }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.success) throw new Error(j.error || '家信保存失败');
+      setFamilyLetter(j.letter || letterDraft);
+      setFamilyLetterImageUrl(j.image_url || '');
+      if (j.template) setFamilyLetterTemplate(j.template);
+      setConnectStatus('');
+    } catch (err) {
+      console.error('family letter save failed', err);
+      setConnectStatus(err?.message || '家信保存失败');
+    } finally {
+      setFamilyLetterBusy(false);
+    }
+  }, [familyLetter, familyLetterTemplate]);
+
+  const toggleInterviewSegmentDeleted = useCallback((segmentId) => {
+    setInterviewSegments(items => items.map(item => (
+      item.id === segmentId ? { ...item, deleted: !item.deleted } : item
+    )));
+  }, []);
+
+  const saveInterviewAudioSegments = useCallback(async (segments = interviewSegments) => {
+    const payloadSegments = normalizeInterviewSegments(segments);
+    setInterviewAudioBusy(true);
+    try {
+      const r = await fetch('/api/hospice/interview/audio-segments/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_id: DEVICE_ID, segments: payloadSegments }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.success) throw new Error(j.error || '访谈语音编辑保存失败');
+      setInterviewSegments(normalizeInterviewSegments(j.segments || payloadSegments));
+      setConnectStatus('');
+    } catch (err) {
+      console.error('interview audio edit save failed', err);
+      setConnectStatus(err?.message || '访谈语音编辑保存失败');
+    } finally {
+      setInterviewAudioBusy(false);
+    }
+  }, [interviewSegments]);
 
   const toggleDignityVoiceMode = useCallback(async () => {
     if (!dignityMode) return;
@@ -554,6 +802,33 @@ export default function App() {
     ttsPlaybackAbortRef,
   });
 
+  const stopDignityReading = useCallback(async ({ resume = true } = {}) => {
+    await stopTtsPlayback();
+    stopPlayback();
+    setDignityReadingKind('');
+    if (resume && dignityModeRef.current && !dignityVoiceMode && !inCallRef.current) {
+      await pauseAssistantListening();
+    }
+  }, [dignityVoiceMode, pauseAssistantListening, stopPlayback, stopTtsPlayback]);
+
+  const readDignityContent = useCallback(async (kind, payload) => {
+    const text = buildDignityReadingText(kind, payload);
+    if (!text) {
+      setConnectStatus('当前还没有可朗读的内容');
+      return;
+    }
+    await stopDignityReading({ resume: false });
+    await pauseAssistantListening();
+    setDignityReadingKind(kind);
+    const ok = await speakViaTts(text);
+    if (!ok) {
+      setDignityReadingKind('');
+      setConnectStatus('朗读启动失败，请稍后再试');
+    } else {
+      setConnectStatus('');
+    }
+  }, [pauseAssistantListening, speakViaTts, stopDignityReading]);
+
   // 联系人列表 + SSE 订阅
   useEffect(() => {
     loadContacts();
@@ -664,10 +939,12 @@ export default function App() {
         setDignityDocumentUrl(data.document_url || '');
         setDignityDocumentConfirmBusy(false);
         if (data.reply) setMsg(data.reply);
+        void loadDignityArtifacts();
         void pauseAssistantListening();
       } else if (event === 'mode_stopped') {
         setDignityMode(false);
         setDignityVoiceMode(false);
+        setDignityReadingKind('');
         setDignityStatus(data);
         if (kwsWakeupEnabled) {
           setOrdinaryVoiceAwake(false);
@@ -784,7 +1061,18 @@ export default function App() {
       window.removeEventListener('xz:dignity', onDignity);
       window.removeEventListener('xz:ready', onReady);
     };
-  }, [connectXiaozhi, kwsWakeupEnabled, pauseAssistantListening, resumeAssistantAndStart, resumeAssistantListening, scheduleReconnect, speakViaTts, startListening, stopNormalRecording, stopTtsPlayback, stopWakeWordListening]);
+  }, [connectXiaozhi, kwsWakeupEnabled, loadDignityArtifacts, pauseAssistantListening, resumeAssistantAndStart, resumeAssistantListening, scheduleReconnect, speakViaTts, startListening, stopNormalRecording, stopTtsPlayback, stopWakeWordListening]);
+
+  useEffect(() => {
+    if (dignityMode) loadDignityArtifacts();
+  }, [dignityMode, loadDignityArtifacts]);
+
+  useEffect(() => {
+    const nextSegments = segmentsFromTranscript(dignityStatus?.transcript);
+    if (nextSegments.length) {
+      setInterviewSegments(items => mergeInterviewSegments(items, nextSegments));
+    }
+  }, [dignityStatus?.transcript]);
 
   useEffect(() => {
     if (!connected || !micOk || assistantHold || inCall) return;
@@ -819,12 +1107,12 @@ export default function App() {
   }, [dignityMode, dignityVoiceMode, pauseAssistantListening]);
 
   useEffect(() => {
-    if (settingsOpen) {
+    if (settingsOpen || assistantToolsOpen) {
       pauseAssistantListening();
     } else {
       resumeAssistantListening();
     }
-  }, [pauseAssistantListening, resumeAssistantListening, settingsOpen]);
+  }, [assistantToolsOpen, pauseAssistantListening, resumeAssistantListening, settingsOpen]);
 
   useEffect(() => () => {
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
@@ -1002,6 +1290,7 @@ export default function App() {
         micOk={micOk}
         connectStatus={connectStatus}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenAssistantTools={() => setAssistantToolsOpen(true)}
         dignityMode={dignityMode}
         onToggleDignityMode={toggleDignityMode}
       />
@@ -1031,60 +1320,74 @@ export default function App() {
           />
         </section>
         <section style={{ position: 'relative', minWidth: 0, overflow: 'hidden', background: 'rgba(255,250,242,0.28)' }}>
-          {dignityMode && dignityDebugEnabled ? (
-            <DignityDebugPanel
-              turns={dignityTurns}
-              status={dignityStatus}
-              openingReply={dignityOpeningReply}
-              busy={dignityDebugBusy}
-              documentBusy={dignityDocumentBusy}
-              documentConfirmBusy={dignityDocumentConfirmBusy}
-              document={dignityDocument}
-              documentUrl={dignityDocumentUrl}
-              legacyCardBusy={legacyCardBusy}
-              legacyCard={legacyCard}
-              legacyCardImageUrl={legacyCardImageUrl}
-              familyLetterBusy={familyLetterBusy}
-              familyLetter={familyLetter}
-              familyLetterImageUrl={familyLetterImageUrl}
-              voiceMode={dignityVoiceMode}
-              recording={recording}
-              onRunTurn={runDignityDebugTurn}
-              onReset={resetDignityDebug}
-              onGenerateDocument={generateDignityDocument}
-              onGenerateLegacyCard={generateLegacyCard}
-              onGenerateFamilyLetter={generateFamilyLetter}
-              onConfirmDocument={confirmDignityDocument}
-              onDocumentChange={updateDignityDocument}
-              onToggleVoiceMode={toggleDignityVoiceMode}
-            />
-          ) : dignityMode ? (
-            <DignityTherapyPanel
-              status={dignityStatus}
-              openingReply={dignityOpeningReply}
-              documentBusy={dignityDocumentBusy}
-              documentConfirmBusy={dignityDocumentConfirmBusy}
-              document={dignityDocument}
-              documentUrl={dignityDocumentUrl}
-              legacyCardBusy={legacyCardBusy}
-              legacyCard={legacyCard}
-              legacyCardImageUrl={legacyCardImageUrl}
-              familyLetterBusy={familyLetterBusy}
-              familyLetter={familyLetter}
-              familyLetterImageUrl={familyLetterImageUrl}
-              voiceMode={dignityVoiceMode}
-              recording={recording}
-              onReset={resetDignityDebug}
-              onGenerateDocument={generateDignityDocument}
-              onGenerateLegacyCard={generateLegacyCard}
-              onGenerateFamilyLetter={generateFamilyLetter}
-              onConfirmDocument={confirmDignityDocument}
-              onDocumentChange={updateDignityDocument}
-              onToggleVoiceMode={toggleDignityVoiceMode}
-            />
-          ) : (
-            <InboxScreen contacts={contacts} refreshContacts={loadContacts} eventTick={eventTick} maxUploadMb={maxUploadMb} onOpenContact={markThreadRead} onUnbindContact={unbindFamily} />
-          )}
+          <RightPanelTitle title={dignityMode ? '尊严疗法' : '家人信息'} />
+          <div style={rightPanelBodyStyle}>
+            {dignityMode && dignityDebugEnabled ? (
+              <DignityDebugPanel
+                turns={dignityTurns}
+                status={dignityStatus}
+                openingReply={dignityOpeningReply}
+                busy={dignityDebugBusy}
+                documentBusy={dignityDocumentBusy}
+                documentConfirmBusy={dignityDocumentConfirmBusy}
+                document={dignityDocument}
+                documentUrl={dignityDocumentUrl}
+                legacyCardBusy={legacyCardBusy}
+                legacyCard={legacyCard}
+                legacyCardImageUrl={legacyCardImageUrl}
+                familyLetterBusy={familyLetterBusy}
+                familyLetter={familyLetter}
+                familyLetterImageUrl={familyLetterImageUrl}
+                voiceMode={dignityVoiceMode}
+                recording={recording}
+                onRunTurn={runDignityDebugTurn}
+                onReset={resetDignityDebug}
+                onGenerateDocument={generateDignityDocument}
+                onGenerateLegacyCard={generateLegacyCard}
+                onGenerateFamilyLetter={generateFamilyLetter}
+                onConfirmDocument={confirmDignityDocument}
+                onDocumentChange={updateDignityDocument}
+                onToggleVoiceMode={toggleDignityVoiceMode}
+              />
+            ) : dignityMode ? (
+              <DignityTherapyPanel
+                status={dignityStatus}
+                openingReply={dignityOpeningReply}
+                documentBusy={dignityDocumentBusy}
+                documentConfirmBusy={dignityDocumentConfirmBusy}
+                document={dignityDocument}
+                documentUrl={dignityDocumentUrl}
+                legacyCardBusy={legacyCardBusy}
+                legacyCard={legacyCard}
+                legacyCardImageUrl={legacyCardImageUrl}
+                familyLetterBusy={familyLetterBusy}
+                familyLetter={familyLetter}
+                familyLetterImageUrl={familyLetterImageUrl}
+                familyLetterTemplate={familyLetterTemplate}
+                voiceMode={dignityVoiceMode}
+                recording={recording}
+                onReset={resetDignityDebug}
+                onGenerateDocument={generateDignityDocument}
+                onGenerateLegacyCard={generateLegacyCard}
+                onLegacyCardChange={updateLegacyCard}
+                onSaveLegacyCard={saveLegacyCard}
+                onGenerateFamilyLetter={generateFamilyLetter}
+                onFamilyLetterTemplateChange={setFamilyLetterTemplate}
+                onFamilyLetterChange={updateFamilyLetter}
+                onSaveFamilyLetter={saveFamilyLetter}
+                onConfirmDocument={confirmDignityDocument}
+                onDocumentChange={updateDignityDocument}
+                onToggleVoiceMode={toggleDignityVoiceMode}
+                readingKind={dignityReadingKind}
+                onReadDocument={() => readDignityContent('document', dignityDocument)}
+                onReadLegacyCard={() => readDignityContent('card', legacyCard)}
+                onReadFamilyLetter={() => readDignityContent('letter', familyLetter)}
+                onStopReading={() => stopDignityReading()}
+              />
+            ) : (
+              <InboxScreen contacts={contacts} refreshContacts={loadContacts} eventTick={eventTick} maxUploadMb={maxUploadMb} onOpenContact={markThreadRead} onUnbindContact={unbindFamily} />
+            )}
+          </div>
         </section>
       </main>
 
@@ -1106,6 +1409,191 @@ export default function App() {
           onToggleMute={toggleMute} onToggleCamera={toggleCamera} />
       )}
       <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <AssistantToolsModal
+        open={assistantToolsOpen}
+        active={assistantToolView}
+        onChange={setAssistantToolView}
+        onClose={() => setAssistantToolsOpen(false)}
+        interviewSegments={interviewSegments}
+        interviewAudioBusy={interviewAudioBusy}
+        onToggleInterviewSegment={toggleInterviewSegmentDeleted}
+        onSaveInterviewAudioSegments={saveInterviewAudioSegments}
+      />
     </PaperBg>
   );
 }
+
+function AssistantToolsModal({
+  open,
+  active,
+  onChange,
+  onClose,
+  interviewSegments,
+  interviewAudioBusy,
+  onToggleInterviewSegment,
+  onSaveInterviewAudioSegments,
+}) {
+  if (!open) return null;
+  return (
+    <div style={assistantModalOverlayStyle}>
+      <div style={assistantModalStyle}>
+        <div style={assistantModalHeaderStyle}>
+          <div>
+            <div style={assistantModalTitleStyle}>助理功能</div>
+            <div style={assistantModalSubStyle}>低频维护和审核工具</div>
+          </div>
+          <button type="button" onClick={onClose} style={assistantCloseButtonStyle}>关闭</button>
+        </div>
+        <div style={assistantModalTabsStyle}>
+          <button type="button" onClick={() => onChange('audio')} style={assistantModalTabStyle(active === 'audio')}>
+            访谈语音编辑
+          </button>
+          <button type="button" onClick={() => onChange('video')} style={assistantModalTabStyle(active === 'video')}>
+            生命影像审核
+          </button>
+        </div>
+        <div style={assistantModalBodyStyle}>
+          {active === 'video' ? (
+            <LegacyVideoScreen />
+          ) : (
+            <InterviewAudioEditor
+              segments={interviewSegments}
+              busy={interviewAudioBusy}
+              onToggleSegment={onToggleInterviewSegment}
+              onSave={onSaveInterviewAudioSegments}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RightPanelTitle({ title }) {
+  return (
+    <div style={rightPanelTitleBarStyle}>
+      <div style={rightPanelTitleStyle}>{title}</div>
+    </div>
+  );
+}
+
+const rightPanelTitleBarStyle = {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  right: 0,
+  height: 58,
+  zIndex: 8,
+  display: 'flex',
+  alignItems: 'center',
+  padding: '0 30px',
+  borderBottom: `1px solid ${C.mist}22`,
+  background: 'rgba(243,233,212,.72)',
+  backdropFilter: 'blur(12px)',
+};
+
+const rightPanelTitleStyle = {
+  color: C.ink,
+  fontSize: 21,
+  lineHeight: 1.2,
+  fontWeight: 700,
+  fontFamily: 'Noto Serif SC, serif',
+};
+
+const assistantModalOverlayStyle = {
+  position: 'fixed',
+  inset: 0,
+  zIndex: 60,
+  display: 'grid',
+  placeItems: 'center',
+  padding: 28,
+  background: 'rgba(30,24,16,.28)',
+  backdropFilter: 'blur(8px)',
+};
+
+const assistantModalStyle = {
+  width: 'min(1040px, 94vw)',
+  height: 'min(760px, 88vh)',
+  display: 'grid',
+  gridTemplateRows: 'auto auto minmax(0, 1fr)',
+  borderRadius: 8,
+  border: `1px solid ${C.mist}55`,
+  background: 'rgba(255,250,242,.96)',
+  boxShadow: '0 28px 60px rgba(31,23,14,.28)',
+  overflow: 'hidden',
+  color: C.ink,
+  fontFamily: 'Noto Sans SC',
+};
+
+const assistantModalHeaderStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 16,
+  padding: '20px 24px 14px',
+  borderBottom: `1px solid ${C.mist}22`,
+};
+
+const assistantModalTitleStyle = {
+  color: C.ink,
+  fontSize: 24,
+  lineHeight: 1.2,
+  fontWeight: 700,
+  fontFamily: 'Noto Serif SC, serif',
+};
+
+const assistantModalSubStyle = {
+  color: C.inkFaint,
+  fontSize: 14,
+  lineHeight: 1.5,
+  marginTop: 4,
+};
+
+const assistantCloseButtonStyle = {
+  height: 38,
+  padding: '0 16px',
+  borderRadius: 8,
+  border: `1px solid ${C.mist}66`,
+  background: 'rgba(255,250,242,.8)',
+  color: C.inkMid,
+  fontSize: 15,
+  fontWeight: 700,
+  fontFamily: 'Noto Sans SC',
+  cursor: 'pointer',
+};
+
+const assistantModalTabsStyle = {
+  display: 'flex',
+  gap: 10,
+  padding: '12px 24px',
+  borderBottom: `1px solid ${C.mist}22`,
+  background: 'rgba(243,233,212,.45)',
+};
+
+const assistantModalTabStyle = (active) => ({
+  height: 40,
+  padding: '0 16px',
+  borderRadius: 8,
+  border: `1px solid ${active ? C.sage : C.mist}66`,
+  background: active ? `${C.sage}22` : 'rgba(255,250,242,.72)',
+  color: active ? C.ink : C.inkMid,
+  fontSize: 15,
+  fontWeight: active ? 700 : 500,
+  fontFamily: 'Noto Sans SC',
+  cursor: 'pointer',
+});
+
+const assistantModalBodyStyle = {
+  minHeight: 0,
+  overflow: 'auto',
+  padding: 24,
+};
+
+const rightPanelBodyStyle = {
+  position: 'absolute',
+  top: 58,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  overflow: 'hidden',
+};

@@ -1,0 +1,475 @@
+<mxfile host="app.diagrams.net" agent="Codex" pages="5">
+  <diagram id="business-readable-main" name="尊严疗法机器人总体架构">
+    <mxGraphModel dx="2063" dy="1066" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1100" background="none" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;fontSize=26;fontStyle=1;align=center;verticalAlign=middle;" value="&lt;br&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;安宁疗法&lt;/span&gt;机器人系统总体架构" vertex="1">
+          <mxGeometry height="42" width="520" x="560" y="24" as="geometry" />
+        </mxCell>
+        <mxCell id="clients_group" parent="1" style="swimlane;whiteSpace=wrap;html=1;rounded=1;arcSize=8;fillColor=#E8F0F8;strokeColor=#5D7895;fontStyle=1;startSize=34;" value="用户与设备端" vertex="1">
+          <mxGeometry height="770" width="310" x="60" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="family" parent="clients_group" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#5D7895;fontSize=14;spacing=8;" value="家属端手机App&lt;br&gt;消息、通话、历史记录、情绪趋势、生命记忆视频" vertex="1">
+          <mxGeometry height="95" width="240" x="35" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="patient" parent="clients_group" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#5D7895;fontSize=14;spacing=8;" value="患者端陪伴平板App&lt;br&gt;语音陪伴、尊严疗法访谈、留言收听、家属音色" vertex="1">
+          <mxGeometry height="95" width="240" x="35" y="310" as="geometry" />
+        </mxCell>
+        <mxCell id="future_device" parent="clients_group" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4F0;strokeColor=#A25F5F;fontSize=14;spacing=8;" value="后续硬件&lt;br&gt;底盘、香薰、眼睛、四肢" vertex="1">
+          <mxGeometry height="95" width="240" x="35" y="492.5" as="geometry" />
+        </mxCell>
+        <mxCell id="platform_group" parent="1" style="swimlane;whiteSpace=wrap;html=1;rounded=1;arcSize=8;fillColor=#E8F5EF;strokeColor=#5C8A70;fontStyle=1;startSize=34;" value="小智 Server 服务平台" vertex="1">
+          <mxGeometry height="810" width="680" x="460" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="access_band" parent="platform_group" style="swimlane;whiteSpace=wrap;html=1;rounded=1;arcSize=8;fillColor=#F7FBF8;strokeColor=#A7C7B4;fontStyle=1;startSize=30;" value="统一接入层" vertex="1">
+          <mxGeometry height="155" width="610" x="35" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="web_entry" parent="access_band" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6F9A80;fontSize=13;spacing=6;" value="网页/APP 请求入口&#xa;资料、消息、摘要、视频、声音复刻" vertex="1">
+          <mxGeometry height="75" width="175" x="20" y="45" as="geometry" />
+        </mxCell>
+        <mxCell id="voice_entry" parent="access_band" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6F9A80;fontSize=13;spacing=6;" value="语音对话连接&#xa;患者端音频流与控制消息" vertex="1">
+          <mxGeometry height="75" width="175" x="217" y="45" as="geometry" />
+        </mxCell>
+        <mxCell id="realtime_entry" parent="access_band" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6F9A80;fontSize=13;spacing=6;" value="实时互动连接&#xa;消息提醒、通话信令、状态同步" vertex="1">
+          <mxGeometry height="75" width="175" x="414" y="45" as="geometry" />
+        </mxCell>
+        <mxCell id="business_band" parent="platform_group" style="swimlane;whiteSpace=wrap;html=1;rounded=1;arcSize=8;fillColor=#F7FBF8;strokeColor=#A7C7B4;fontStyle=1;startSize=30;" value="业务能力层" vertex="1">
+          <mxGeometry height="285" width="610" x="35" y="245" as="geometry" />
+        </mxCell>
+        <mxCell id="ai_chat" parent="business_band" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6F9A80;fontSize=13;spacing=6;" value="AI 陪伴对话&#xa;自然语音交流、四川方言适配" vertex="1">
+          <mxGeometry height="70" width="175" x="20" y="48" as="geometry" />
+        </mxCell>
+        <mxCell id="family_message" parent="business_band" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6F9A80;fontSize=13;spacing=6;" value="家属互动&#xa;留言、未读提醒、按联系人会话" vertex="1">
+          <mxGeometry height="70" width="175" x="217" y="48" as="geometry" />
+        </mxCell>
+        <mxCell id="call_service" parent="business_band" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6F9A80;fontSize=13;spacing=6;" value="语音/视频通话&#xa;呼叫、接听、挂断、通话状态" vertex="1">
+          <mxGeometry height="70" width="175" x="414" y="48" as="geometry" />
+        </mxCell>
+        <mxCell id="dignity_service" parent="business_band" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF6E8;strokeColor=#B79A65;fontSize=13;fontStyle=1;spacing=6;" value="尊严疗法访谈&#xa;引导追问、记忆提取、人工关注提醒" vertex="1">
+          <mxGeometry height="80" width="175" x="20" y="145" as="geometry" />
+        </mxCell>
+        <mxCell id="summary_service" parent="business_band" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6F9A80;fontSize=13;spacing=6;" value="情绪观察与摘要" vertex="1">
+          <mxGeometry height="80" width="175" x="217" y="145" as="geometry" />
+        </mxCell>
+        <mxCell id="legacy_service" parent="business_band" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6F9A80;fontSize=13;spacing=6;" value="生命记忆产物&#xa;人生故事、传承卡片、家信、记忆视频" vertex="1">
+          <mxGeometry height="80" width="175" x="414" y="145" as="geometry" />
+        </mxCell>
+        <mxCell id="data_band" parent="platform_group" style="swimlane;whiteSpace=wrap;html=1;rounded=1;arcSize=8;fillColor=#F7FBF8;strokeColor=#A7C7B4;fontStyle=1;startSize=30;" value="数据与文件层" vertex="1">
+          <mxGeometry height="170" width="610" x="35" y="585" as="geometry" />
+        </mxCell>
+        <mxCell id="conversation_data" parent="data_band" style="shape=cylinder3d;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#FFFFFF;strokeColor=#6F9A80;fontSize=13;" value="交流记录与情绪数据" vertex="1">
+          <mxGeometry height="65" width="160" x="25" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="media_data" parent="data_band" style="shape=cylinder3d;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#FFFFFF;strokeColor=#6F9A80;fontSize=13;" value="留言媒体与视频素材" vertex="1">
+          <mxGeometry height="65" width="160" x="225" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="dignity_data" parent="data_band" style="shape=cylinder3d;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#FFFFFF;strokeColor=#6F9A80;fontSize=13;" value="尊严疗法记忆与文档" vertex="1">
+          <mxGeometry height="65" width="160" x="425" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="e_access_business" edge="1" parent="platform_group" source="access_band" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#5C8A70;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="business_band" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_business_data" edge="1" parent="platform_group" source="business_band" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#5C8A70;" target="data_band" value="保存与读取">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ai_group" parent="1" style="swimlane;whiteSpace=wrap;html=1;rounded=1;arcSize=8;fillColor=#F2E9F8;strokeColor=#83679A;fontStyle=1;startSize=34;" value="AI 能力" vertex="1">
+          <mxGeometry height="310" width="310" x="1220" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="asr" parent="ai_group" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#83679A;fontSize=14;" value="语音识别 / 唤醒词" vertex="1">
+          <mxGeometry height="44" width="230" x="40" y="65" as="geometry" />
+        </mxCell>
+        <mxCell id="llm" parent="ai_group" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#83679A;fontSize=14;" value="大模型对话与访谈决策" vertex="1">
+          <mxGeometry height="44" width="230" x="40" y="125" as="geometry" />
+        </mxCell>
+        <mxCell id="tts" parent="ai_group" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#83679A;fontSize=14;" value="语音合成 / 家属音色播报" vertex="1">
+          <mxGeometry height="44" width="230" x="40" y="185" as="geometry" />
+        </mxCell>
+        <mxCell id="voice_clone" parent="ai_group" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#83679A;fontSize=14;" value="家属声音复刻" vertex="1">
+          <mxGeometry height="44" width="230" x="40" y="245" as="geometry" />
+        </mxCell>
+        <mxCell id="hardware_group" parent="1" style="swimlane;whiteSpace=wrap;html=1;rounded=1;arcSize=8;fillColor=#F8E8E8;strokeColor=#A25F5F;fontStyle=1;startSize=34;" value="机器人硬件控制" vertex="1">
+          <mxGeometry height="320" width="310" x="1220" y="560" as="geometry" />
+        </mxCell>
+        <mxCell id="adapter" parent="hardware_group" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF3D8;strokeColor=#A25F5F;fontSize=14;fontStyle=1;spacing=6;" value="机器人控制适配层&#xa;把业务动作翻译成硬件指令" vertex="1">
+          <mxGeometry height="70" width="230" x="40" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="base" parent="hardware_group" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A25F5F;fontSize=13;" value="底盘：移动、转向、回充、停止" vertex="1">
+          <mxGeometry height="38" width="230" x="40" y="145" as="geometry" />
+        </mxCell>
+        <mxCell id="expression" parent="hardware_group" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A25F5F;fontSize=13;" value="眼睛/四肢：表情、挥手、安抚动作" vertex="1">
+          <mxGeometry height="38" width="230" x="40" y="195" as="geometry" />
+        </mxCell>
+        <mxCell id="aroma" parent="hardware_group" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A25F5F;fontSize=13;" value="香薰：场景、档位、时长控制" vertex="1">
+          <mxGeometry height="38" width="230" x="40" y="245" as="geometry" />
+        </mxCell>
+        <mxCell id="e_adapter_base" edge="1" parent="hardware_group" source="adapter" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#A25F5F;" target="base" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_adapter_expression" edge="1" parent="hardware_group" source="adapter" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#A25F5F;" target="expression" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_adapter_aroma" edge="1" parent="hardware_group" source="adapter" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#A25F5F;" target="aroma" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="protocol_note" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFBEF;strokeColor=#D6B656;fontSize=12;align=left;spacing=8;" value="&lt;div&gt;技术说明：&lt;/div&gt;&lt;div&gt;普通操作走请求接口（HTTP API），例如发消息、查记录、生成视频。&lt;/div&gt;&lt;div&gt;语音陪伴走长连接（设备 WebSocket），用于连续传声音和接收 AI 回复。&lt;/div&gt;&lt;div&gt;消息提醒走实时通知（SSE），通话建立走通话信令（WebRTC 信令）。&lt;/div&gt;" vertex="1">
+          <mxGeometry height="110" width="455" x="572.5" y="930" as="geometry" />
+        </mxCell>
+        <mxCell id="e_clients_web" edge="1" parent="1" source="family" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#5D7895;" target="web_entry" value="业务请求">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_patient_voice" edge="1" parent="1" source="patient" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#5D7895;" target="voice_entry" value="语音与控制">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="215" y="290" />
+              <mxPoint x="800" y="290" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_patient_realtime" edge="1" parent="1" source="patient" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#5D7895;" target="realtime_entry" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="215" y="290" />
+              <mxPoint x="996" y="290" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_business_ai" edge="1" parent="1" source="business_band" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#83679A;" target="ai_group" value="调用 AI 能力">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_business_hardware" edge="1" parent="1" source="business_band" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#A25F5F;" target="adapter" value="输出动作意图">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1160" y="478" />
+              <mxPoint x="1160" y="650" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_future_adapter" edge="1" parent="1" source="future_device" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1;strokeColor=#A25F5F;" target="adapter" value="硬件状态回传">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="215" y="860" />
+              <mxPoint x="1180" y="860" />
+              <mxPoint x="1180" y="650" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="patient-ai-voice-flow" name="患者端与AI语音主链路">
+    <mxGraphModel dx="1406" dy="746" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="850" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="voice_title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;fontSize=24;fontStyle=1;align=center;" value="患者端与 AI 语音主链路" vertex="1">
+          <mxGeometry height="40" width="420" x="430" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="v_patient" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0F8;strokeColor=#5D7895;fontSize=14;fontStyle=1;spacing=8;" value="患者端应用&lt;br&gt;麦克风采集、界面状态、语音播放" vertex="1">
+          <mxGeometry height="90" width="230" x="50" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="v_ws" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5EF;strokeColor=#5C8A70;fontSize=14;spacing=8;" value="语音对话连接&#xa;保持设备会话，传输声音和控制状态" vertex="1">
+          <mxGeometry height="90" width="240" x="390" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="v_asr" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2E9F8;strokeColor=#83679A;fontSize=14;spacing=8;" value="VAD/ 语音识别 / 唤醒词&lt;br&gt;把患者声音转成文本" vertex="1">
+          <mxGeometry height="80" width="220" x="730" y="115" as="geometry" />
+        </mxCell>
+        <mxCell id="v_llm" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2E9F8;strokeColor=#83679A;fontSize=14;fontStyle=1;spacing=8;" value="大模型与尊严疗法引擎&#xa;判断意图、生成回复、输出动作意图" vertex="1">
+          <mxGeometry height="90" width="220" x="730" y="245" as="geometry" />
+        </mxCell>
+        <mxCell id="v_tts" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2E9F8;strokeColor=#83679A;fontSize=14;spacing=8;" value="语音合成&#xa;可使用家属音色播报" vertex="1">
+          <mxGeometry height="80" width="220" x="730" y="395" as="geometry" />
+        </mxCell>
+        <mxCell id="v_store" parent="1" style="shape=cylinder3d;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#FFFFFF;strokeColor=#6F9A80;fontSize=13;" value="会话、情绪与尊严疗法记忆&#xa;保存交流记录、情绪、重要人生记忆" vertex="1">
+          <mxGeometry height="90" width="240" x="1050" y="245" as="geometry" />
+        </mxCell>
+        <mxCell id="v_robot" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8E8E8;strokeColor=#A25F5F;fontSize=14;spacing=8;" value="机器人表现&#xa;播放回复、更新界面、执行眼睛/动作意图" vertex="1">
+          <mxGeometry height="90" width="280" x="340" y="390" as="geometry" />
+        </mxCell>
+        <mxCell id="v_e1" edge="1" parent="1" source="v_patient" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#5D7895;" target="v_ws" value="连接设备会话">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v_e2" edge="1" parent="1" source="v_ws" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#83679A;" target="v_asr" value="上传音频流">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v_e3" edge="1" parent="1" source="v_asr" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#83679A;" target="v_llm" value="识别文本">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v_e4" edge="1" parent="1" source="v_llm" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#83679A;" target="v_tts" value="回复与访谈决策">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v_e5" edge="1" parent="1" source="v_llm" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#5C8A70;" target="v_store" value="保存">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v_e6" edge="1" parent="1" source="v_tts" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#83679A;" target="v_robot" value="合成音频">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v_e7" edge="1" parent="1" source="v_robot" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#A25F5F;" target="v_patient" value="播放给患者">
+          <mxGeometry relative="1" x="0.4634" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="family-message-call-flow" name="家属端消息通话通知链路">
+    <mxGraphModel dx="1406" dy="746" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="fm_title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;fontSize=24;fontStyle=1;align=center;" value="家属端消息、通话与通知链路" vertex="1">
+          <mxGeometry height="40" width="460" x="480" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="fm_family" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0F8;strokeColor=#5D7895;fontSize=14;fontStyle=1;spacing=8;" value="家属端 App&#xa;绑定、发消息、发起通话、查看状态" vertex="1">
+          <mxGeometry height="90" width="210" x="40" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="fm_api" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5EF;strokeColor=#5C8A70;fontSize=14;spacing=8;" value="业务请求入口&#xa;绑定、消息、历史、摘要、媒体上传" vertex="1">
+          <mxGeometry height="90" width="230" x="390" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="fm_store" parent="1" style="shape=cylinder3d;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#FFFFFF;strokeColor=#6F9A80;fontSize=13;" value="数据与媒体存储&#xa;绑定关系、留言、图片、音频、视频" vertex="1">
+          <mxGeometry height="90" width="230" x="720" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="fm_notify" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF6E8;strokeColor=#B79A65;fontSize=14;spacing=8;" value="实时通知&#xa;新消息、已读、绑定解除、状态变化" vertex="1">
+          <mxGeometry height="90" width="230" x="390" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="fm_patient" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F0F8;strokeColor=#5D7895;fontSize=14;fontStyle=1;spacing=8;" value="患者端 App&#xa;收到提醒、读取留言、回复家属" vertex="1">
+          <mxGeometry height="90" width="230" x="720" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="fm_call" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2E9F8;strokeColor=#83679A;fontSize=14;spacing=8;" value="通话连接协调&#xa;呼叫、接听、拒接、挂断、连接建立" vertex="1">
+          <mxGeometry height="90" width="230" x="390" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="fm_browser" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8E8E8;strokeColor=#A25F5F;fontSize=14;spacing=8;" value="浏览器通话能力&#xa;真正传输双方音频/视频画面" vertex="1">
+          <mxGeometry height="90" width="230" x="720" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="fm_e1" edge="1" parent="1" source="fm_family" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#5D7895;" target="fm_api" value="绑定和发送消息">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="320" y="365" />
+              <mxPoint x="320" y="175" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fm_e2" edge="1" parent="1" source="fm_api" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#5C8A70;" target="fm_store" value="保存">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fm_e3" edge="1" parent="1" source="fm_api" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#B79A65;" target="fm_notify" value="发布提醒">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fm_e4" edge="1" parent="1" source="fm_notify" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#B79A65;" target="fm_patient" value="实时到达">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fm_e5" edge="1" parent="1" source="fm_patient" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#5D7895;" target="fm_api" value="回复/标记已读">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="650" y="375" />
+              <mxPoint x="650" y="175" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fm_e6" edge="1" parent="1" source="fm_family" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#83679A;" target="fm_call" value="发起通话">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="320" y="365" />
+              <mxPoint x="320" y="585" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fm_e7" edge="1" parent="1" source="fm_call" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#83679A;" target="fm_patient" value="通知患者端接听">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="650" y="585" />
+              <mxPoint x="650" y="375" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fm_e8" edge="1" parent="1" source="fm_call" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#A25F5F;" target="fm_browser" value="建立音视频">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="dignity-products-flow" name="尊严疗法与生命记忆产物链路">
+    <mxGraphModel dx="1406" dy="746" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="dg_title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;fontSize=24;fontStyle=1;align=center;" value="尊严疗法与生命记忆产物链路" vertex="1">
+          <mxGeometry height="40" width="500" x="430" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="dg_start" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#E8F0F8;strokeColor=#5D7895;fontSize=14;fontStyle=1;" value="进入尊严疗法模式" vertex="1">
+          <mxGeometry height="65" width="170" x="60" y="195" as="geometry" />
+        </mxCell>
+        <mxCell id="dg_interview" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF6E8;strokeColor=#B79A65;fontSize=14;fontStyle=1;spacing=8;" value="AI 引导式访谈&#xa;围绕人生经历、关系、价值观和心愿追问" vertex="1">
+          <mxGeometry height="95" width="240" x="410" y="180" as="geometry" />
+        </mxCell>
+        <mxCell id="dg_memory" parent="1" style="shape=cylinder3d;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#FFFFFF;strokeColor=#6F9A80;fontSize=13;" value="提取并保存重要记忆&#xa;形成结构化人生故事素材" vertex="1">
+          <mxGeometry height="95" width="220" x="760" y="180" as="geometry" />
+        </mxCell>
+        <mxCell id="dg_alert" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#F8E8E8;strokeColor=#A25F5F;fontSize=14;fontStyle=1;" value="需要人工关注？" vertex="1">
+          <mxGeometry height="90" width="140" x="1080" y="185" as="geometry" />
+        </mxCell>
+        <mxCell id="dg_nurse" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8E8E8;strokeColor=#A25F5F;fontSize=13;spacing=8;" value="触发提醒&#xa;需要家属或护理人员关注" vertex="1">
+          <mxGeometry height="70" width="200" x="1050" y="340" as="geometry" />
+        </mxCell>
+        <mxCell id="dg_doc" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5EF;strokeColor=#5C8A70;fontSize=14;spacing=8;" value="人生故事文档&#xa;生成草稿、患者端确认、保存 Word" vertex="1">
+          <mxGeometry height="90" width="210" x="270" y="410" as="geometry" />
+        </mxCell>
+        <mxCell id="dg_card" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5EF;strokeColor=#5C8A70;fontSize=14;" value="传承卡片" vertex="1">
+          <mxGeometry height="60" width="170" x="630" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="dg_letter" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5EF;strokeColor=#5C8A70;fontSize=14;" value="家信" vertex="1">
+          <mxGeometry height="60" width="170" x="870" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="dg_storyboard" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2E9F8;strokeColor=#83679A;fontSize=14;spacing=8;" value="生命记忆视频分镜&#xa;根据故事文档生成短片结构" vertex="1">
+          <mxGeometry height="85" width="210" x="270" y="620" as="geometry" />
+        </mxCell>
+        <mxCell id="dg_assets" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2E9F8;strokeColor=#83679A;fontSize=14;spacing=8;" value="匹配素材&#xa;家属上传图片、视频、音频" vertex="1">
+          <mxGeometry height="85" width="210" x="570" y="620" as="geometry" />
+        </mxCell>
+        <mxCell id="dg_render" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2E9F8;strokeColor=#83679A;fontSize=14;fontStyle=1;spacing=8;" value="渲染生命记忆视频&#xa;生成可播放结果" vertex="1">
+          <mxGeometry height="85" width="210" x="870" y="620" as="geometry" />
+        </mxCell>
+        <mxCell id="dg_e1" edge="1" parent="1" source="dg_start" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#5D7895;" target="dg_interview" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dg_e2" edge="1" parent="1" source="dg_interview" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#B79A65;" target="dg_memory" value="访谈内容">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dg_e3" edge="1" parent="1" source="dg_memory" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#A25F5F;" target="dg_alert" value="评估风险">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1020" y="230" />
+              <mxPoint x="1020" y="230" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="dg_e4" edge="1" parent="1" source="dg_alert" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#A25F5F;" target="dg_nurse" value="是">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dg_e6" edge="1" parent="1" source="dg_memory" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#5C8A70;" target="dg_doc" value="生成产物">
+          <mxGeometry relative="1" x="-0.8322" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="860" y="310" />
+              <mxPoint x="375" y="310" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="dg_e7" edge="1" parent="1" source="dg_memory" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#5C8A70;" target="dg_card" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dg_e8" edge="1" parent="1" source="dg_memory" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#5C8A70;" target="dg_letter" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dg_e9" edge="1" parent="1" source="dg_doc" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#83679A;" target="dg_storyboard" value="视频化">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dg_e10" edge="1" parent="1" source="dg_storyboard" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#83679A;" target="dg_assets" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dg_e11" edge="1" parent="1" source="dg_assets" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#83679A;" target="dg_render" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="robot-hardware-interaction" name="后续机器人底盘与硬件交互架构">
+    <mxGraphModel dx="1480" dy="785" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1650" pageHeight="950" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="hw_title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;fontSize=24;fontStyle=1;align=center;" value="后续机器人底盘与硬件交互架构" vertex="1">
+          <mxGeometry height="42" width="520" x="520" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_business" parent="1" style="swimlane;whiteSpace=wrap;html=1;rounded=1;arcSize=8;fillColor=#E8F0F8;strokeColor=#5D7895;fontStyle=1;startSize=34;" value="业务意图层" vertex="1">
+          <mxGeometry height="250" width="270" x="60" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_dignity" parent="hw_business" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#5D7895;fontSize=13;spacing=6;" value="尊严疗法动作意图&#xa;robot_action / eye_expression" vertex="1">
+          <mxGeometry height="65" width="200" x="35" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_voice" parent="hw_business" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#5D7895;fontSize=13;" value="自然语言控制意图" vertex="1">
+          <mxGeometry height="50" width="200" x="35" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_adapter" parent="1" style="swimlane;whiteSpace=wrap;html=1;rounded=1;arcSize=8;fillColor=#FFF6E8;strokeColor=#B79A65;fontStyle=1;startSize=34;" value="机器人控制适配层" vertex="1">
+          <mxGeometry height="470" width="320" x="430" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_map" parent="hw_adapter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B79A65;fontSize=13;spacing=6;" value="动作意图映射&lt;br&gt;把自然语言转成硬件动作" vertex="1">
+          <mxGeometry height="65" width="230" x="45" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_safety" parent="hw_adapter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF3D8;strokeColor=#B79A65;fontSize=13;fontStyle=1;spacing=6;" value="安全门禁&#xa;急停、限速、距离、权限、故障拦截" vertex="1">
+          <mxGeometry height="75" width="230" x="45" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_state" parent="hw_adapter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B79A65;fontSize=13;spacing=6;" value="设备状态缓存&#xa;电量、位姿、香薰、故障、急停状态" vertex="1">
+          <mxGeometry height="75" width="230" x="45" y="318" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_router" parent="hw_adapter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B79A65;fontSize=13;spacing=6;" value="协议路由&#xa;选择 ROS2、MQTT、TCP、串口/CAN、Home Assistant" vertex="1">
+          <mxGeometry height="75" width="230" x="45" y="225" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_e2" edge="1" parent="hw_adapter" source="hw_map" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#B79A65;" target="hw_safety" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_e3" edge="1" parent="hw_adapter" source="hw_safety" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#B79A65;" target="hw_router" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_protocol" parent="1" style="swimlane;whiteSpace=wrap;html=1;rounded=1;arcSize=8;fillColor=#E8F5EF;strokeColor=#5C8A70;fontStyle=1;startSize=34;" value="通信协议层" vertex="1">
+          <mxGeometry height="470" width="230" x="850" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_ros2" parent="hw_protocol" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#5C8A70;fontSize=13;" value="ROS2" vertex="1">
+          <mxGeometry height="42" width="140" x="45" y="65" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_mqtt" parent="hw_protocol" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#5C8A70;fontSize=13;" value="MQTT" vertex="1">
+          <mxGeometry height="42" width="140" x="45" y="135" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_tcp" parent="hw_protocol" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#5C8A70;fontSize=13;" value="TCP / UDP" vertex="1">
+          <mxGeometry height="42" width="140" x="45" y="205" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_serial" parent="hw_protocol" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#5C8A70;fontSize=13;" value="串口 / CAN" vertex="1">
+          <mxGeometry height="42" width="140" x="45" y="275" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_ha" parent="hw_protocol" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#5C8A70;fontSize=13;" value="Home Assistant" vertex="1">
+          <mxGeometry height="42" width="140" x="45" y="345" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_hardware" parent="1" style="swimlane;whiteSpace=wrap;html=1;rounded=1;arcSize=8;fillColor=#F8E8E8;strokeColor=#A25F5F;fontStyle=1;startSize=34;" value="硬件执行层" vertex="1">
+          <mxGeometry height="470" width="300" x="1180" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_base" parent="hw_hardware" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A25F5F;fontSize=13;spacing=6;" value="底盘&#xa;移动、转向、回充、停止" vertex="1">
+          <mxGeometry height="60" width="210" x="45" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_arm" parent="hw_hardware" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A25F5F;fontSize=13;spacing=6;" value="四肢/机械臂&#xa;挥手、指向、复位" vertex="1">
+          <mxGeometry height="60" width="210" x="45" y="145" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_eye" parent="hw_hardware" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A25F5F;fontSize=13;spacing=6;" value="眼睛/表情屏&#xa;微笑、关注、安抚" vertex="1">
+          <mxGeometry height="60" width="210" x="45" y="230" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_aroma" parent="hw_hardware" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A25F5F;fontSize=13;spacing=6;" value="香薰&#xa;开启、关闭、档位、场景" vertex="1">
+          <mxGeometry height="60" width="210" x="45" y="315" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_sensor" parent="hw_hardware" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A25F5F;fontSize=13;spacing=6;" value="传感器&#xa;电量、位姿、避障、故障" vertex="1">
+          <mxGeometry height="60" width="210" x="45" y="400" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_e1" edge="1" parent="1" source="hw_business" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#5D7895;" target="hw_map" value="统一进入">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="380" y="212" />
+              <mxPoint x="380" y="212" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="hw_e4" edge="1" parent="1" source="hw_router" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#5C8A70;" target="hw_protocol" value="选择协议">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="740" y="355" />
+              <mxPoint x="740" y="355" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="hw_e5" edge="1" parent="1" source="hw_protocol" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeWidth=2;strokeColor=#A25F5F;" target="hw_hardware" value="控制硬件">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_e6" edge="1" parent="1" source="hw_sensor" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1;strokeColor=#A25F5F;" target="hw_state" value="状态回传">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

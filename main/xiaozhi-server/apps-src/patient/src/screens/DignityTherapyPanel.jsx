@@ -10,6 +10,14 @@ const MEMORY_LABELS = {
   messages_to_family: '给家人的话',
 };
 
+const LETTER_TEMPLATES = [
+  { id: 'warm', name: '暖黄', swatch: '#e8c98f', preview: './images/letter_templates/warm.png', envelope: './images/letter_templates/envelope-warm.png' },
+  { id: 'floral', name: '花影', swatch: '#e7a7b0', preview: './images/letter_templates/floral.png', envelope: './images/letter_templates/envelope-floral.png' },
+  { id: 'bamboo', name: '青竹', swatch: '#9fbd94', preview: './images/letter_templates/bamboo.png', envelope: './images/letter_templates/envelope-bamboo.png' },
+  { id: 'sky', name: '晴空', swatch: '#9fc5df', preview: './images/letter_templates/sky.png', envelope: './images/letter_templates/envelope-sky.png' },
+  { id: 'plain', name: '素白', swatch: '#f4ecdd', preview: './images/letter_templates/plain.png', envelope: './images/letter_templates/envelope-plain.png' },
+];
+
 function collectMemorySections(memory) {
   return Object.entries(memory || {})
     .map(([key, value]) => {
@@ -29,10 +37,8 @@ function MemoryPanel({
   ready,
   busy,
   cardBusy,
-  letterBusy,
   onGenerateDocument,
   onGenerateLegacyCard,
-  onGenerateFamilyLetter,
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -62,14 +68,6 @@ function MemoryPanel({
           >
             {cardBusy ? '生成中' : ready ? '生成传承卡片' : '记忆不足'}
           </button>
-          <button
-            onClick={onGenerateFamilyLetter}
-            disabled={letterBusy || !ready}
-            title={ready ? '' : `至少需要 ${MIN_MEMORY_ITEMS_FOR_DOCUMENT} 条生命记忆`}
-            style={letterButtonStyle(ready)}
-          >
-            {letterBusy ? '生成中' : ready ? '生成家信' : '记忆不足'}
-          </button>
         </div>
       </div>
       {open && (
@@ -94,8 +92,38 @@ function MemoryPanel({
   );
 }
 
-function LegacyCardPanel({ card, imageUrl, busy }) {
-  if (!busy && !imageUrl) return null;
+function ReadButton({ active, disabled, onRead, onStop }) {
+  return (
+    <button
+      type="button"
+      onClick={active ? onStop : onRead}
+      disabled={disabled && !active}
+      style={readButtonStyle(active, !(disabled && !active))}
+    >
+      {active ? '停止朗读' : '朗读'}
+    </button>
+  );
+}
+
+function LegacyCardPanel({ card, imageUrl, busy, reading, onRead, onStopReading, onChange, onSave }) {
+  const [editing, setEditing] = useState(false);
+  if (!busy && !imageUrl && !card) return null;
+  const canRead = !!card && !busy;
+  const sections = Array.isArray(card?.sections) ? card.sections : [];
+  const updateCard = (patch) => onChange({ ...(card || {}), ...patch });
+  const updateSection = (index, patch) => {
+    updateCard({
+      sections: sections.map((section, i) => (i === index ? { ...section, ...patch } : section)),
+    });
+  };
+  const removeSection = (index) => {
+    updateCard({ sections: sections.filter((_, i) => i !== index) });
+  };
+  const addSection = () => {
+    updateCard({
+      sections: [...sections, { title: '新的片段', body: '', quote: '' }],
+    });
+  };
   return (
     <section style={legacyCardPanelStyle}>
       <div style={sectionHeadStyle}>
@@ -103,44 +131,167 @@ function LegacyCardPanel({ card, imageUrl, busy }) {
           <div style={sectionTitleStyle}>传承故事图文卡片</div>
           <div style={subTextStyle}>{imageUrl ? '已生成，可下载图片分享给家人' : '正在整理并生成图文卡片'}</div>
         </div>
-        {imageUrl && <a href={imageUrl} download style={downloadLinkStyle}>下载图片</a>}
+        <div style={headActionsStyle}>
+          <ReadButton active={reading} disabled={!canRead} onRead={onRead} onStop={onStopReading} />
+          {card && <button onClick={() => setEditing(value => !value)} disabled={busy} style={smallButtonStyle(true)}>{editing ? '完成编辑' : '编辑'}</button>}
+          {editing && card && <button onClick={() => onSave(card).then(() => setEditing(false))} disabled={busy} style={smallButtonStyle(true)}>{busy ? '保存中' : '保存卡片'}</button>}
+          {imageUrl && <a href={imageUrl} download style={downloadLinkStyle}>下载图片</a>}
+        </div>
       </div>
       {busy ? (
         <div style={loadingTextStyle}>正在生成传承故事卡片...</div>
       ) : (
-        <div style={legacyPreviewWrapStyle}>
-          <img src={imageUrl} alt={card?.title || '传承故事图文卡片'} style={legacyPreviewStyle} />
-        </div>
+        <>
+          {editing && card && (
+            <div style={editorPanelStyle}>
+              <input value={card.title || ''} onChange={e => updateCard({ title: e.target.value })} style={fieldStyle} placeholder="卡片标题" />
+              <input value={card.subtitle || ''} onChange={e => updateCard({ subtitle: e.target.value })} style={fieldStyle} placeholder="副标题" />
+              <textarea value={card.intro || ''} onChange={e => updateCard({ intro: e.target.value })} rows={3} style={textareaFieldStyle} placeholder="开篇文字" />
+              {sections.map((section, index) => (
+                <div key={index} style={nestedEditorStyle}>
+                  <div style={sectionEditorHeadStyle}>
+                    <span style={editorLabelStyle}>片段 {index + 1}</span>
+                    <button type="button" onClick={() => removeSection(index)} style={textButtonStyle}>删除</button>
+                  </div>
+                  <input value={section.title || ''} onChange={e => updateSection(index, { title: e.target.value })} style={fieldStyle} placeholder="片段标题" />
+                  <textarea value={section.body || ''} onChange={e => updateSection(index, { body: e.target.value })} rows={3} style={textareaFieldStyle} placeholder="片段正文" />
+                  <input value={section.quote || ''} onChange={e => updateSection(index, { quote: e.target.value })} style={fieldStyle} placeholder="引用/金句" />
+                </div>
+              ))}
+              <button type="button" onClick={addSection} style={smallButtonStyle(true)}>添加片段</button>
+              <textarea value={card.wish || ''} onChange={e => updateCard({ wish: e.target.value })} rows={2} style={textareaFieldStyle} placeholder="最大的心愿" />
+              <input value={card.closing || ''} onChange={e => updateCard({ closing: e.target.value })} style={fieldStyle} placeholder="结尾落款" />
+            </div>
+          )}
+          {imageUrl && (
+            <div style={legacyPreviewWrapStyle}>
+              <img src={imageUrl} alt={card?.title || '传承故事图文卡片'} style={legacyPreviewStyle} />
+            </div>
+          )}
+        </>
       )}
     </section>
   );
 }
 
-function FamilyLetterPanel({ letter, imageUrl, busy }) {
-  if (!busy && !imageUrl) return null;
+function FamilyLetterPanel({ letter, imageUrl, busy, ready, reading, template, onTemplateChange, onGenerate, onRead, onStopReading, onChange, onSave }) {
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const canRead = !!letter && !busy;
+  const selectedTemplate = LETTER_TEMPLATES.find(item => item.id === template) || LETTER_TEMPLATES[0];
+  const paragraphs = Array.isArray(letter?.paragraphs) ? letter.paragraphs : [];
+  const updateLetter = (patch) => onChange({ ...(letter || {}), ...patch });
+  const updateParagraph = (index, value) => {
+    updateLetter({ paragraphs: paragraphs.map((paragraph, i) => (i === index ? value : paragraph)) });
+  };
+  const removeParagraph = (index) => {
+    updateLetter({ paragraphs: paragraphs.filter((_, i) => i !== index) });
+  };
+  const addParagraph = () => {
+    updateLetter({ paragraphs: [...paragraphs, ''] });
+  };
   return (
     <section style={legacyCardPanelStyle}>
+      <style>{letterAnimationCss}</style>
       <div style={sectionHeadStyle}>
         <div>
           <div style={sectionTitleStyle}>写给家人的一封信</div>
-          <div style={subTextStyle}>{imageUrl ? '已生成，可下载图片分享给家人' : '正在整理并生成家信'}</div>
+          <div style={subTextStyle}>{imageUrl ? `已装入${selectedTemplate.name}信封，点击信封查看` : '正在整理并生成家信'}</div>
         </div>
-        {imageUrl && <a href={imageUrl} download style={downloadLinkStyle}>下载图片</a>}
+        <div style={headActionsStyle}>
+          {open && <ReadButton active={reading} disabled={!canRead} onRead={onRead} onStop={onStopReading} />}
+          {open && letter && <button onClick={() => setEditing(value => !value)} disabled={busy} style={smallButtonStyle(true)}>{editing ? '完成编辑' : '编辑'}</button>}
+          {open && editing && letter && <button onClick={() => onSave(letter).then(() => setEditing(false))} disabled={busy} style={smallButtonStyle(true)}>{busy ? '保存中' : '保存家信'}</button>}
+          {open && imageUrl && <a href={imageUrl} download style={downloadLinkStyle}>下载图片</a>}
+        </div>
+      </div>
+      <div style={templatePanelStyle}>
+        <div style={templateLabelStyle}>家信信纸</div>
+        <div style={templateGridStyle}>
+          {LETTER_TEMPLATES.map(item => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onTemplateChange(item.id)}
+              style={templateButtonStyle(template === item.id)}
+            >
+              <span style={{ ...templateSwatchStyle, backgroundImage: `url(${item.preview})` }} />
+              {item.name}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={onGenerate}
+          disabled={busy || !ready}
+          title={ready ? '' : `至少需要 ${MIN_MEMORY_ITEMS_FOR_DOCUMENT} 条生命记忆`}
+          style={letterTemplateGenerateStyle(!busy && ready)}
+        >
+          {busy ? '生成中' : ready ? (letter ? '按此信纸重新生成' : '生成家信') : '记忆不足'}
+        </button>
       </div>
       {busy ? (
         <div style={loadingTextStyle}>正在生成家信...</div>
+      ) : !letter && !imageUrl ? (
+        <div style={emptyArtifactStyle}>选择一款信纸，生成后会装入电子信封。</div>
+      ) : !open ? (
+        <button type="button" onClick={() => setOpen(true)} style={envelopeStyle(selectedTemplate.swatch, selectedTemplate.envelope)}>
+          <span style={envelopeLinerStyle(selectedTemplate.swatch, selectedTemplate.preview)} />
+          <span style={envelopeFlapStyle} />
+          <span style={envelopeLeftFoldStyle} />
+          <span style={envelopeRightFoldStyle} />
+          <span style={envelopeAddressStyle}>
+            <span style={envelopeAddressLineStyle} />
+            <span style={envelopeAddressLineStyle} />
+            <span style={{ ...envelopeAddressLineStyle, width: 96 }} />
+          </span>
+          <span style={envelopeStampStyle(selectedTemplate.swatch)} />
+          <span style={envelopeSealStyle(selectedTemplate.swatch)} />
+          <span style={envelopeTitleStyle}>给家人的一封信</span>
+          <span style={envelopeHintStyle}>轻触打开</span>
+        </button>
       ) : (
-        <div style={legacyPreviewWrapStyle}>
-          <img src={imageUrl} alt={letter?.title || '写给家人的一封信'} style={legacyPreviewStyle} />
-        </div>
+        <>
+          <button type="button" onClick={() => { setOpen(false); setEditing(false); }} style={closeEnvelopeButtonStyle}>收起信封</button>
+          {editing && letter && (
+            <div style={editorPanelStyle}>
+              <input value={letter.title || ''} onChange={e => updateLetter({ title: e.target.value })} style={fieldStyle} placeholder="家信标题" />
+              <input value={letter.subtitle || ''} onChange={e => updateLetter({ subtitle: e.target.value })} style={fieldStyle} placeholder="副标题" />
+              <input value={letter.salutation || ''} onChange={e => updateLetter({ salutation: e.target.value })} style={fieldStyle} placeholder="称呼" />
+              {paragraphs.map((paragraph, index) => (
+                <div key={index} style={nestedEditorStyle}>
+                  <div style={sectionEditorHeadStyle}>
+                    <span style={editorLabelStyle}>正文 {index + 1}</span>
+                    <button type="button" onClick={() => removeParagraph(index)} style={textButtonStyle}>删除</button>
+                  </div>
+                  <textarea value={paragraph || ''} onChange={e => updateParagraph(index, e.target.value)} rows={4} style={textareaFieldStyle} placeholder="家信正文" />
+                </div>
+              ))}
+              <button type="button" onClick={addParagraph} style={smallButtonStyle(true)}>添加正文</button>
+              <input value={letter.signature || ''} onChange={e => updateLetter({ signature: e.target.value })} style={fieldStyle} placeholder="署名" />
+              <input value={letter.date || ''} onChange={e => updateLetter({ date: e.target.value })} style={fieldStyle} placeholder="日期" />
+            </div>
+          )}
+          <div style={letterRevealStageStyle}>
+            <div style={openedEnvelopeStyle(selectedTemplate.swatch, selectedTemplate.envelope)}>
+              <span style={openedEnvelopeBackStyle(selectedTemplate.swatch, selectedTemplate.preview)} />
+              <span style={openedEnvelopeFlapStyle(selectedTemplate.swatch, selectedTemplate.envelope)} />
+              <span style={openedEnvelopePocketStyle(selectedTemplate.swatch, selectedTemplate.envelope)} />
+              <span style={openedEnvelopeSealStyle(selectedTemplate.swatch)} />
+            </div>
+            <div style={revealedLetterFrameStyle}>
+              <img src={imageUrl} alt={letter?.title || '写给家人的一封信'} style={revealedLetterImageStyle} />
+            </div>
+          </div>
+        </>
       )}
     </section>
   );
 }
 
-function DocumentPanel({ document, documentUrl, busy, confirmBusy, onChange, onConfirm }) {
+function DocumentPanel({ document, documentUrl, busy, confirmBusy, reading, onChange, onConfirm, onRead, onStopReading }) {
   if (!busy && !document) return null;
   const canConfirm = !!String(document || '').trim() && !busy && !confirmBusy;
+  const canRead = !!String(document || '').trim() && !busy;
   return (
     <section style={documentPanelStyle}>
       <div style={sectionHeadStyle}>
@@ -151,6 +302,7 @@ function DocumentPanel({ document, documentUrl, busy, confirmBusy, onChange, onC
           </div>
         </div>
         <div style={headActionsStyle}>
+          <ReadButton active={reading} disabled={!canRead} onRead={onRead} onStop={onStopReading} />
           {canConfirm && (
             <button onClick={() => onConfirm(document)} disabled={confirmBusy} style={smallButtonStyle(true)}>
               {confirmBusy ? '保存中' : documentUrl ? '保存修改' : '确认故事'}
@@ -188,9 +340,20 @@ export default function DignityTherapyPanel({
   onGenerateDocument,
   onGenerateLegacyCard,
   onGenerateFamilyLetter,
+  onLegacyCardChange,
+  onSaveLegacyCard,
+  familyLetterTemplate,
+  onFamilyLetterTemplateChange,
+  onFamilyLetterChange,
+  onSaveFamilyLetter,
   onConfirmDocument,
   onDocumentChange,
   onToggleVoiceMode,
+  readingKind,
+  onReadDocument,
+  onReadLegacyCard,
+  onReadFamilyLetter,
+  onStopReading,
 }) {
   const memorySections = collectMemorySections(status?.dignity_memory);
   const memoryItemCount = memorySections.reduce((sum, section) => sum + section.items.length, 0);
@@ -213,10 +376,8 @@ export default function DignityTherapyPanel({
         ready={documentReady}
         busy={documentBusy}
         cardBusy={legacyCardBusy}
-        letterBusy={familyLetterBusy}
         onGenerateDocument={onGenerateDocument}
         onGenerateLegacyCard={onGenerateLegacyCard}
-        onGenerateFamilyLetter={onGenerateFamilyLetter}
       />
 
       <DocumentPanel
@@ -224,20 +385,37 @@ export default function DignityTherapyPanel({
         documentUrl={documentUrl}
         busy={documentBusy}
         confirmBusy={documentConfirmBusy}
+        reading={readingKind === 'document'}
         onChange={onDocumentChange}
         onConfirm={onConfirmDocument}
+        onRead={onReadDocument}
+        onStopReading={onStopReading}
       />
 
       <LegacyCardPanel
         card={legacyCard}
         imageUrl={legacyCardImageUrl}
         busy={legacyCardBusy}
+        reading={readingKind === 'card'}
+        onRead={onReadLegacyCard}
+        onStopReading={onStopReading}
+        onChange={onLegacyCardChange}
+        onSave={onSaveLegacyCard}
       />
 
       <FamilyLetterPanel
         letter={familyLetter}
         imageUrl={familyLetterImageUrl}
         busy={familyLetterBusy}
+        ready={documentReady}
+        reading={readingKind === 'letter'}
+        template={familyLetterTemplate}
+        onTemplateChange={onFamilyLetterTemplateChange}
+        onGenerate={onGenerateFamilyLetter}
+        onRead={onReadFamilyLetter}
+        onStopReading={onStopReading}
+        onChange={onFamilyLetterChange}
+        onSave={onSaveFamilyLetter}
       />
     </div>
   );
@@ -254,7 +432,12 @@ const memoryToggleStyle = { height: 40, padding: '0 14px', borderRadius: 8, bord
 const memoryCountStyle = { marginLeft: 10, color: C.inkFaint, fontSize: 15, fontFamily: 'Noto Sans SC' };
 const generateButtonStyle = (enabled) => ({ height: 40, padding: '0 16px', borderRadius: 8, border: `1px solid ${enabled ? C.amber : C.mist}66`, background: enabled ? `${C.amber}22` : 'rgba(255,250,242,.46)', color: enabled ? C.ink : C.inkFaint, fontSize: 15, fontWeight: enabled ? 700 : 500, fontFamily: 'Noto Sans SC', cursor: enabled ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' });
 const cardButtonStyle = (enabled) => ({ height: 40, padding: '0 16px', borderRadius: 8, border: `1px solid ${enabled ? C.sage : C.mist}66`, background: enabled ? `${C.sage}22` : 'rgba(255,250,242,.46)', color: enabled ? C.ink : C.inkFaint, fontSize: 15, fontWeight: enabled ? 700 : 500, fontFamily: 'Noto Sans SC', cursor: enabled ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' });
-const letterButtonStyle = (enabled) => ({ height: 40, padding: '0 16px', borderRadius: 8, border: `1px solid ${enabled ? C.green : C.mist}66`, background: enabled ? `${C.green}20` : 'rgba(255,250,242,.46)', color: enabled ? C.ink : C.inkFaint, fontSize: 15, fontWeight: enabled ? 700 : 500, fontFamily: 'Noto Sans SC', cursor: enabled ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' });
+const templatePanelStyle = { display: 'grid', gap: 8, padding: '10px 12px', border: `1px solid ${C.mist}22`, borderRadius: 8, background: 'rgba(255,250,242,.42)' };
+const templateLabelStyle = { color: C.inkMid, fontSize: 14, fontWeight: 700 };
+const templateGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(5, minmax(82px, 1fr))', gap: 8 };
+const templateButtonStyle = (active) => ({ minHeight: 78, minWidth: 0, display: 'grid', alignContent: 'center', justifyItems: 'center', gap: 6, borderRadius: 8, border: `1px solid ${active ? C.green : C.mist}66`, background: active ? `${C.green}18` : 'rgba(255,250,242,.74)', color: active ? C.ink : C.inkMid, fontSize: 14, fontWeight: active ? 700 : 500, fontFamily: 'Noto Sans SC', cursor: 'pointer', whiteSpace: 'nowrap' });
+const templateSwatchStyle = { width: 46, height: 34, borderRadius: 4, border: `1px solid ${C.mist}77`, flex: '0 0 auto', backgroundSize: 'cover', backgroundPosition: 'center', boxShadow: '0 4px 10px rgba(40,28,16,.12)' };
+const letterTemplateGenerateStyle = (enabled) => ({ height: 40, justifySelf: 'start', padding: '0 16px', borderRadius: 8, border: `1px solid ${enabled ? C.green : C.mist}66`, background: enabled ? `${C.green}22` : 'rgba(255,250,242,.52)', color: enabled ? C.ink : C.inkFaint, fontSize: 15, fontWeight: enabled ? 700 : 500, fontFamily: 'Noto Sans SC', cursor: enabled ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' });
 const memoryListStyle = { display: 'grid', gap: 12, marginTop: 12 };
 const memorySectionStyle = { border: `1px solid ${C.mist}22`, borderRadius: 8, background: 'rgba(255,250,242,.46)', padding: '12px 14px' };
 const memorySectionTitleStyle = { color: C.inkMid, fontSize: 15, fontWeight: 600, marginBottom: 8 };
@@ -267,8 +450,48 @@ const sectionHeadStyle = { display: 'flex', justifyContent: 'space-between', gap
 const headActionsStyle = { display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' };
 const sectionTitleStyle = { color: C.ink, fontSize: 20, fontFamily: 'Noto Serif SC, serif', fontWeight: 600 };
 const loadingTextStyle = { color: C.inkFaint, fontSize: 15, padding: '12px 0' };
+const emptyArtifactStyle = { color: C.inkFaint, fontSize: 15, lineHeight: 1.7, padding: '12px 14px', border: `1px dashed ${C.mist}55`, borderRadius: 8, background: 'rgba(255,250,242,.48)', marginTop: 10 };
 const documentEditorStyle = { width: '100%', minHeight: 330, resize: 'vertical', boxSizing: 'border-box', border: `1px solid ${C.mist}26`, borderRadius: 8, padding: '16px 17px', outline: 'none', color: C.inkMid, background: 'rgba(255,250,242,.84)', fontSize: 16, lineHeight: 1.8, fontFamily: 'Noto Sans SC', boxShadow: 'inset 0 1px 0 rgba(255,255,255,.7)' };
 const smallButtonStyle = (enabled) => ({ height: 40, padding: '0 16px', borderRadius: 8, border: `1px solid ${enabled ? C.sage : C.mist}66`, background: enabled ? `${C.sage}22` : 'rgba(255,250,242,.52)', color: enabled ? C.ink : C.inkFaint, fontSize: 15, fontWeight: enabled ? 700 : 500, cursor: enabled ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap', fontFamily: 'Noto Sans SC' });
+const readButtonStyle = (active, enabled) => ({ height: 40, padding: '0 16px', borderRadius: 8, border: `1px solid ${active ? C.green : enabled ? C.sage : C.mist}66`, background: active ? `${C.green}24` : enabled ? `${C.sage}20` : 'rgba(255,250,242,.52)', color: enabled ? C.ink : C.inkFaint, fontSize: 15, fontWeight: enabled ? 700 : 500, cursor: enabled ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap', fontFamily: 'Noto Sans SC' });
 const downloadLinkStyle = { display: 'inline-flex', alignItems: 'center', height: 40, padding: '0 16px', borderRadius: 8, border: `1px solid ${C.amber}88`, color: C.ink, background: `${C.amber}24`, fontSize: 15, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' };
 const legacyPreviewWrapStyle = { marginTop: 12, maxWidth: 420, borderRadius: 8, border: `1px solid ${C.mist}26`, background: 'rgba(255,250,242,.64)', overflow: 'hidden' };
 const legacyPreviewStyle = { display: 'block', width: '100%', height: 'auto' };
+const editorPanelStyle = { display: 'grid', gap: 10, maxWidth: 620, padding: 12, border: `1px solid ${C.mist}22`, borderRadius: 8, background: 'rgba(255,250,242,.46)', marginTop: 10 };
+const fieldStyle = { width: '100%', boxSizing: 'border-box', height: 40, borderRadius: 8, border: `1px solid ${C.mist}33`, background: 'rgba(255,250,242,.86)', color: C.inkMid, padding: '0 12px', outline: 'none', fontSize: 15, fontFamily: 'Noto Sans SC' };
+const textareaFieldStyle = { ...fieldStyle, height: 'auto', minHeight: 86, padding: '10px 12px', resize: 'vertical', lineHeight: 1.6 };
+const nestedEditorStyle = { display: 'grid', gap: 8, padding: 10, borderRadius: 8, border: `1px solid ${C.mist}22`, background: 'rgba(255,250,242,.58)' };
+const sectionEditorHeadStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 };
+const editorLabelStyle = { color: C.inkMid, fontSize: 14, fontWeight: 700 };
+const textButtonStyle = { border: 0, background: 'transparent', color: C.red, fontSize: 13, fontFamily: 'Noto Sans SC', cursor: 'pointer', padding: 0 };
+const envelopeStyle = (accent, image) => ({ position: 'relative', width: 'min(500px, 100%)', aspectRatio: '1.5 / 1', border: `1px solid ${C.mist}55`, borderRadius: 8, backgroundImage: `linear-gradient(180deg, rgba(255,250,242,.08), rgba(60,38,18,.08)), url(${image})`, backgroundSize: 'cover', backgroundPosition: 'center', overflow: 'hidden', cursor: 'pointer', boxShadow: '0 18px 34px rgba(30,24,16,.18), inset 0 1px 0 rgba(255,255,255,.88)', fontFamily: 'Noto Sans SC', color: C.ink, display: 'grid', placeItems: 'center', marginTop: 10 });
+const envelopeLinerStyle = (accent, image) => ({ position: 'absolute', left: 18, right: 18, top: 12, height: '38%', clipPath: 'polygon(0 0, 100% 0, 50% 100%)', backgroundImage: `linear-gradient(180deg, rgba(255,250,242,.55), ${accent}1f), url(${image})`, backgroundSize: 'cover', backgroundPosition: 'center top', borderRadius: '0 0 8px 8px', opacity: .9, filter: 'saturate(.92) brightness(1.03)' });
+const envelopeFlapStyle = { position: 'absolute', left: 0, right: 0, top: 0, height: '58%', clipPath: 'polygon(0 0, 100% 0, 50% 100%)', background: 'linear-gradient(180deg, rgba(255,252,246,.18), rgba(92,63,35,.1))', borderBottom: `1px solid ${C.mist}44`, boxShadow: '0 8px 20px rgba(58,45,28,.08)' };
+const envelopeLeftFoldStyle = { position: 'absolute', left: 0, bottom: 0, width: '52%', height: '64%', clipPath: 'polygon(0 0, 100% 100%, 0 100%)', background: 'linear-gradient(35deg, rgba(255,250,242,.18), rgba(86,58,30,.09))', borderTop: `1px solid ${C.mist}33` };
+const envelopeRightFoldStyle = { position: 'absolute', right: 0, bottom: 0, width: '52%', height: '64%', clipPath: 'polygon(100% 0, 0 100%, 100% 100%)', background: 'linear-gradient(325deg, rgba(255,250,242,.16), rgba(86,58,30,.08))', borderTop: `1px solid ${C.mist}33` };
+const envelopeAddressStyle = { position: 'absolute', left: 32, bottom: 36, display: 'grid', gap: 8, width: 150, opacity: .44 };
+const envelopeAddressLineStyle = { display: 'block', width: 136, height: 2, borderRadius: 999, background: C.inkMid };
+const envelopeStampStyle = (accent) => ({ position: 'absolute', top: 26, right: 28, width: 54, height: 44, borderRadius: 6, border: `2px solid ${accent}`, background: `linear-gradient(135deg, rgba(255,250,242,.74), ${accent}28)`, boxShadow: 'inset 0 0 0 3px rgba(255,250,242,.72)' });
+const envelopeSealStyle = (accent) => ({ position: 'absolute', top: '43%', left: '50%', width: 50, height: 50, transform: 'translate(-50%, -50%)', borderRadius: 999, background: `radial-gradient(circle at 35% 30%, #fffaf2 0 7%, ${accent} 24%, ${accent} 100%)`, border: '3px solid rgba(255,250,242,.94)', boxShadow: '0 7px 16px rgba(30,24,16,.2)' });
+const envelopeTitleStyle = { position: 'relative', zIndex: 1, marginTop: 52, fontSize: 22, fontFamily: 'Noto Serif SC, serif', fontWeight: 600, letterSpacing: 0, padding: '5px 16px', borderRadius: 8, background: 'rgba(255,250,242,.56)', boxShadow: '0 1px 0 rgba(255,255,255,.65)' };
+const envelopeHintStyle = { position: 'absolute', bottom: 22, left: 0, right: 0, textAlign: 'center', color: C.inkFaint, fontSize: 14 };
+const closeEnvelopeButtonStyle = { height: 36, padding: '0 14px', borderRadius: 8, border: `1px solid ${C.mist}66`, background: 'rgba(255,250,242,.72)', color: C.inkMid, fontSize: 14, fontWeight: 600, fontFamily: 'Noto Sans SC', cursor: 'pointer', marginBottom: 2 };
+const letterRevealStageStyle = { position: 'relative', width: 'min(560px, 100%)', minHeight: 640, marginTop: 12, paddingTop: 12 };
+const openedEnvelopeStyle = (accent, image) => ({ position: 'absolute', left: '50%', bottom: 12, width: 'min(520px, 100%)', aspectRatio: '1.5 / 1', transform: 'translateX(-50%)', borderRadius: 8, backgroundImage: `linear-gradient(180deg, rgba(255,250,242,.08), rgba(60,38,18,.08)), url(${image})`, backgroundSize: 'cover', backgroundPosition: 'center', boxShadow: '0 18px 36px rgba(30,24,16,.18)', overflow: 'visible' });
+const openedEnvelopeBackStyle = (accent, image) => ({ position: 'absolute', left: 18, right: 18, top: 10, height: '43%', clipPath: 'polygon(0 0, 100% 0, 50% 100%)', backgroundImage: `linear-gradient(180deg, rgba(255,250,242,.48), ${accent}1f), url(${image})`, backgroundSize: 'cover', backgroundPosition: 'center top', borderRadius: '8px 8px 0 0', filter: 'saturate(.92) brightness(1.03)' });
+const openedEnvelopeFlapStyle = (accent, image) => ({ position: 'absolute', left: 0, right: 0, top: 0, height: '58%', transformOrigin: '50% 0', clipPath: 'polygon(0 0, 100% 0, 50% 100%)', backgroundImage: `linear-gradient(180deg, rgba(255,252,244,.24), rgba(72,46,24,.12)), url(${image})`, backgroundSize: 'cover', backgroundPosition: 'center top', boxShadow: '0 10px 22px rgba(45,32,18,.12)', animation: 'letterEnvelopeOpen .55s ease-out both' });
+const openedEnvelopePocketStyle = (accent, image) => ({ position: 'absolute', left: 0, right: 0, bottom: 0, height: '68%', clipPath: 'polygon(0 0, 50% 56%, 100% 0, 100% 100%, 0 100%)', backgroundImage: `linear-gradient(180deg, rgba(255,248,235,.22), rgba(62,40,22,.1)), url(${image})`, backgroundSize: 'cover', backgroundPosition: 'center bottom', border: `1px solid ${C.mist}55`, borderTop: 0, borderRadius: '0 0 8px 8px', zIndex: 3 });
+const openedEnvelopeSealStyle = (accent) => ({ position: 'absolute', left: '50%', bottom: '36%', width: 42, height: 42, transform: 'translateX(-50%)', borderRadius: 999, background: accent, border: '3px solid rgba(255,250,242,.9)', boxShadow: '0 7px 14px rgba(30,24,16,.18)', zIndex: 4 });
+const revealedLetterFrameStyle = { position: 'relative', zIndex: 2, width: 'min(420px, 76%)', margin: '0 auto 190px', borderRadius: 6, background: '#f5e4c4', boxShadow: '0 24px 38px rgba(38,27,15,.22)', overflow: 'hidden', animation: 'letterPaperPull .82s cubic-bezier(.2,.72,.15,1) both' };
+const revealedLetterImageStyle = { display: 'block', width: '100%', height: 'auto', filter: 'saturate(.98) contrast(1.02)' };
+const letterAnimationCss = `
+@keyframes letterPaperPull {
+  0% { transform: translateY(260px) scale(.82); opacity: .25; }
+  55% { transform: translateY(74px) scale(.93); opacity: 1; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes letterEnvelopeOpen {
+  0% { transform: rotateX(0deg); opacity: 1; }
+  100% { transform: rotateX(64deg) translateY(-10px); opacity: .86; }
+}
+`;

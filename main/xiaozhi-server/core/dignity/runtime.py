@@ -29,6 +29,10 @@ from core.dignity.engine.prompts import (
     build_memory_reply_user_prompt,
 )
 from core.dignity.engine.state_updates import merge_dignity_memory
+from core.dignity.interview_audio import (
+    apply_audio_edits_to_memory,
+    merge_and_save_transcript_segments,
+)
 from core.dignity.engine.rules import strategy_to_eye_expression, strategy_to_robot_action
 from core.handle.sendAudioHandle import send_stt_message
 from core.utils.dialogue import Message
@@ -361,6 +365,7 @@ async def generate_dignity_document(conn, msg_json: Optional[Dict[str, Any]] = N
         state_memory = conn.dignity_state.get("dignity_memory", {})
     if state_memory:
         memory = merge_dignity_memory(memory, state_memory)
+    memory = apply_audio_edits_to_memory(_memory_key(conn), memory)
 
     if not any(isinstance(items, list) and items for items in memory.values()):
         await send_dignity_event(conn, "document_error", {"message": "还没有可生成人生故事的访谈记忆。"})
@@ -458,6 +463,7 @@ async def handle_dignity_turn_if_active(conn, text: str) -> bool:
 
     state["response_latency_ms"] = int((perf_counter() - started_at) * 1000)
     conn.dignity_state = state
+    _save_interview_audio_segments(conn, state)
     payload = _state_payload(state)
     payload["patient_text"] = patient_text
 
@@ -512,6 +518,7 @@ async def _update_state_in_background(conn, state: DignityState, target: str) ->
 
     payload = _state_payload(updated_state)
     payload["patient_text"] = updated_state.get("patient_text", "")
+    _save_interview_audio_segments(conn, updated_state)
     await send_dignity_event(conn, event, payload)
 
 
@@ -525,7 +532,9 @@ def _run_dignity_turn(conn, patient_text: str) -> DignityState:
         state = _apply_persisted_memory(conn, state)
     else:
         state["decision_model"] = _get_decision_model(conn)
-    return run_text_turn(state, patient_text)
+    next_state = run_text_turn(state, patient_text)
+    _attach_last_audio_segment(conn, next_state)
+    return next_state
 
 
 def _run_dignity_debug_turn(conn, patient_text: str) -> DignityState:
@@ -556,6 +565,39 @@ def _run_background_state_update(conn, state: DignityState) -> DignityState:
         )
         _save_persisted_memory(conn, next_state["dignity_memory"])
     return next_state
+
+
+def _save_interview_audio_segments(conn, state: Optional[DignityState]) -> None:
+    if not state:
+        return
+    try:
+        merge_and_save_transcript_segments(_memory_key(conn), state.get("transcript", []))
+    except Exception as exc:
+        logger = getattr(conn, "logger", None)
+        if logger:
+            logger.bind(tag=TAG).debug(f"访谈语音审核片段保存失败: {exc}")
+
+
+def _attach_last_audio_segment(conn, state: DignityState) -> None:
+    audio_segment = getattr(conn, "dignity_last_audio_segment", None)
+    if not isinstance(audio_segment, dict):
+        return
+    try:
+        delattr(conn, "dignity_last_audio_segment")
+    except Exception:
+        conn.dignity_last_audio_segment = None
+    transcript = state.get("transcript")
+    if not isinstance(transcript, list) or not transcript:
+        return
+    last = transcript[-1]
+    if not isinstance(last, dict):
+        return
+    if audio_segment.get("audio_url"):
+        last["audio_url"] = audio_segment.get("audio_url")
+    duration = audio_segment.get("duration")
+    if isinstance(duration, (int, float)) and duration > 0:
+        last["start_time"] = 0
+        last["end_time"] = duration
 
 
 def _run_dignity_document_draft(conn, memory: Dict[str, Any]) -> str:
