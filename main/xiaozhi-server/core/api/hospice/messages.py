@@ -138,18 +138,21 @@ class HospiceMessagesMixin:
     async def handle_client_config(self, request):
         """GET /api/hospice/config  返回前端需要知道的配置。"""
         hospice = self.config.get("hospice", {}) or {}
-        wakeup = hospice.get("patient_wakeup", {}) or {}
-        if not wakeup:
-            wakeup = {
-                "enabled": hospice.get("enable_patient_wakeup", True),
-                "mode": hospice.get("patient_wakeup_mode", "sherpa_onnx_kws"),
-                "threshold": hospice.get("patient_wakeup_threshold", 0.50),
-                "sherpa_onnx": hospice.get("patient_wakeup_sherpa_onnx", {}) or {},
-            }
+        wakeup = dict(hospice.get("patient_wakeup", {}) or {})
+        # Flat hospice config is authoritative so toggling enable_patient_wakeup
+        # cannot be shadowed by an older nested patient_wakeup block.
+        wakeup["enabled"] = hospice.get("enable_patient_wakeup", wakeup.get("enabled", True))
+        wakeup["mode"] = hospice.get("patient_wakeup_mode", wakeup.get("mode", "sherpa_onnx_kws"))
+        wakeup["threshold"] = hospice.get("patient_wakeup_threshold", wakeup.get("threshold", 0.50))
+        wakeup["sherpa_onnx"] = hospice.get(
+            "patient_wakeup_sherpa_onnx",
+            wakeup.get("sherpa_onnx", {}) or {},
+        ) or {}
         max_mb = int(hospice.get("upload_max_mb", 50))
         return web.json_response(
             {
                 "upload_max_mb": max_mb,
+                "enable_patient_wakeup": wakeup["enabled"],
                 "patient_wakeup": wakeup,
             },
             headers=self._cors_headers(),

@@ -182,6 +182,7 @@ export default function App() {
   const [dignityReadingKind, setDignityReadingKind] = useState('');
   const [assistantToolsOpen, setAssistantToolsOpen] = useState(false);
   const [assistantToolView, setAssistantToolView] = useState('audio');
+  const [robotActionLog, setRobotActionLog] = useState([]);
 
   const connectingRef = useRef(false);
   const initStartedRef = useRef(false);
@@ -223,9 +224,13 @@ export default function App() {
       .then(j => {
         if (j && j.upload_max_mb) setMaxUploadMb(j.upload_max_mb);
         if (j && j.patient_wakeup) {
-          setPatientWakeup(j.patient_wakeup);
-          const wakeupEnabled = j.patient_wakeup.enabled === true
-            && String(j.patient_wakeup.mode || '').toLowerCase() === 'sherpa_onnx_kws';
+          const wakeup = {
+            ...j.patient_wakeup,
+            enabled: j.enable_patient_wakeup === false ? false : j.patient_wakeup.enabled === true,
+          };
+          setPatientWakeup(wakeup);
+          const wakeupEnabled = wakeup.enabled === true
+            && String(wakeup.mode || '').toLowerCase() === 'sherpa_onnx_kws';
           setOrdinaryVoiceAwake(!wakeupEnabled);
           ordinaryVoiceAwakeRef.current = !wakeupEnabled;
         }
@@ -903,6 +908,7 @@ export default function App() {
       userSpeakingRef.current = active;
     };
     const onWakeWordDetected = async (e) => {
+      if (!kwsWakeupEnabled || patientWakeupRef.current?.enabled !== true) return;
       if (!connectedRef.current || !micOkRef.current || dignityModeRef.current || inCallRef.current) return;
       setOrdinaryVoiceAwake(true);
       ordinaryVoiceAwakeRef.current = true;
@@ -921,11 +927,25 @@ export default function App() {
       }));
     };
     const onWakeWordState = (e) => {
+      if (!kwsWakeupEnabled || patientWakeupRef.current?.enabled !== true) {
+        return;
+      }
       if (e.detail?.state === 'error') {
         setConnectStatus(e.detail?.message || '本地唤醒词模型未就绪');
       }
     };
     const onErr = e => setConnectStatus(e.detail?.message || e.detail?.error?.message || '连接模块初始化失败');
+    const onRobotAction = e => {
+      const detail = e.detail || {};
+      setRobotActionLog(items => [
+        {
+          id: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
+          time: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+          ...detail,
+        },
+        ...items,
+      ].slice(0, 3));
+    };
     const onDignity = e => {
       const detail = e.detail || {};
       const event = detail.event;
@@ -1046,6 +1066,7 @@ export default function App() {
     window.addEventListener('xz:wakeword-detected', onWakeWordDetected);
     window.addEventListener('xz:wakeword-state', onWakeWordState);
     window.addEventListener('xz:error', onErr);
+    window.addEventListener('xz:robot-action', onRobotAction);
     window.addEventListener('xz:dignity', onDignity);
     window.addEventListener('xz:ready', onReady);
     if (window.XiaozhiClient) onReady();
@@ -1058,6 +1079,7 @@ export default function App() {
       window.removeEventListener('xz:wakeword-detected', onWakeWordDetected);
       window.removeEventListener('xz:wakeword-state', onWakeWordState);
       window.removeEventListener('xz:error', onErr);
+      window.removeEventListener('xz:robot-action', onRobotAction);
       window.removeEventListener('xz:dignity', onDignity);
       window.removeEventListener('xz:ready', onReady);
     };
@@ -1318,6 +1340,7 @@ export default function App() {
             dignityStatus={dignityStatus}
             ordinaryVoiceAwake={ordinaryVoiceAwake || !kwsWakeupEnabled}
           />
+          <RobotActionDebugPanel actions={robotActionLog} />
         </section>
         <section style={{ position: 'relative', minWidth: 0, overflow: 'hidden', background: 'rgba(255,250,242,0.28)' }}>
           <RightPanelTitle title={dignityMode ? '尊严疗法' : '家人信息'} />
@@ -1477,6 +1500,45 @@ function RightPanelTitle({ title }) {
   );
 }
 
+function RobotActionDebugPanel({ actions }) {
+  const latest = Array.isArray(actions) ? actions[0] : null;
+  const items = Array.isArray(actions) ? actions : [];
+
+  return (
+    <div style={robotActionPanelStyle}>
+      <div style={robotActionHeadStyle}>
+        <div>
+          <div style={robotActionTitleStyle}>硬件动作调试</div>
+          <div style={robotActionSubStyle}>语音/访谈命中后的控制策略</div>
+        </div>
+        <div style={robotActionStatusStyle(latest?.status)}>
+          {latest?.status || '等待'}
+        </div>
+      </div>
+      {items.length ? (
+        <div style={robotActionListStyle}>
+          {items.map(item => (
+            <div key={item.id} style={robotActionItemStyle}>
+              <div style={robotActionMainStyle}>
+                <span style={robotActionIdStyle}>{item.action_id || item.robot_action || 'unknown'}</span>
+                <span style={robotActionMetaStyle}>{item.source || item.source_event || 'system'} · {item.time}</span>
+              </div>
+              <div style={robotActionReasonStyle}>
+                {item.reason || item.strategy || item.eye_expression || '已收到动作事件'}
+              </div>
+              {item.params && Object.keys(item.params).length > 0 && (
+                <pre style={robotActionParamsStyle}>{JSON.stringify(item.params)}</pre>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={robotActionEmptyStyle}>对机器人说“挥挥手”“过来一点”“停一下”后，这里会显示动作选择。</div>
+      )}
+    </div>
+  );
+}
+
 const rightPanelTitleBarStyle = {
   position: 'absolute',
   top: 0,
@@ -1596,4 +1658,128 @@ const rightPanelBodyStyle = {
   right: 0,
   bottom: 0,
   overflow: 'hidden',
+};
+
+const robotActionPanelStyle = {
+  position: 'absolute',
+  left: 20,
+  right: 20,
+  bottom: 18,
+  zIndex: 16,
+  display: 'grid',
+  gap: 9,
+  padding: '12px 14px',
+  borderRadius: 8,
+  border: `1px solid ${C.mist}55`,
+  background: 'rgba(255,250,242,.88)',
+  boxShadow: '0 16px 36px rgba(70, 55, 34, .16)',
+  backdropFilter: 'blur(10px)',
+  color: C.ink,
+  fontFamily: 'Noto Sans SC',
+  pointerEvents: 'none',
+};
+
+const robotActionHeadStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 12,
+};
+
+const robotActionTitleStyle = {
+  fontSize: 14,
+  lineHeight: 1.2,
+  fontWeight: 700,
+  color: C.ink,
+};
+
+const robotActionSubStyle = {
+  marginTop: 3,
+  fontSize: 11,
+  lineHeight: 1.3,
+  color: C.inkFaint,
+};
+
+const robotActionStatusStyle = (status) => ({
+  flex: '0 0 auto',
+  minWidth: 58,
+  height: 26,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '0 9px',
+  borderRadius: 999,
+  border: `1px solid ${status === 'rejected' ? '#C9877D' : C.sage}66`,
+  background: status === 'rejected' ? 'rgba(201,135,125,.16)' : `${C.sage}20`,
+  color: status === 'rejected' ? '#8E423B' : C.inkMid,
+  fontSize: 12,
+  fontWeight: 700,
+});
+
+const robotActionListStyle = {
+  display: 'grid',
+  gap: 7,
+};
+
+const robotActionItemStyle = {
+  minWidth: 0,
+  display: 'grid',
+  gap: 4,
+  paddingTop: 7,
+  borderTop: `1px solid ${C.mist}22`,
+};
+
+const robotActionMainStyle = {
+  display: 'flex',
+  alignItems: 'baseline',
+  justifyContent: 'space-between',
+  gap: 10,
+  minWidth: 0,
+};
+
+const robotActionIdStyle = {
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  fontSize: 14,
+  fontWeight: 800,
+  color: C.ink,
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+};
+
+const robotActionMetaStyle = {
+  flex: '0 0 auto',
+  fontSize: 11,
+  color: C.inkFaint,
+};
+
+const robotActionReasonStyle = {
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  fontSize: 12,
+  lineHeight: 1.35,
+  color: C.inkMid,
+};
+
+const robotActionParamsStyle = {
+  margin: 0,
+  maxHeight: 34,
+  overflow: 'hidden',
+  fontSize: 11,
+  lineHeight: 1.35,
+  color: C.inkFaint,
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-all',
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+};
+
+const robotActionEmptyStyle = {
+  paddingTop: 7,
+  borderTop: `1px solid ${C.mist}22`,
+  color: C.inkFaint,
+  fontSize: 12,
+  lineHeight: 1.45,
 };

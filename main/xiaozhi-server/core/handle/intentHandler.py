@@ -59,6 +59,18 @@ async def handle_user_intent(conn, text):
         conn.logger.bind(tag=TAG).info("通话中语音未命中患者端动作，已忽略普通对话处理")
         return True
 
+    if hospice_config and hospice_config.get("enable_robot_voice_actions", True):
+        try:
+            from core.robot_actions import classify_robot_action, dispatch_robot_action
+
+            robot_action = await classify_robot_action(conn, text)
+            if robot_action:
+                await send_stt_message(conn, text)
+                await dispatch_robot_action(conn, robot_action, source_event="voice_action")
+                return True
+        except Exception as e:
+            conn.logger.bind(tag=TAG).warning(f"机器人语音动作处理失败: {e}")
+
     try:
         from core.dignity.runtime import handle_dignity_turn_if_active
 

@@ -184,19 +184,19 @@ async def send_robot_action_event(
     if "robot_action" not in data:
         return
     robot_action = _normalize_robot_action(data.get("robot_action"))
-    payload = {
-        "type": "client_action",
-        "action": "robot_action",
-        "source": "dignity",
-        "source_event": source_event,
-        "session_id": conn.session_id,
+    from core.robot_actions.adapter import dispatch_robot_action, map_dignity_robot_action
+
+    action_request = map_dignity_robot_action(robot_action)
+    if not action_request:
+        return
+    action_request.update({
         "robot_action": robot_action,
         "robot_action_enum": ROBOT_ACTIONS,
         "eye_expression": data.get("eye_expression", ""),
         "current_stage": data.get("current_stage", ""),
         "strategy": data.get("strategy", ""),
-    }
-    await conn.websocket.send(json.dumps(payload, ensure_ascii=False))
+    })
+    await dispatch_robot_action(conn, action_request, source_event=source_event)
 
 
 async def send_dignity_event(conn, event: str, data: Optional[Dict[str, Any]] = None) -> None:
