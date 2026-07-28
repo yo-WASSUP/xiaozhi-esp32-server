@@ -170,6 +170,13 @@ def _state_payload(state: Optional[DignityState]) -> Dict[str, Any]:
     }
 
 
+def _attach_dignity_trigger_payload(payload: Dict[str, Any], msg_json: Dict[str, Any]) -> None:
+    for key in ("source", "auto_voice_mode", "trigger_text", "matched_command"):
+        value = msg_json.get(key)
+        if value:
+            payload[key] = value
+
+
 def _normalize_robot_action(value: Any) -> str:
     action = str(value or "listening").strip()
     return action if action in ROBOT_ACTIONS else "listening"
@@ -296,17 +303,20 @@ async def start_dignity_mode(conn, msg_json: Optional[Dict[str, Any]] = None) ->
     document_source = _load_dignity_document_source(conn)
     if document_source:
         payload.update(document_source)
+    _attach_dignity_trigger_payload(payload, msg_json)
     _write_dignity_log(conn, "mode_started", payload)
     await send_dignity_event(conn, "mode_started", payload)
 
 
-async def stop_dignity_mode(conn) -> None:
+async def stop_dignity_mode(conn, msg_json: Optional[Dict[str, Any]] = None) -> None:
     _ensure_dignity_runtime(conn)
+    msg_json = msg_json or {}
     conn.dignity_active = False
     conn.logger.bind(tag=TAG).info("尊严访谈模式已关闭")
     payload = _state_payload(conn.dignity_state)
     payload["robot_action"] = "idle"
     payload["eye_expression"] = "calm"
+    _attach_dignity_trigger_payload(payload, msg_json)
     _write_dignity_log(conn, "mode_stopped", payload)
     await send_dignity_event(conn, "mode_stopped", payload)
 

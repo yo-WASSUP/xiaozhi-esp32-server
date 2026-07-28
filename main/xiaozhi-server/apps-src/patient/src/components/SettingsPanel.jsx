@@ -89,7 +89,7 @@ const statusTone = (status, active) => {
 
 const voiceKey = (voice) => voice?.voice_id || voice?.speaker_id || '';
 
-export default function SettingsPanel({ open, onClose }) {
+export default function SettingsPanel({ open, onClose, voiceMode = 'doubao_s2s', onVoiceModeChange }) {
   const [configured, setConfigured] = useState(false);
   const [missingConfig, setMissingConfig] = useState([]);
   const [maxSampleMb, setMaxSampleMb] = useState(10);
@@ -548,6 +548,40 @@ export default function SettingsPanel({ open, onClose }) {
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: 22, fontFamily: 'Noto Sans SC', color: C.inkMid }}>
+          <div style={sectionStyle}>
+            <div style={{ fontSize: 17, color: C.ink, marginBottom: 10 }}>AI 语音模式</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {[
+                { id: 'doubao_s2s', label: '豆包端到端', note: '自然聊天' },
+                { id: 'cascade', label: '标准模式', note: '功能完整' },
+              ].map((option) => {
+                const selected = voiceMode === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => onVoiceModeChange?.(option.id)}
+                    title={option.id === 'doubao_s2s' ? '端到端语音理解与生成' : 'ASR、LLM、TTS 标准管线'}
+                    style={{
+                      minHeight: 56,
+                      padding: '9px 10px',
+                      borderRadius: 8,
+                      border: `1px solid ${selected ? C.sage : `${C.mist}33`}`,
+                      background: selected ? `${C.sage}12` : 'rgba(255,255,255,.5)',
+                      color: selected ? C.ink : C.inkMid,
+                      cursor: 'pointer',
+                      fontFamily: 'Noto Sans SC',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <div style={{ fontSize: 14 }}>{option.label}</div>
+                    <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 3 }}>{option.note}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {!configured && (
             <div style={{ ...sectionStyle, color: C.red, fontSize: 13 }}>配置未完成：{missingConfig.join('、')}</div>
           )}

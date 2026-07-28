@@ -15,6 +15,7 @@ window.XiaozhiClient = {
   async init() { return (await xiaozhiBridgeReady).init(); },
   async connect() { return (await xiaozhiBridgeReady).connect(); },
   disconnect() { return xiaozhiBridgeReady.then(c => c.disconnect()); },
+  setVoiceMode(mode) { return xiaozhiBridgeReady.then(c => c.setVoiceMode(mode)); },
   sendClientState(payload) { return xiaozhiBridgeReady.then(c => c.sendClientState(payload)); },
   sendDignityAction(action, payload) { return xiaozhiBridgeReady.then(c => c.sendDignityAction(action, payload)); },
   sendText(text) { return xiaozhiBridgeReady.then(c => c.sendText(text)); },
@@ -73,6 +74,8 @@ if (!clientId) {
 ensureHiddenInput('deviceMac', deviceMac);
 ensureHiddenInput('deviceName', 'patient-app');
 ensureHiddenInput('clientId', clientId);
+const savedVoiceMode = localStorage.getItem('xiaonuan_voice_mode') || 'doubao_s2s';
+ensureHiddenInput('voiceMode', savedVoiceMode);
 
 // ── 2. 垫片：stub uiController（原模块里硬引用） ────────
 window.uiController = window.uiController || {
@@ -93,7 +96,7 @@ const [
   playerMod,
   opusMod,
 ] = await Promise.all([
-  import(`${TEST}/core/network/websocket.js?v=0130`),
+  import(`${TEST}/core/network/websocket.js?v=0131`),
   import(`${TEST}/core/audio/recorder.js?v=0127`),
   import(`${TEST}/core/audio/player.js?v=0127`),
   import(`${TEST}/core/audio/opus-codec.js?v=0127`),
@@ -170,6 +173,10 @@ wsHandler.onDignityEvent = (payload) => {
   window.dispatchEvent(new CustomEvent('xz:dignity', { detail: payload || {} }));
 };
 
+wsHandler.onVoiceModeChange = (payload) => {
+  window.dispatchEvent(new CustomEvent('xz:voice-mode', { detail: payload || {} }));
+};
+
 // ── 5. 暴露统一的客户端 API ──────────────────────────────
 const realClient = {
   async init() {
@@ -188,6 +195,13 @@ const realClient = {
 
   disconnect() {
     wsHandler.disconnect();
+  },
+
+  setVoiceMode(mode) {
+    const nextMode = mode === 'cascade' ? 'cascade' : 'doubao_s2s';
+    ensureHiddenInput('voiceMode', nextMode);
+    localStorage.setItem('xiaonuan_voice_mode', nextMode);
+    return nextMode;
   },
 
   sendClientState(payload) {

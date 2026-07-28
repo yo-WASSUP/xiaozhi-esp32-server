@@ -32,6 +32,19 @@ selected_module:
   Memory: nomem
   Intent: function_call
 
+realtime_voice:
+  doubao_s2s:
+    enabled: true
+    # 在 data/.doubao_s2s.env 中填写 DOUBAO_API_KEY=...
+    api_key_env_file: data/.doubao_s2s.env
+    resource_id: volc.speech.dialog
+    model: 1.2.1.1
+    speaker: zh_female_vv_jupiter_bigtts
+    output_format: pcm_s16le
+    end_smooth_window_ms: 800
+    system_role: "你是小暖，一名温暖、耐心、有同理心的中文陪伴助手。回答自然简洁，不给医疗诊断或治疗建议。"
+    speaking_style: "自然、温和、简洁，语速稍慢"
+
 # ========== 安宁疗护专用提示词 ==========
 prompt: |
   你是"小暖"，一个温柔体贴的安宁疗护陪伴助手。你正在陪伴一位需要关怀的老年患者。
@@ -91,6 +104,16 @@ hospice:
     - "先退下"
     - "休息一下"
     - "暂停聊天"
+  dignity_voice_switch:
+    enabled: true
+    start_commands:
+      - "进入尊严疗法"
+      - "开始尊严访谈"
+      - "开启人生回顾"
+    stop_commands:
+      - "退出尊严疗法"
+      - "结束尊严访谈"
+      - "回到普通聊天"
   db_path: data/hospice_sessions.db
   # summary_schedule: "22:00"  # 每日摘要定时任务，未启用
   upload_max_mb: 200            # 家属/患者发送媒体文件的大小上限

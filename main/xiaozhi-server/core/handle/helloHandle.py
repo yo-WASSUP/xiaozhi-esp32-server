@@ -40,6 +40,25 @@ _wakeup_response_lock = asyncio.Lock()
 
 async def handleHelloMessage(conn, msg_json):
     """处理hello消息"""
+    conn.client_name = str(msg_json.get("device_name") or "")
+    requested_voice_mode = str(msg_json.get("voice_mode") or "cascade").strip()
+    realtime_config = conn.config.get("realtime_voice", {}) or {}
+    doubao_config = realtime_config.get("doubao_s2s", {}) or {}
+    realtime_enabled = doubao_config.get("enabled", False) is True
+
+    if (
+        requested_voice_mode == "doubao_s2s"
+        and conn.client_name == "patient-app"
+        and realtime_enabled
+    ):
+        from core.providers.realtime.doubao_s2s import DoubaoS2SClient
+
+        conn.voice_mode = "doubao_s2s"
+        conn.realtime_voice = DoubaoS2SClient(conn, doubao_config)
+        conn.realtime_voice.start()
+    else:
+        conn.voice_mode = "cascade"
+
     audio_params = msg_json.get("audio_params")
     if audio_params:
         format = audio_params.get("format")
@@ -56,6 +75,8 @@ async def handleHelloMessage(conn, msg_json):
             # 发送初始化
             asyncio.create_task(send_mcp_initialize_message(conn))
 
+    conn.welcome_msg["voice_mode"] = conn.voice_mode
+    conn.welcome_msg["voice_modes"] = ["doubao_s2s", "cascade"]
     await conn.websocket.send(json.dumps(conn.welcome_msg))
 
 

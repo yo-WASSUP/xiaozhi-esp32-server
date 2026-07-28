@@ -62,12 +62,14 @@ export function getConfig() {
     const deviceMac = document.getElementById('deviceMac')?.value.trim() || '';
     const deviceName = document.getElementById('deviceName')?.value.trim() || '';
     const clientId = document.getElementById('clientId')?.value.trim() || '';
+    const voiceMode = document.getElementById('voiceMode')?.value.trim() || 'cascade';
 
     return {
         deviceId: deviceMac,  // 使用MAC地址作为deviceId
         deviceName,
         deviceMac,
-        clientId
+        clientId,
+        voiceMode
     };
 }
 

@@ -231,6 +231,9 @@ class LifecycleMixin:
                 await self.tts.close()
             if self.asr:
                 await self.asr.close()
+            if self.realtime_voice:
+                await self.realtime_voice.close()
+                self.realtime_voice = None
 
             # 最后关闭线程池（避免阻塞）
             if self.executor:

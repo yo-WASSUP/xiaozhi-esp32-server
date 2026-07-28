@@ -1,5 +1,5 @@
 // WebSocket消息处理模块
-import { getConfig, saveConnectionUrls } from '../../config/manager.js?v=0127';
+import { getConfig, saveConnectionUrls } from '../../config/manager.js?v=0128';
 import { uiController } from '../../ui/controller.js?v=0127';
 import { log } from '../../utils/logger.js?v=0127';
 import { getAudioPlayer } from '../audio/player.js?v=0127';
@@ -18,6 +18,7 @@ export class WebSocketHandler {
         this.onChatMessage = null; // 新增：聊天消息回调
         this.onClientAction = null; // 患者端本地动作：接电话、读消息等
         this.onDignityEvent = null; // 尊严疗法模式事件
+        this.onVoiceModeChange = null; // 语音管线切换或服务端降级
         this.currentSessionId = null;
         this.isRemoteSpeaking = false;
     }
@@ -35,6 +36,7 @@ export class WebSocketHandler {
                 device_name: config.deviceName,
                 device_mac: config.deviceMac,
                 token: config.token,
+                voice_mode: config.voiceMode,
                 features: {
                     mcp: true
                 }
@@ -89,10 +91,6 @@ export class WebSocketHandler {
             }
         } else if (message.type === 'llm') {
             log(`大模型回复: ${message.text}`, 'info');
-            // 使用新的聊天消息回调显示LLM回复
-            if (this.onChatMessage && message.text) {
-                this.onChatMessage(message.text, false);
-            }
 
             // 如果包含表情，更新sessionStatus表情并触发Live2D动作
             if (message.text && /[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/u.test(message.text)) {
@@ -114,6 +112,13 @@ export class WebSocketHandler {
             const textWithoutEmoji = message.text ? message.text.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '').trim() : '';
             if (textWithoutEmoji && this.onChatMessage) {
                 this.onChatMessage(message.text, false);
+            }
+        } else if (message.type === 'voice_mode') {
+            log(`语音模式: ${message.mode}${message.reason ? ` (${message.reason})` : ''}`, message.reason ? 'warning' : 'info');
+            if (this.onVoiceModeChange) {
+                this.onVoiceModeChange(message);
+            } else if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('xz:voice-mode', { detail: message }));
             }
         } else if (message.type === 'tool_call') {
             // 显示服务端函数调用信息

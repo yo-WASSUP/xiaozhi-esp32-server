@@ -159,6 +159,9 @@ export default function App() {
   const [maxUploadMb, setMaxUploadMb] = useState(50);
   const [patientWakeup, setPatientWakeup] = useState({ enabled: false, mode: 'sherpa_onnx_kws' });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(
+    () => localStorage.getItem('xiaonuan_voice_mode') || 'doubao_s2s'
+  );
   const [dignityMode, setDignityMode] = useState(false);
   const [dignityStatus, setDignityStatus] = useState(null);
   const [dignityOpeningReply, setDignityOpeningReply] = useState('');
@@ -798,6 +801,19 @@ export default function App() {
     }
   }, [connectXiaozhi]);
 
+  const handleVoiceModeChange = useCallback((nextMode) => {
+    const normalized = nextMode === 'cascade' ? 'cascade' : 'doubao_s2s';
+    setVoiceMode(normalized);
+    localStorage.setItem('xiaonuan_voice_mode', normalized);
+    window.XiaozhiClient?.setVoiceMode?.(normalized);
+    setConnectStatus(normalized === 'doubao_s2s' ? '正在切换到豆包端到端...' : '正在切换到标准模式...');
+    if (connectedRef.current) {
+      window.XiaozhiClient?.disconnect?.();
+    } else {
+      scheduleReconnect(100);
+    }
+  }, [scheduleReconnect]);
+
   const { announceUnread, readFamilyMessages, speakAndWait, stopPlayback } = useFamilyMessageReader({
     loadContacts,
     markThreadRead,
@@ -935,6 +951,17 @@ export default function App() {
       }
     };
     const onErr = e => setConnectStatus(e.detail?.message || e.detail?.error?.message || '连接模块初始化失败');
+    const onVoiceMode = e => {
+      const detail = e.detail || {};
+      if (detail.mode === 'cascade' && detail.requested_mode === 'doubao_s2s' && detail.reason) {
+        setVoiceMode('cascade');
+        localStorage.setItem('xiaonuan_voice_mode', 'cascade');
+        window.XiaozhiClient?.setVoiceMode?.('cascade');
+        setConnectStatus(`豆包连接失败，已切换标准模式：${detail.reason}`);
+      } else if (detail.mode === 'doubao_s2s') {
+        setConnectStatus('');
+      }
+    };
     const onRobotAction = e => {
       const detail = e.detail || {};
       setRobotActionLog(items => [
@@ -951,8 +978,9 @@ export default function App() {
       const event = detail.event;
       const data = detail.data || {};
       if (event === 'mode_started') {
+        const autoVoiceMode = data.auto_voice_mode === true || data.source === 'voice_command';
         setDignityMode(true);
-        setDignityVoiceMode(false);
+        setDignityVoiceMode(autoVoiceMode);
         setDignityStatus(data);
         setDignityOpeningReply(data.reply || '');
         setDignityDocument(data.document || '');
@@ -960,7 +988,11 @@ export default function App() {
         setDignityDocumentConfirmBusy(false);
         if (data.reply) setMsg(data.reply);
         void loadDignityArtifacts();
-        void pauseAssistantListening();
+        if (autoVoiceMode) {
+          resumeAssistantListening();
+        } else {
+          void pauseAssistantListening();
+        }
       } else if (event === 'mode_stopped') {
         setDignityMode(false);
         setDignityVoiceMode(false);
@@ -1066,6 +1098,7 @@ export default function App() {
     window.addEventListener('xz:wakeword-detected', onWakeWordDetected);
     window.addEventListener('xz:wakeword-state', onWakeWordState);
     window.addEventListener('xz:error', onErr);
+    window.addEventListener('xz:voice-mode', onVoiceMode);
     window.addEventListener('xz:robot-action', onRobotAction);
     window.addEventListener('xz:dignity', onDignity);
     window.addEventListener('xz:ready', onReady);
@@ -1079,6 +1112,7 @@ export default function App() {
       window.removeEventListener('xz:wakeword-detected', onWakeWordDetected);
       window.removeEventListener('xz:wakeword-state', onWakeWordState);
       window.removeEventListener('xz:error', onErr);
+      window.removeEventListener('xz:voice-mode', onVoiceMode);
       window.removeEventListener('xz:robot-action', onRobotAction);
       window.removeEventListener('xz:dignity', onDignity);
       window.removeEventListener('xz:ready', onReady);
@@ -1431,7 +1465,12 @@ export default function App() {
           localStream={localStream} remoteStream={remoteStream}
           onToggleMute={toggleMute} onToggleCamera={toggleCamera} />
       )}
-      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsPanel
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        voiceMode={voiceMode}
+        onVoiceModeChange={handleVoiceModeChange}
+      />
       <AssistantToolsModal
         open={assistantToolsOpen}
         active={assistantToolView}

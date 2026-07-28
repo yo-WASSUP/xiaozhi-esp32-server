@@ -74,6 +74,9 @@ class ConnectionHandler(
         self.chat_history_conf = 0
         self.audio_format = "opus"
         self.sample_rate = 24000  # 默认采样率，从客户端 hello 消息中动态更新
+        self.voice_mode = "cascade"
+        self.realtime_voice = None
+        self.client_name = ""
 
         # 客户端状态相关
         self.client_abort = False

@@ -32,6 +32,9 @@ async def handle_user_intent(conn, text):
     if await checkWakeupWords(conn, filtered_text):
         return True
 
+    if await handle_dignity_voice_switch(conn, text):
+        return True
+
     # 安宁疗护患者端：本地动作指令直接下发给前端执行，不进入普通聊天。
     hospice_config = conn.config.get("hospice", {}) or {}
     if hospice_config and hospice_config.get("enable_patient_voice_actions", True):
@@ -107,6 +110,40 @@ async def _send_patient_voice_action(conn, action, text, **extra):
             ensure_ascii=False,
         )
     )
+
+
+async def handle_dignity_voice_switch(conn, original_text):
+    try:
+        from core.dignity.runtime import start_dignity_mode, stop_dignity_mode
+        from core.dignity.voice_commands import detect_dignity_voice_command
+
+        command = detect_dignity_voice_command(original_text, conn.config)
+        if not command:
+            return False
+
+        await send_stt_message(conn, original_text)
+        payload = {
+            "source": "voice_command",
+            "auto_voice_mode": True,
+            "trigger_text": original_text,
+            "matched_command": command.get("matched_command", ""),
+        }
+        device_id = getattr(conn, "device_id", None) or (
+            getattr(conn, "headers", None) or {}
+        ).get("device-id")
+        if device_id:
+            payload["patient_id"] = device_id
+
+        if command.get("action") == "start":
+            conn.logger.bind(tag=TAG).info("语音指令开启尊严疗法模式")
+            await start_dignity_mode(conn, payload)
+        else:
+            conn.logger.bind(tag=TAG).info("语音指令关闭尊严疗法模式")
+            await stop_dignity_mode(conn, payload)
+        return True
+    except Exception as e:
+        conn.logger.bind(tag=TAG).warning(f"尊严疗法语音开关处理失败: {e}")
+        return False
 
 
 async def handle_hospice_patient_sleep(conn, original_text, filtered_text):

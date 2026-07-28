@@ -1,0 +1,4 @@
+PyAudio==0.2.14
+aiohttp>=3.10,<4
+python-dotenv==1.0.1
+websockets>=14.2,<16

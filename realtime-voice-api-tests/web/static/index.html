@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <title>Realtime Voice Lab</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='12' fill='%23087f5b'/><circle cx='22' cy='22' r='4' fill='%23c64c3c'/></svg>"
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div>
+          <h1>Realtime Voice Lab</h1>
+          <p id="activeModel">等待选择接口</p>
+        </div>
+      </div>
+      <div class="connection-state" id="connectionState" data-state="idle">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="connectionLabel">未连接</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="control-band" aria-label="通话控制">
+        <div class="provider-group">
+          <span class="control-label">实时接口</span>
+          <div class="provider-tabs" id="providerTabs" role="tablist">
+            <button class="provider-tab is-active" data-provider="openai" role="tab">
+              <span class="provider-indicator"></span>
+              <span>
+                <strong>GPT Realtime 2.1</strong>
+                <small>OpenAI</small>
+              </span>
+            </button>
+            <button class="provider-tab" data-provider="qwen" role="tab">
+              <span class="provider-indicator"></span>
+              <span>
+                <strong>Qwen3.5 Omni</strong>
+                <small>Alibaba Cloud</small>
+              </span>
+            </button>
+            <button class="provider-tab" data-provider="doubao" role="tab">
+              <span class="provider-indicator"></span>
+              <span>
+                <strong>Doubao S2S-O</strong>
+                <small>Volcengine</small>
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <div class="call-actions">
+          <div class="device-picker" id="microphonePicker">
+            <button
+              class="device-button"
+              id="microphoneButton"
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded="false"
+              title="选择麦克风"
+            >
+              <span class="icon-slot" data-icon="sliders"></span>
+              <span class="device-button-copy">
+                <small>输入设备</small>
+                <strong id="selectedMicrophone">系统默认</strong>
+              </span>
+              <span class="icon-slot device-chevron" data-icon="chevron-down"></span>
+            </button>
+            <div
+              class="device-menu"
+              id="microphoneMenu"
+              role="menu"
+              aria-label="选择麦克风"
+              hidden
+            ></div>
+          </div>
+          <button class="icon-button" id="muteButton" title="关闭麦克风" disabled>
+            <span class="icon-slot" data-icon="mic"></span>
+          </button>
+          <button class="primary-button" id="callButton">
+            <span class="icon-slot" data-icon="phone"></span>
+            <span class="button-label">开始通话</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="signal-band" aria-label="音频输入状态">
+        <div class="signal-meta">
+          <span class="control-label">输入波形</span>
+          <strong id="voiceState">静音</strong>
+        </div>
+        <canvas id="waveform" aria-label="实时麦克风波形"></canvas>
+        <div class="signal-level">
+          <span>MIC</span>
+          <div class="level-track"><span id="levelFill"></span></div>
+          <strong id="levelValue">0%</strong>
+        </div>
+      </section>
+
+      <section class="metrics-band" aria-label="实时延迟">
+        <div class="metric">
+          <span>模型首包</span>
+          <strong id="providerLatency">--</strong>
+        </div>
+        <div class="metric">
+          <span>端到端首音</span>
+          <strong id="clientLatency">--</strong>
+        </div>
+        <div class="metric">
+          <span>完整响应</span>
+          <strong id="responseLatency">--</strong>
+        </div>
+        <div class="metric">
+          <span>本轮说话</span>
+          <strong id="utteranceDuration">--</strong>
+        </div>
+        <div class="metric">
+          <span>播放缓冲</span>
+          <strong id="playbackBuffer">0 ms</strong>
+        </div>
+      </section>
+
+      <section class="conversation-section">
+        <div class="section-heading">
+          <div>
+            <span class="control-label">实时转写</span>
+            <h2>对话内容</h2>
+          </div>
+          <button class="icon-button clear-button" id="clearButton" title="清空对话">
+            <span class="icon-slot" data-icon="trash"></span>
+          </button>
+        </div>
+
+        <div class="transcript-grid">
+          <section class="transcript-column user-column">
+            <header>
+              <span class="speaker-badge">你</span>
+              <div>
+                <strong>用户语音</strong>
+                <small id="userTurnState">等待输入</small>
+              </div>
+            </header>
+            <div class="live-transcript" id="userLive">--</div>
+            <div class="transcript-history" id="userHistory"></div>
+          </section>
+
+          <section class="transcript-column assistant-column">
+            <header>
+              <span class="speaker-badge">AI</span>
+              <div>
+                <strong>助手回复</strong>
+                <small id="assistantTurnState">等待响应</small>
+              </div>
+            </header>
+            <div class="live-transcript" id="assistantLive">--</div>
+            <div class="transcript-history" id="assistantHistory"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="event-section">
+        <div class="section-heading compact">
+          <div>
+            <span class="control-label">SESSION EVENTS</span>
+            <h2>事件流</h2>
+          </div>
+          <span id="audioFormat">PCM16</span>
+        </div>
+        <div class="event-log" id="eventLog">
+          <div class="event-row">
+            <time>--:--:--</time>
+            <span class="event-kind">SYSTEM</span>
+            <p>控制台已就绪</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div class="error-banner" id="errorBanner" role="alert" hidden>
+      <span class="icon-slot" data-icon="alert"></span>
+      <span id="errorText"></span>
+      <button id="dismissError" title="关闭">
+        <span class="icon-slot" data-icon="x"></span>
+      </button>
+    </div>
+
+    <script type="module" src="/static/app.js"></script>
+  </body>
+</html>

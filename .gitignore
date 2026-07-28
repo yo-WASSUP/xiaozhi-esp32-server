@@ -226,6 +226,7 @@ main/xiaozhi-server/data/hospice_sessions.db-shm
 main/xiaozhi-server/data/hospice_sessions.db-wal
 main/xiaozhi-server/data/hospice_media/
 main/xiaozhi-server/data/dignity_logs
+main/xiaozhi-server/data/.doubao_s2s.env
 
 # TLS 证书（mkcert 或其它签发的，绝对不能进 git）
 main/xiaozhi-server/data/certs/

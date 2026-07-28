@@ -5,6 +5,14 @@ TAG = __name__
 
 async def handleAbortMessage(conn):
     conn.logger.bind(tag=TAG).info("Abort message received")
+    if (
+        getattr(conn, "voice_mode", "cascade") == "doubao_s2s"
+        and getattr(conn, "realtime_voice", None) is not None
+    ):
+        await conn.realtime_voice.interrupt()
+        conn.logger.bind(tag=TAG).info("Realtime abort message handled")
+        return
+
     # 设置成打断状态，会自动打断llm、tts任务
     conn.client_abort = True
     conn.clear_queues()

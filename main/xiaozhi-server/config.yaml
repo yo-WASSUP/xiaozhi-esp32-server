@@ -222,6 +222,21 @@ selected_module:
   # 默认免费的ChatGLMLLM就已经支持function_call，但是如果像追求稳定建议把LLM设置成：DoubaoLLM，使用的具体model_name是：doubao-1-5-pro-32k-250115
   Intent: function_call
 
+# 患者网页可在豆包端到端和现有 ASR -> LLM -> TTS 管线之间切换。
+realtime_voice:
+  doubao_s2s:
+    enabled: false
+    api_key: ""
+    api_key_env_file: data/.doubao_s2s.env
+    resource_id: volc.speech.dialog
+    url: wss://openspeech.bytedance.com/api/v3/realtime/dialogue
+    model: 1.2.1.1
+    speaker: zh_female_vv_jupiter_bigtts
+    output_format: pcm_s16le
+    end_smooth_window_ms: 800
+    system_role: "你是小暖，一名温暖、耐心、有同理心的中文陪伴助手。回答自然简洁，不给医疗诊断或治疗建议。"
+    speaking_style: "自然、温和、简洁，语速稍慢"
+
 # 意图识别，是用于理解用户意图的模块，例如：播放音乐
 Intent:
   # 不使用意图识别

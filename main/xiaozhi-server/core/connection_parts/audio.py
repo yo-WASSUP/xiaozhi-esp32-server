@@ -91,6 +91,15 @@ class AudioRoutingMixin:
         if isinstance(message, str):
             await handleTextMessage(self, message)
         elif isinstance(message, bytes):
+            if (
+                self.voice_mode == "doubao_s2s"
+                and self.realtime_voice is not None
+                and not self.dignity_active
+                and not self.conn_from_mqtt_gateway
+            ):
+                await self.realtime_voice.send_opus(message)
+                return
+
             if self.vad is None or self.asr is None:
                 return
 
