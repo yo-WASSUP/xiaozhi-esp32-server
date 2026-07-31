@@ -1,4 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
+import {
+  Microphone,
+  Paperclip,
+  PaperPlaneRight,
+  WarningCircle,
+  X,
+} from '@phosphor-icons/react';
 import { C } from '../theme';
 import { DEVICE_ID, FAMILY_ID, SENDER_NAME } from '../constants';
 import { fmtTime } from '../utils/time';
@@ -9,7 +16,7 @@ export default function MessageScreen() {
   const [recording, setRec] = useState(false);
   const [recSecs, setRecSecs] = useState(0);
   const [sent, setSent] = useState([]);
-  const [flash, setFlash] = useState('');
+  const [flash, setFlash] = useState(null);
   const [busy, setBusy] = useState(false);
   const [maxUploadMb, setMaxUploadMb] = useState(50);
 
@@ -61,7 +68,10 @@ export default function MessageScreen() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [sent.length]);
 
-  const toast = (s) => { setFlash(s); setTimeout(() => setFlash(''), 2000); };
+  const toast = (text, tone = 'error') => {
+    setFlash({ text, tone });
+    setTimeout(() => setFlash(null), 2400);
+  };
 
   const uploadFile = async (blob, filename) => {
     const fd = new FormData();
@@ -88,7 +98,7 @@ export default function MessageScreen() {
       await postMessage({ device_id: DEVICE_ID, family_id: FAMILY_ID, sender_role: 'family', sender_name: SENDER_NAME, type: 'text', content: text });
       setText('');
       loadMessages();
-    } catch (e) { toast('⚠ ' + e.message); }
+    } catch (e) { toast(e.message); }
     finally { setBusy(false); }
   };
 
@@ -107,7 +117,7 @@ export default function MessageScreen() {
       recRef.current = setInterval(() => setRecSecs(s => s + 1), 1000);
     } catch (e) {
       console.error(e);
-      toast('⚠ 无法使用麦克风：' + e.message);
+      toast('无法使用麦克风：' + e.message);
       setRec(false);
     }
   };
@@ -122,7 +132,7 @@ export default function MessageScreen() {
     mr.stop();
     await stopped;
     if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
-    if (secs < 1) { toast('录音太短'); return; }
+    if (secs < 1) { toast('录音太短，请重新录制'); return; }
 
     setBusy(true);
     try {
@@ -135,7 +145,7 @@ export default function MessageScreen() {
       });
       setRecSecs(0);
       loadMessages();
-    } catch (e) { console.error(e); toast('⚠ ' + e.message); }
+    } catch (e) { console.error(e); toast(e.message); }
     finally { setBusy(false); }
   };
 
@@ -155,11 +165,11 @@ export default function MessageScreen() {
     const isImage = file.type.startsWith('image/');
     const isVideo = file.type.startsWith('video/');
     if (!isImage && !isVideo) {
-      toast('⚠ 请选择照片或视频');
+      toast('请选择照片或视频');
       return;
     }
     if (isVideo && file.size > maxUploadMb * 1024 * 1024) {
-      toast(`⚠ 视频过大（${(file.size / 1024 / 1024).toFixed(1)}MB），最多 ${maxUploadMb}MB`);
+      toast(`视频过大（${(file.size / 1024 / 1024).toFixed(1)}MB），最多 ${maxUploadMb}MB`);
       return;
     }
     setBusy(true);
@@ -170,50 +180,55 @@ export default function MessageScreen() {
         type: isVideo ? 'video' : 'photo', content: file.name, file_path: up.url,
       });
       loadMessages();
-    } catch (err) { console.error(err); toast('⚠ ' + err.message); }
+    } catch (err) { console.error(err); toast(err.message); }
     finally { setBusy(false); }
   };
 
   return (
-    <div style={{ position: 'absolute', top: 0, bottom: 80, left: 0, right: 0, display: 'flex', flexDirection: 'column', animation: 'fadeUp .4s ease' }}>
+    <div className="screen" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* 顶部标题 */}
-      <div style={{ padding: '44px 20px 12px', borderBottom: `0.5px solid ${C.mist}22` }}>
-        <div style={{ fontSize: 20, color: C.ink, fontFamily: 'Noto Serif SC,serif', fontWeight: 300, letterSpacing: '.06em' }}>和家人的对话</div>
-        <div style={{ fontSize: 12, color: C.inkFaint, fontFamily: 'Noto Sans SC', fontWeight: 300, marginTop: 2 }}>消息会在小暖陪伴时播报给家人</div>
+      <div className="screen-header" style={{ borderBottom: `1px solid ${C.outline}`, background: 'rgba(244,247,245,.92)' }}>
+        <div className="screen-title">和家人的对话</div>
+        <div className="screen-subtitle">消息会在小暖陪伴时播报给家人</div>
       </div>
 
       {/* 聊天流 */}
-      <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '10px 14px 14px', background: `linear-gradient(180deg,transparent,${C.mist}08)` }}>
-        {sent.length === 0 && <div style={{ fontSize: 13, color: C.inkFaint, fontFamily: 'Noto Sans SC', fontWeight: 300, textAlign: 'center', padding: '40px 0', opacity: .5 }}>还没有消息，说句话试试</div>}
+      <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '14px 14px 18px' }}>
+        {sent.length === 0 && <div style={{ fontSize: 13, color: C.inkFaint, fontWeight: 500, textAlign: 'center', padding: '44px 0' }}>还没有消息，先向家人问个好吧</div>}
         {sent.map(m => <Bubble key={m.id} m={m} isMine={m.role !== 'patient'} />)}
       </div>
 
       {/* Flash */}
-      {flash && <div style={{ position: 'absolute', bottom: 150, left: '50%', transform: 'translateX(-50%)', background: flash.startsWith('⚠') ? C.red : C.sage, borderRadius: 14, padding: '8px 16px', fontSize: 13, color: 'white', fontFamily: 'Noto Sans SC', fontWeight: 300, zIndex: 10, animation: 'fadeIn .3s ease' }}>{flash}</div>}
+      {flash && (
+        <div role="alert" style={{ position: 'absolute', bottom: 84, left: 16, right: 16, background: flash.tone === 'error' ? C.red : C.sage, borderRadius: 14, padding: '11px 14px', fontSize: 13, color: 'white', fontWeight: 500, zIndex: 10, animation: 'fadeIn .2s ease', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 8px 24px rgba(23,33,28,.18)' }}>
+          <WarningCircle size={19} weight="fill" />
+          <span>{flash.text}</span>
+        </div>
+      )}
 
       {/* 录音浮层 */}
       {recording && (
         <div style={{ position: 'absolute', bottom: 80, left: 0, right: 0, background: 'rgba(30,24,16,.92)', padding: '20px 16px', display: 'flex', alignItems: 'center', gap: 14, zIndex: 20 }}>
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 10, height: 10, borderRadius: '50%', background: C.red, animation: 'pulse 1s ease-in-out infinite' }} />
+            <Microphone size={20} color={C.red} weight="fill" />
             <span style={{ color: 'white', fontFamily: 'Noto Sans SC', fontSize: 14 }}>录音中 {String(Math.floor(recSecs / 60)).padStart(2, '0')}:{String(recSecs % 60).padStart(2, '0')}</span>
           </div>
-          <button onClick={cancelRec} style={{ padding: '8px 14px', borderRadius: 12, border: `1px solid ${C.mist}66`, background: 'transparent', color: 'white', fontSize: 13, fontFamily: 'Noto Sans SC', cursor: 'pointer' }}>取消</button>
-          <button onClick={stopRecAndSend} style={{ padding: '8px 16px', borderRadius: 12, border: 'none', background: C.amber, color: 'white', fontSize: 13, fontFamily: 'Noto Sans SC', cursor: 'pointer' }}>发送</button>
+          <button type="button" onClick={cancelRec} aria-label="取消录音" style={{ width: 44, height: 44, borderRadius: 14, border: `1px solid ${C.mist}66`, background: 'transparent', color: 'white', cursor: 'pointer', display: 'grid', placeItems: 'center' }}><X size={20} /></button>
+          <button type="button" onClick={stopRecAndSend} style={{ height: 44, padding: '0 18px', borderRadius: 14, border: 'none', background: C.amber, color: 'white', fontSize: 13, fontWeight: 650, cursor: 'pointer' }}>发送</button>
         </div>
       )}
 
       {/* 底部输入栏 */}
-      <div style={{ borderTop: `0.5px solid ${C.mist}22`, background: C.card, padding: '8px 10px', display: 'flex', alignItems: 'flex-end', gap: 8 }}>
-        <button onClick={() => mediaInputRef.current && mediaInputRef.current.click()} disabled={busy || recording} title={`照片或视频（视频最大 ${maxUploadMb}MB）`}
-          style={{ width: 40, height: 40, borderRadius: '50%', border: `1px solid ${C.mist}33`, background: 'transparent', cursor: busy || recording ? 'not-allowed' : 'pointer', fontSize: 18, flexShrink: 0, opacity: busy || recording ? .4 : 1 }}>📎</button>
-        <button onClick={startRec} disabled={busy || recording} title="语音"
-          style={{ width: 40, height: 40, borderRadius: '50%', border: `1px solid ${C.mist}33`, background: recording ? C.red + '33' : 'transparent', cursor: busy || recording ? 'not-allowed' : 'pointer', fontSize: 18, flexShrink: 0, opacity: busy ? .4 : 1 }}>🎤</button>
+      <div style={{ borderTop: `1px solid ${C.outline}`, background: '#f9fbfa', padding: '10px 10px calc(10px + env(safe-area-inset-bottom))', display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+        <button type="button" className="icon-button" onClick={() => mediaInputRef.current && mediaInputRef.current.click()} disabled={busy || recording} aria-label={`发送照片或视频，视频最大 ${maxUploadMb}MB`}
+          style={{ cursor: busy || recording ? 'not-allowed' : 'pointer', opacity: busy || recording ? .4 : 1 }}><Paperclip size={21} /></button>
+        <button type="button" className="icon-button" onClick={startRec} disabled={busy || recording} aria-label="录制语音"
+          style={{ cursor: busy || recording ? 'not-allowed' : 'pointer', opacity: busy ? .4 : 1 }}><Microphone size={21} /></button>
         <textarea value={text} onChange={e => setText(e.target.value)} placeholder="说点什么…" rows={1}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText(); } }}
-          style={{ flex: 1, minHeight: 40, maxHeight: 100, padding: '10px 12px', borderRadius: 18, border: `1px solid ${C.mist}33`, background: 'white', resize: 'none', fontSize: 15, color: C.ink, fontFamily: 'Noto Sans SC', fontWeight: 300, outline: 'none', lineHeight: 1.4 }} />
-        <button onClick={sendText} disabled={!text.trim() || busy}
-          style={{ padding: '10px 14px', borderRadius: 18, border: 'none', background: text.trim() && !busy ? C.amber : `${C.mist}44`, color: 'white', fontSize: 13, fontFamily: 'Noto Sans SC', fontWeight: 400, cursor: text.trim() && !busy ? 'pointer' : 'not-allowed', flexShrink: 0 }}>发送</button>
+          style={{ flex: 1, minHeight: 48, maxHeight: 112, padding: '12px 14px', borderRadius: 16, border: `1px solid ${C.outline}`, background: 'white', resize: 'none', fontSize: 15, color: C.ink, fontWeight: 400, outline: 'none', lineHeight: 1.5 }} />
+        <button type="button" onClick={sendText} disabled={!text.trim() || busy} aria-label="发送消息"
+          style={{ width: 48, height: 48, borderRadius: 16, border: 'none', background: text.trim() && !busy ? C.amber : C.surfaceVariant, color: text.trim() && !busy ? C.onPrimary : C.inkFaint, cursor: text.trim() && !busy ? 'pointer' : 'not-allowed', flexShrink: 0, display: 'grid', placeItems: 'center' }}><PaperPlaneRight size={21} weight="fill" /></button>
         <input ref={mediaInputRef} type="file" accept="image/*,video/*" onChange={onPickMedia} style={{ display: 'none' }} />
       </div>
     </div>

@@ -15,7 +15,9 @@ export function fmtTime(ts) {
 
 export function fmtCallTime(iso) {
   try {
-    const d = new Date(iso + 'T00:00:00');
+    const datePart = String(iso || '').slice(0, 10);
+    const d = new Date(`${datePart}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return String(iso || '');
     const now = new Date();
     if (d.toDateString() === now.toDateString()) return `今天 ${d.getMonth() + 1}月${d.getDate()}日`;
     const y = new Date(now); y.setDate(now.getDate() - 1);

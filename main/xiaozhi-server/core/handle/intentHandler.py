@@ -62,6 +62,10 @@ async def handle_user_intent(conn, text):
         conn.logger.bind(tag=TAG).info("通话中语音未命中患者端动作，已忽略普通对话处理")
         return True
 
+    if not getattr(conn, "dignity_active", False):
+        if await handle_hospice_symptom_qa(conn, text):
+            return True
+
     if hospice_config and hospice_config.get("enable_robot_voice_actions", True):
         try:
             from core.robot_actions import classify_robot_action, dispatch_robot_action
@@ -196,6 +200,47 @@ async def analyze_intent_with_llm(conn, text):
         conn.logger.bind(tag=TAG).error(f"意图识别失败: {str(e)}")
 
     return None
+
+
+async def handle_hospice_symptom_qa(conn, text):
+    hospice_config = conn.config.get("hospice", {}) or {}
+    if not hospice_config:
+        return False
+
+    qa_config = hospice_config.get("symptom_qa", {})
+    if qa_config is False or (
+        isinstance(qa_config, dict) and qa_config.get("enabled", True) is False
+    ):
+        return False
+
+    try:
+        from core.dignity.symptom_qa import DEFAULT_MIN_SCORE, match_symptom_question
+
+        min_score = (
+            float(qa_config.get("min_score", DEFAULT_MIN_SCORE))
+            if isinstance(qa_config, dict)
+            else DEFAULT_MIN_SCORE
+        )
+        match = match_symptom_question(text, min_score=min_score)
+    except Exception as e:
+        conn.logger.bind(tag=TAG).warning(f"症状问答库匹配失败，继续普通聊天: {e}")
+        return False
+
+    if match is None:
+        return False
+
+    conn.sentence_id = str(uuid.uuid4().hex)
+    conn.client_abort = False
+    await send_stt_message(conn, text)
+    conn.dialogue.put(Message(role="user", content=text))
+    speak_txt(conn, match.entry.answer)
+    conn.logger.bind(tag=TAG).info(
+        "症状问答库命中: "
+        f"symptom={match.entry.symptom}, question={match.entry.question}, "
+        f"source_row={match.entry.source_row}, match_type={match.match_type}, "
+        f"score={match.score:.3f}"
+    )
+    return True
 
 
 async def process_intent_result(conn, intent_result, original_text):

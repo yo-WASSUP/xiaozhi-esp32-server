@@ -1,125 +1,87 @@
-import { useEffect, useRef, useState } from 'react';
-import { C } from '../theme';
+import { useEffect, useState } from 'react';
+import { House } from 'lucide-react';
 
 function Clock() {
   const [now, setNow] = useState(new Date());
-  useEffect(() => { const id = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(id); }, []);
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
   const hh = String(now.getHours()).padStart(2, '0');
   const mm = String(now.getMinutes()).padStart(2, '0');
-  const gr = now.getHours() < 6 ? '凌晨' : now.getHours() < 12 ? '上午' : now.getHours() < 18 ? '下午' : '晚上';
+  const period = now.getHours() < 6
+    ? '凌晨'
+    : now.getHours() < 12
+      ? '上午'
+      : now.getHours() < 18
+        ? '下午'
+        : '晚上';
+
   return (
-    <div style={{ textAlign: 'right', fontFamily: 'Noto Sans SC', fontWeight: 300 }}>
-      <div style={{ fontSize: 28, color: C.ink, letterSpacing: '.12em' }}>{hh}:{mm}</div>
-      <div style={{ fontSize: 11, color: C.inkFaint, letterSpacing: '.1em' }}>{gr}好</div>
+    <div className="patient-topbar__clock" aria-label={`现在时间 ${hh}:${mm}`}>
+      <strong>{hh}:{mm}</strong>
+      <span>{period}</span>
     </div>
   );
 }
 
 export default function TopBar({
+  activeApp,
+  appTitle,
   connected,
   recording,
   micOk,
   connectStatus,
-  onOpenSettings,
-  onOpenAssistantTools,
-  dignityMode,
-  onToggleDignityMode,
+  onHome,
 }) {
-  const pressTimerRef = useRef(null);
-  const longPressTriggeredRef = useRef(false);
-  const clearPressTimer = () => {
-    if (pressTimerRef.current) {
-      clearTimeout(pressTimerRef.current);
-      pressTimerRef.current = null;
-    }
-  };
-  const beginSettingsPress = () => {
-    longPressTriggeredRef.current = false;
-    clearPressTimer();
-    pressTimerRef.current = setTimeout(() => {
-      longPressTriggeredRef.current = true;
-      pressTimerRef.current = null;
-      if (onOpenAssistantTools) onOpenAssistantTools();
-    }, 1200);
-  };
-  const endSettingsPress = () => {
-    clearPressTimer();
-    if (longPressTriggeredRef.current) {
-      longPressTriggeredRef.current = false;
-      return;
-    }
-    onOpenSettings();
-  };
-  const statusColor = connected && recording ? C.sage : connected ? C.amber : C.red;
-  const statusText = connected && recording
-    ? '小暖在线聆听'
+  const isVoicePage = activeApp === 'voice' || activeApp === 'dignity';
+
+  const status = !isVoicePage
+    ? { label: '系统待机', type: 'ready' }
+    : recording
+    ? { label: activeApp === 'dignity' ? '访谈正在进行' : '语音通话中', type: 'active' }
     : connected
-      ? '小暖在线'
-      : '正在连接小暖';
+      ? { label: isVoicePage ? '语音服务已就绪' : '系统已就绪', type: 'ready' }
+      : { label: '语音服务连接中', type: 'waiting' };
 
   return (
-    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 72, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 48px', borderBottom: `0.5px solid ${C.mist}22`, backdropFilter: 'blur(12px)', background: `rgba(243,233,212,0.55)` }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ width: 36, height: 36, borderRadius: '50%', background: `radial-gradient(circle at 33% 30%,${C.amber}ee,#b87340cc)`, boxShadow: `0 0 16px ${C.amber}44` }} />
-        <div>
-          <div style={{ fontSize: 18, fontWeight: 400, color: C.ink, letterSpacing: '.14em', fontFamily: 'Noto Serif SC, serif' }}>小暖</div>
-          <div style={{ fontSize: 11, color: C.inkFaint, letterSpacing: '.08em', fontFamily: 'Noto Sans SC', fontWeight: 300 }}>安宁疗护陪伴助手</div>
-        </div>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 18, fontFamily: 'Noto Sans SC', fontWeight: 300 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: statusColor, fontSize: 14, letterSpacing: '.08em' }}>
-          <span style={{ width: 9, height: 9, borderRadius: '50%', background: statusColor, boxShadow: `0 0 8px ${statusColor}`, animation: recording ? 'dotPulse 1.2s ease-in-out infinite' : 'none' }} />
-          {statusText}
-        </div>
-        <button
-          onClick={onToggleDignityMode}
-          title={dignityMode ? '退出尊严疗法模式' : '进入尊严疗法模式'}
-          style={{
-            minWidth: 132,
-            height: 36,
-            padding: '0 14px',
-            borderRadius: 18,
-            border: dignityMode ? `1px solid ${C.amber}` : `1px solid ${C.mist}55`,
-            background: dignityMode ? `${C.amber}22` : 'rgba(255,250,242,.72)',
-            color: dignityMode ? C.ink : C.inkMid,
-            cursor: 'pointer',
-            fontSize: 13,
-            letterSpacing: '.06em',
-            fontFamily: 'Noto Sans SC',
-            fontWeight: 300,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {dignityMode ? '尊严疗法中' : '自然聊天'}
-        </button>
-        {!micOk && (
-          <div style={{ color: C.red, fontSize: 13, letterSpacing: '.06em' }}>需要麦克风权限</div>
+    <header className="patient-topbar">
+      <div className="patient-topbar__start">
+        {activeApp === 'home' ? (
+          <div className="patient-brand">
+            <span className="patient-brand__mark" aria-hidden="true">暖</span>
+            <span>
+              <strong>小暖</strong>
+              <small>安宁疗护陪伴助手</small>
+            </span>
+          </div>
+        ) : (
+          <>
+            <button className="patient-topbar__home" type="button" onClick={onHome} title="返回主菜单">
+              <House size={24} strokeWidth={1.9} aria-hidden="true" />
+              <span>主菜单</span>
+            </button>
+            <div className="patient-topbar__divider" />
+            <div className="patient-topbar__title">{appTitle}</div>
+          </>
         )}
-        {connectStatus && connected && (
-          <div style={{ color: C.inkFaint, fontSize: 12, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{connectStatus}</div>
-        )}
-        <button
-          onPointerDown={beginSettingsPress}
-          onPointerUp={endSettingsPress}
-          onPointerLeave={clearPressTimer}
-          onPointerCancel={clearPressTimer}
-          title="设置"
-          style={{
-            width: 38,
-            height: 38,
-            borderRadius: '50%',
-            border: `1px solid ${C.mist}44`,
-            background: 'rgba(255,250,242,.72)',
-            color: C.inkMid,
-            cursor: 'pointer',
-            fontSize: 18,
-            lineHeight: 1,
-          }}
-        >
-          ⚙
-        </button>
       </div>
-      <Clock />
-    </div>
+
+      <div className="patient-topbar__end">
+        <div className={`patient-topbar__status patient-topbar__status--${status.type}`}>
+          <span aria-hidden="true" />
+          {status.label}
+        </div>
+        {isVoicePage && !micOk && (
+          <div className="patient-topbar__notice">需要麦克风权限</div>
+        )}
+        {isVoicePage && connectStatus && connected && (
+          <div className="patient-topbar__notice patient-topbar__notice--truncate">{connectStatus}</div>
+        )}
+        <Clock />
+      </div>
+    </header>
   );
 }

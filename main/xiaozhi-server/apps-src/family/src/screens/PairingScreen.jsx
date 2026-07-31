@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { DeviceMobile, LinkSimple, ShieldCheck } from '@phosphor-icons/react';
 import { C } from '../theme';
 
 export default function PairingScreen() {
@@ -44,32 +45,40 @@ export default function PairingScreen() {
   };
 
   return (
-    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div style={{ width: 420, maxWidth: '100%', border: `1px solid ${C.mist}33`, borderRadius: 8, background: C.card, padding: 22, boxShadow: '0 12px 38px rgba(30,24,16,.12)' }}>
-        <div style={{ fontSize: 24, color: C.ink, fontFamily: 'Noto Serif SC,serif', marginBottom: 6 }}>绑定患者</div>
-        <div style={{ fontSize: 13, color: C.inkFaint, lineHeight: 1.7, marginBottom: 18 }}>请在患者端设置里生成配对码，然后在这里输入。</div>
+    <div style={{ position: 'absolute', inset: 0, overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'calc(24px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom))' }}>
+      <div style={{ width: 420, maxWidth: '100%', border: `1px solid ${C.outline}`, borderRadius: 20, background: C.card, padding: 22, boxShadow: '0 18px 48px rgba(47,107,85,.10)' }}>
+        <div style={{ width: 52, height: 52, borderRadius: 16, background: C.primaryContainer, color: C.amber, display: 'grid', placeItems: 'center', marginBottom: 18 }}><DeviceMobile size={27} weight="duotone" /></div>
+        <div style={{ fontSize: 25, color: C.ink, fontWeight: 650, letterSpacing: '-.02em', marginBottom: 7 }}>连接家人的设备</div>
+        <div style={{ fontSize: 14, color: C.inkFaint, lineHeight: 1.65, marginBottom: 22 }}>在患者端生成 6 位配对码，然后填写您的称呼即可完成连接。</div>
+        <label style={labelStyle} htmlFor="pairing-code">配对码</label>
         <input
+          id="pairing-code"
           value={code}
           onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-          placeholder="6 位配对码"
+          placeholder="请输入 6 位数字"
           inputMode="numeric"
           style={inputStyle}
         />
+        <label style={labelStyle} htmlFor="family-name">您的称呼</label>
         <input
+          id="family-name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="家属称呼，例如：女儿小雨"
+          placeholder="例如：女儿小雨"
           style={inputStyle}
         />
+        <label style={labelStyle} htmlFor="relationship">与家人的关系 <span style={{ color: C.inkFaint, fontWeight: 400 }}>选填</span></label>
         <input
+          id="relationship"
           value={relationship}
           onChange={(e) => setRelationship(e.target.value)}
-          placeholder="关系，可选"
+          placeholder="例如：女儿"
           style={inputStyle}
         />
-        {error && <div style={{ color: C.red, fontSize: 13, marginBottom: 12 }}>{error}</div>}
-        <button onClick={bind} disabled={busy} style={{ width: '100%', height: 42, border: 'none', borderRadius: 8, background: busy ? `${C.mist}66` : C.sage, color: 'white', fontSize: 15, cursor: busy ? 'not-allowed' : 'pointer' }}>
-          {busy ? '绑定中...' : '完成绑定'}
+        {error && <div role="alert" style={{ color: C.red, background: `${C.red}10`, borderRadius: 12, padding: '10px 12px', fontSize: 13, marginBottom: 14 }}>{error}</div>}
+        <button type="button" className="tap-button" onClick={bind} disabled={busy} style={{ width: '100%', border: 'none', borderRadius: 16, background: busy ? C.surfaceVariant : C.sage, color: busy ? C.inkFaint : 'white', fontSize: 15, fontWeight: 650, cursor: busy ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          {busy ? <LinkSimple size={20} /> : <ShieldCheck size={20} weight="fill" />}
+          {busy ? '正在连接' : '安全连接'}
         </button>
       </div>
     </div>
@@ -79,12 +88,21 @@ export default function PairingScreen() {
 const inputStyle = {
   width: '100%',
   boxSizing: 'border-box',
-  border: `1px solid ${C.mist}33`,
-  borderRadius: 8,
-  padding: '12px 13px',
-  marginBottom: 12,
+  height: 50,
+  border: `1px solid ${C.outline}`,
+  borderRadius: 14,
+  padding: '0 14px',
+  marginBottom: 16,
   color: C.ink,
   fontSize: 15,
   outline: 'none',
-  background: 'rgba(255,255,255,.76)',
+  background: '#fff',
+};
+
+const labelStyle = {
+  display: 'block',
+  color: C.inkMid,
+  fontSize: 13,
+  fontWeight: 600,
+  marginBottom: 7,
 };

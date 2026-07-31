@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import { C } from '../theme';
+import RobotAvatar from '../components/RobotAvatar';
+import WaveBars from '../components/WaveBars';
+import voiceRoomBackground from '../assets/voice/voice-room.webp';
 
 const MIN_MEMORY_ITEMS_FOR_DOCUMENT = 6;
 
@@ -17,6 +20,83 @@ const LETTER_TEMPLATES = [
   { id: 'sky', name: '晴空', swatch: '#9fc5df', preview: './images/letter_templates/sky.png', envelope: './images/letter_templates/envelope-sky.png' },
   { id: 'plain', name: '素白', swatch: '#f4ecdd', preview: './images/letter_templates/plain.png', envelope: './images/letter_templates/envelope-plain.png' },
 ];
+
+function DignityInterviewStage({
+  aiState,
+  msg,
+  openingReply,
+  lastHeard,
+  connected,
+  recording,
+  userSpeaking,
+  inputLevel,
+  outputLevel,
+  voiceMode,
+}) {
+  const passiveState = aiState === 'speaking' || aiState === 'thinking' ? aiState : 'idle';
+  const displayState = voiceMode && aiState === 'idle' && connected && recording && userSpeaking
+    ? 'listening'
+    : voiceMode
+      ? aiState
+      : passiveState;
+  const activitySource = userSpeaking || aiState !== 'speaking' ? 'input' : 'output';
+  const activityLevel = activitySource === 'input' ? inputLevel : outputLevel;
+  const statusText = !connected
+    ? '语音服务连接中'
+    : voiceMode
+      ? (userSpeaking ? '正在听您说' : '访谈进行中')
+      : '访谈已暂停';
+  const fallbackReply = !connected
+    ? '语音服务正在连接，请稍等一会儿。'
+    : voiceMode
+      ? '我在这里。我们可以慢慢聊，您想到什么就说什么。'
+      : '访谈已暂停，准备好后可以继续。';
+  const reply = msg || openingReply || fallbackReply;
+
+  return (
+    <aside
+      className={`dignity-interview dignity-interview--${displayState}`}
+      style={{ '--dignity-room-background': `url(${voiceRoomBackground})` }}
+      aria-label="尊严疗法实时语音访谈"
+    >
+      <div className="dignity-interview__header">
+        <div>
+          <span className="dignity-interview__eyebrow">实时语音访谈</span>
+          <h2>和小暖慢慢聊</h2>
+        </div>
+        <span className={`dignity-interview__status ${voiceMode ? 'is-active' : ''}`}>
+          <i aria-hidden="true" />
+          {statusText}
+        </span>
+      </div>
+
+      <div className="dignity-interview__avatar" aria-hidden="true">
+        <RobotAvatar state={displayState} />
+      </div>
+
+      <div className="dignity-interview__conversation" aria-live="polite">
+        <div className="dignity-interview__turn dignity-interview__turn--user">
+          <span>您说</span>
+          <p className={lastHeard ? '' : 'is-quiet'}>
+            {lastHeard || '您说的话会显示在这里'}
+          </p>
+        </div>
+        <div className="dignity-interview__turn dignity-interview__turn--assistant">
+          <span>小暖</span>
+          <p className={(msg || openingReply) ? '' : 'is-quiet'}>{reply}</p>
+        </div>
+      </div>
+
+      <div className="dignity-interview__activity" aria-hidden="true">
+        <WaveBars
+          source={activitySource}
+          level={activityLevel}
+          active={connected && ((voiceMode && recording) || aiState === 'speaking')}
+        />
+      </div>
+    </aside>
+  );
+}
 
 function collectMemorySections(memory) {
   return Object.entries(memory || {})
@@ -326,6 +406,15 @@ function DocumentPanel({ document, documentUrl, busy, confirmBusy, reading, onCh
 
 export default function DignityTherapyPanel({
   status,
+  aiState,
+  msg,
+  lastHeard,
+  connected,
+  recording,
+  userSpeaking,
+  inputLevel = 0,
+  outputLevel = 0,
+  openingReply,
   documentBusy,
   documentConfirmBusy,
   document,
@@ -360,68 +449,82 @@ export default function DignityTherapyPanel({
   const documentReady = memoryItemCount >= MIN_MEMORY_ITEMS_FOR_DOCUMENT;
 
   return (
-    <div style={screenStyle}>
-      <section style={controlPanelStyle}>
-        <div style={kickerStyle}>尊严疗法</div>
-        <div style={actionsStyle}>
-          <button onClick={onToggleVoiceMode} style={primaryButtonStyle(voiceMode)}>
-            {voiceMode ? '暂停访谈' : '开始访谈'}
-          </button>
-        </div>
-      </section>
-
-      <MemoryPanel
-        sections={memorySections}
-        itemCount={memoryItemCount}
-        ready={documentReady}
-        busy={documentBusy}
-        cardBusy={legacyCardBusy}
-        onGenerateDocument={onGenerateDocument}
-        onGenerateLegacyCard={onGenerateLegacyCard}
+    <div className="dignity-therapy">
+      <DignityInterviewStage
+        aiState={aiState}
+        msg={msg}
+        openingReply={openingReply}
+        lastHeard={lastHeard}
+        connected={connected}
+        recording={recording}
+        userSpeaking={userSpeaking}
+        inputLevel={inputLevel}
+        outputLevel={outputLevel}
+        voiceMode={voiceMode}
       />
 
-      <DocumentPanel
-        document={document}
-        documentUrl={documentUrl}
-        busy={documentBusy}
-        confirmBusy={documentConfirmBusy}
-        reading={readingKind === 'document'}
-        onChange={onDocumentChange}
-        onConfirm={onConfirmDocument}
-        onRead={onReadDocument}
-        onStopReading={onStopReading}
-      />
+      <main className="dignity-therapy__workspace">
+        <section style={controlPanelStyle}>
+          <div style={kickerStyle}>尊严疗法</div>
+          <div style={actionsStyle}>
+            <button onClick={onToggleVoiceMode} style={primaryButtonStyle(voiceMode)}>
+              {voiceMode ? '暂停访谈' : '开始访谈'}
+            </button>
+          </div>
+        </section>
 
-      <LegacyCardPanel
-        card={legacyCard}
-        imageUrl={legacyCardImageUrl}
-        busy={legacyCardBusy}
-        reading={readingKind === 'card'}
-        onRead={onReadLegacyCard}
-        onStopReading={onStopReading}
-        onChange={onLegacyCardChange}
-        onSave={onSaveLegacyCard}
-      />
+        <MemoryPanel
+          sections={memorySections}
+          itemCount={memoryItemCount}
+          ready={documentReady}
+          busy={documentBusy}
+          cardBusy={legacyCardBusy}
+          onGenerateDocument={onGenerateDocument}
+          onGenerateLegacyCard={onGenerateLegacyCard}
+        />
 
-      <FamilyLetterPanel
-        letter={familyLetter}
-        imageUrl={familyLetterImageUrl}
-        busy={familyLetterBusy}
-        ready={documentReady}
-        reading={readingKind === 'letter'}
-        template={familyLetterTemplate}
-        onTemplateChange={onFamilyLetterTemplateChange}
-        onGenerate={onGenerateFamilyLetter}
-        onRead={onReadFamilyLetter}
-        onStopReading={onStopReading}
-        onChange={onFamilyLetterChange}
-        onSave={onSaveFamilyLetter}
-      />
+        <DocumentPanel
+          document={document}
+          documentUrl={documentUrl}
+          busy={documentBusy}
+          confirmBusy={documentConfirmBusy}
+          reading={readingKind === 'document'}
+          onChange={onDocumentChange}
+          onConfirm={onConfirmDocument}
+          onRead={onReadDocument}
+          onStopReading={onStopReading}
+        />
+
+        <LegacyCardPanel
+          card={legacyCard}
+          imageUrl={legacyCardImageUrl}
+          busy={legacyCardBusy}
+          reading={readingKind === 'card'}
+          onRead={onReadLegacyCard}
+          onStopReading={onStopReading}
+          onChange={onLegacyCardChange}
+          onSave={onSaveLegacyCard}
+        />
+
+        <FamilyLetterPanel
+          letter={familyLetter}
+          imageUrl={familyLetterImageUrl}
+          busy={familyLetterBusy}
+          ready={documentReady}
+          reading={readingKind === 'letter'}
+          template={familyLetterTemplate}
+          onTemplateChange={onFamilyLetterTemplateChange}
+          onGenerate={onGenerateFamilyLetter}
+          onRead={onReadFamilyLetter}
+          onStopReading={onStopReading}
+          onChange={onFamilyLetterChange}
+          onSave={onSaveFamilyLetter}
+        />
+      </main>
     </div>
   );
 }
 
-const screenStyle = { height: '100%', overflow: 'auto', boxSizing: 'border-box', padding: '34px 30px 30px', color: C.ink, fontFamily: 'Noto Sans SC', display: 'grid', alignContent: 'start', gap: 20 };
 const controlPanelStyle = { display: 'grid', gap: 16, padding: '2px 0 18px', borderBottom: `1px solid ${C.mist}22` };
 const kickerStyle = { color: C.ink, fontSize: 32, lineHeight: 1.15, fontFamily: 'Noto Serif SC, serif', fontWeight: 600 };
 const subTextStyle = { color: C.inkFaint, fontSize: 15, lineHeight: 1.6 };

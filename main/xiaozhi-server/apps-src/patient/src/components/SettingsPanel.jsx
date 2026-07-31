@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Mic } from 'lucide-react';
 import { DEVICE_ID } from '../constants';
 import { C } from '../theme';
 
@@ -111,6 +112,8 @@ export default function SettingsPanel({ open, onClose, voiceMode = 'doubao_s2s',
   const [pairingCode, setPairingCode] = useState('');
   const [pairingExpiresAt, setPairingExpiresAt] = useState(0);
   const [families, setFamilies] = useState([]);
+  const [microphones, setMicrophones] = useState([]);
+  const [microphoneId, setMicrophoneId] = useState('');
 
   const recorderRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -128,6 +131,36 @@ export default function SettingsPanel({ open, onClose, voiceMode = 'doubao_s2s',
     setVoiceId(nextSettings.voice_id || nextSettings.speaker_id || '');
     setAlias(nextSettings.alias || '家属声音');
     setModel(nextSettings.model || model);
+  };
+
+  const loadMicrophones = async () => {
+    try {
+      const [devices, selectedDeviceId] = await Promise.all([
+        window.XiaozhiClient?.listMicrophones?.() || [],
+        window.XiaozhiClient?.getMicrophoneDevice?.() || '',
+      ]);
+      setMicrophones(Array.isArray(devices) ? devices : []);
+      setMicrophoneId(selectedDeviceId || '');
+    } catch (e) {
+      setMicrophones([]);
+      setTip(`读取麦克风失败：${e?.message || '未知错误'}`);
+    }
+  };
+
+  const changeMicrophone = async (event) => {
+    const nextDeviceId = event.target.value;
+    setBusy('microphone');
+    setTip('');
+    try {
+      await window.XiaozhiClient?.setMicrophoneDevice?.(nextDeviceId);
+      setMicrophoneId(nextDeviceId);
+      const selected = microphones.find(device => device.deviceId === nextDeviceId);
+      setTip(`已切换到${selected?.label || '系统默认麦克风'}。`);
+    } catch (e) {
+      setTip(`麦克风切换失败：${e?.message || '未知错误'}`);
+    } finally {
+      setBusy('');
+    }
   };
 
   const loadConfig = async () => {
@@ -179,8 +212,12 @@ export default function SettingsPanel({ open, onClose, voiceMode = 'doubao_s2s',
     if (open) {
       loadConfig();
       loadFamilies();
+      loadMicrophones();
     }
+    const handleDeviceChange = () => loadMicrophones();
+    navigator.mediaDevices?.addEventListener?.('devicechange', handleDeviceChange);
     return () => {
+      navigator.mediaDevices?.removeEventListener?.('devicechange', handleDeviceChange);
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       clearInterval(timerRef.current);
       cancelAnimationFrame(rafRef.current);
@@ -236,7 +273,12 @@ export default function SettingsPanel({ open, onClose, voiceMode = 'doubao_s2s',
     resetCurrentSample();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          ...(microphoneId ? { deviceId: { exact: microphoneId } } : {}),
+        },
       });
       streamRef.current = stream;
       const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -526,7 +568,6 @@ export default function SettingsPanel({ open, onClose, voiceMode = 'doubao_s2s',
   };
 
   const warn = tip.includes('失败') || tip.includes('缺少') || tip.includes('未完成') || tip.includes('无法') || tip.includes('不可用');
-  const currentStatus = settings.active ? '已启用' : '默认音色';
   const sampleTooShort = !!blob && durationRef.current < MIN_RECORD_SECONDS;
   const canSubmit = configured && !!blob && !sampleTooShort && !recording && !busy;
 
@@ -541,18 +582,54 @@ export default function SettingsPanel({ open, onClose, voiceMode = 'doubao_s2s',
       <div style={{ width: 520, maxWidth: '94vw', height: '100%', background: '#fffaf2', boxShadow: '-10px 0 32px rgba(30,24,16,.18)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '20px 24px', borderBottom: `1px solid ${C.mist}22`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ fontSize: 22, color: C.ink, fontFamily: 'Noto Serif SC,serif' }}>设置</div>
-            <div style={{ fontSize: 12, color: statusTone(settings.status, settings.active), marginTop: 4, fontFamily: 'Noto Sans SC' }}>{currentStatus}</div>
+            <div style={{ fontSize: 22, color: C.ink, fontFamily: 'Noto Serif SC,serif' }}>语音与设备设置</div>
+            <div style={{ fontSize: 12, color: C.mist, marginTop: 4, fontFamily: 'Noto Sans SC' }}>麦克风、语音模式、家属配对与声音管理</div>
           </div>
           <button onClick={onClose} style={{ ...buttonStyle(), width: 38, height: 38, borderRadius: '50%', padding: 0, fontSize: 20 }}>×</button>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: 22, fontFamily: 'Noto Sans SC', color: C.inkMid }}>
           <div style={sectionStyle}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
+              <Mic size={19} strokeWidth={1.8} color={C.sage} aria-hidden="true" />
+              <div>
+                <div style={{ fontSize: 17, color: C.ink }}>对话麦克风</div>
+                <div style={{ fontSize: 12, color: C.inkFaint, marginTop: 3 }}>切换后立即用于语音沟通和声音录制</div>
+              </div>
+            </div>
+            <select
+              value={microphoneId}
+              onChange={changeMicrophone}
+              disabled={busy === 'microphone'}
+              aria-label="选择对话麦克风"
+              style={{
+                width: '100%',
+                minHeight: 44,
+                boxSizing: 'border-box',
+                padding: '9px 36px 9px 12px',
+                border: `1px solid ${C.mist}44`,
+                borderRadius: 8,
+                color: C.ink,
+                background: 'rgba(255,255,255,.72)',
+                fontSize: 14,
+                fontFamily: 'Noto Sans SC',
+                cursor: busy === 'microphone' ? 'wait' : 'pointer',
+              }}
+            >
+              <option value="">系统默认麦克风</option>
+              {microphones.map((device, index) => (
+                <option key={device.deviceId || `microphone-${index}`} value={device.deviceId}>
+                  {device.label || `麦克风 ${index + 1}`}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={sectionStyle}>
             <div style={{ fontSize: 17, color: C.ink, marginBottom: 10 }}>AI 语音模式</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {[
-                { id: 'doubao_s2s', label: '豆包端到端', note: '自然聊天' },
+                { id: 'doubao_s2s', label: '端到端', note: '自然聊天' },
                 { id: 'cascade', label: '标准模式', note: '功能完整' },
               ].map((option) => {
                 const selected = voiceMode === option.id;

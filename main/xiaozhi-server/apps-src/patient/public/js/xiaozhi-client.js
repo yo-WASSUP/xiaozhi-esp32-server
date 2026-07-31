@@ -25,6 +25,10 @@ window.XiaozhiClient = {
   releaseWakeWord() { return xiaozhiBridgeReady.then(c => c.releaseWakeWord()); },
   async startRecording(options) { return (await xiaozhiBridgeReady).startRecording(options); },
   stopRecording() { return xiaozhiBridgeReady.then(c => c.stopRecording()); },
+  interrupt(reason) { return xiaozhiBridgeReady.then(c => c.interrupt(reason)); },
+  listMicrophones() { return xiaozhiBridgeReady.then(c => c.listMicrophones()); },
+  getMicrophoneDevice() { return xiaozhiBridgeReady.then(c => c.getMicrophoneDevice()); },
+  setMicrophoneDevice(deviceId) { return xiaozhiBridgeReady.then(c => c.setMicrophoneDevice(deviceId)); },
   isConnected() { return false; },
   isRecording() { return false; },
   isRemoteSpeaking() { return false; },
@@ -96,8 +100,8 @@ const [
   playerMod,
   opusMod,
 ] = await Promise.all([
-  import(`${TEST}/core/network/websocket.js?v=0131`),
-  import(`${TEST}/core/audio/recorder.js?v=0127`),
+  import(`${TEST}/core/network/websocket.js?v=0133`),
+  import(`${TEST}/core/audio/recorder.js?v=0129`),
   import(`${TEST}/core/audio/player.js?v=0127`),
   import(`${TEST}/core/audio/opus-codec.js?v=0127`),
 ]);
@@ -110,6 +114,88 @@ let wakeWordMod = null;
 // ── 4. 桥接回调：把原模块的回调转成 window 事件 ──────────
 let isConnected = false;
 let isRemoteSpeaking = false;
+let audioLevelFrame = null;
+let lastAudioLevelUpdate = 0;
+let inputLevel = 0;
+let outputLevel = 0;
+let bargeInFrames = 0;
+let lastInterruptAt = 0;
+const analyserBuffers = new WeakMap();
+const MICROPHONE_STORAGE_KEY = 'xiaonuan_microphone_device_id';
+
+function readAudioLevel(analyser) {
+  if (!analyser) return 0;
+  let data = analyserBuffers.get(analyser);
+  if (!data || data.length !== analyser.fftSize) {
+    data = new Uint8Array(analyser.fftSize);
+    analyserBuffers.set(analyser, data);
+  }
+  analyser.getByteTimeDomainData(data);
+  let sum = 0;
+  for (let i = 0; i < data.length; i += 1) {
+    const sample = (data[i] - 128) / 128;
+    sum += sample * sample;
+  }
+  const rms = Math.sqrt(sum / data.length);
+  return Math.max(0, Math.min(1, (rms - 0.008) / 0.16));
+}
+
+function smoothLevel(previous, next) {
+  const factor = next > previous ? 0.58 : 0.2;
+  return previous + (next - previous) * factor;
+}
+
+function interruptRemoteSpeech(reason = 'user_speech') {
+  const now = Date.now();
+  if (!isRemoteSpeaking || now - lastInterruptAt < 800) return false;
+  const websocket = wsHandler.getWebSocket?.();
+  if (!websocket || websocket.readyState !== WebSocket.OPEN) return false;
+
+  lastInterruptAt = now;
+  bargeInFrames = 0;
+  websocket.send(JSON.stringify({
+    type: 'abort',
+    session_id: wsHandler.currentSessionId || '',
+    reason,
+  }));
+  player.clearAllAudio();
+  isRemoteSpeaking = false;
+  window.dispatchEvent(new CustomEvent('xz:barge-in', {
+    detail: { reason }
+  }));
+  window.dispatchEvent(new CustomEvent('xz:state', {
+    detail: { state: 'listening' }
+  }));
+  return true;
+}
+
+function startAudioLevelMonitor() {
+  if (audioLevelFrame) return;
+  const update = (time) => {
+    audioLevelFrame = requestAnimationFrame(update);
+    if (time - lastAudioLevelUpdate < 66) return;
+    lastAudioLevelUpdate = time;
+    inputLevel = smoothLevel(inputLevel, readAudioLevel(recorder.getAnalyser?.()));
+    outputLevel = smoothLevel(outputLevel, readAudioLevel(player.streamingContext?.getAnalyser?.()));
+    const speechThreshold = Math.max(0.18, outputLevel * 0.3);
+    if (
+      isRemoteSpeaking
+      && recorder.isRecording
+      && inputLevel >= speechThreshold
+    ) {
+      bargeInFrames += 1;
+      if (bargeInFrames >= 3) {
+        interruptRemoteSpeech('local_voice_activity');
+      }
+    } else {
+      bargeInFrames = 0;
+    }
+    window.dispatchEvent(new CustomEvent('xz:audio-level', {
+      detail: { input: inputLevel, output: outputLevel }
+    }));
+  };
+  audioLevelFrame = requestAnimationFrame(update);
+}
 
 function displayText(text) {
   let value = text;
@@ -126,7 +212,10 @@ function displayText(text) {
   } else if (value && typeof value === 'object') {
     value = value.content || value.text || '';
   }
-  return String(value || '').replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '').trim();
+  return String(value || '')
+    .replace(/<!--\s*emotion\s*:[\s\S]*?-->/gi, '')
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')
+    .trim();
 }
 
 wsHandler.onConnectionStateChange = (connected) => {
@@ -139,6 +228,7 @@ wsHandler.onConnectionStateChange = (connected) => {
 
 wsHandler.onSessionStateChange = (speaking) => {
   isRemoteSpeaking = speaking;
+  if (!speaking) bargeInFrames = 0;
   window.dispatchEvent(new CustomEvent('xz:state', {
     detail: { state: speaking ? 'speaking' : 'idle' }
   }));
@@ -183,8 +273,16 @@ const realClient = {
     opusMod.checkOpusLoaded();
     opusMod.initOpusEncoder();
     await player.start();
-    const ok = await recMod.checkMicrophoneAvailability();
+    const savedDeviceId = localStorage.getItem(MICROPHONE_STORAGE_KEY) || '';
+    recorder.setDeviceId(savedDeviceId);
+    let ok = await recMod.checkMicrophoneAvailability(savedDeviceId);
+    if (!ok && savedDeviceId) {
+      localStorage.removeItem(MICROPHONE_STORAGE_KEY);
+      recorder.setDeviceId(null);
+      ok = await recMod.checkMicrophoneAvailability();
+    }
     window.microphoneAvailable = ok;
+    startAudioLevelMonitor();
     return ok;
   },
 
@@ -252,6 +350,40 @@ const realClient = {
 
   stopRecording() {
     recorder.stop();
+  },
+
+  interrupt(reason = 'user_request') {
+    return interruptRemoteSpeech(reason);
+  },
+
+  async listMicrophones() {
+    if (!navigator.mediaDevices?.enumerateDevices) return [];
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices
+      .filter(device => device.kind === 'audioinput')
+      .map((device, index) => ({
+        deviceId: device.deviceId,
+        groupId: device.groupId,
+        label: device.label || `麦克风 ${index + 1}`,
+      }));
+  },
+
+  getMicrophoneDevice() {
+    return localStorage.getItem(MICROPHONE_STORAGE_KEY) || '';
+  },
+
+  async setMicrophoneDevice(deviceId) {
+    const nextDeviceId = String(deviceId || '');
+    await recorder.switchDevice(nextDeviceId);
+    if (nextDeviceId) {
+      localStorage.setItem(MICROPHONE_STORAGE_KEY, nextDeviceId);
+    } else {
+      localStorage.removeItem(MICROPHONE_STORAGE_KEY);
+    }
+    window.dispatchEvent(new CustomEvent('xz:microphone-change', {
+      detail: { deviceId: nextDeviceId }
+    }));
+    return nextDeviceId;
   },
 
   isConnected() { return isConnected; },

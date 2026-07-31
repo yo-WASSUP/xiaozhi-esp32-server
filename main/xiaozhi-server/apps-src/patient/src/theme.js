@@ -1,6 +1,6 @@
 export const C = {
-  paper1: '#f3e9d4', paper2: '#e6d9c0',
-  ink: '#1e1810', inkMid: '#5a4e3f', inkFaint: '#8a7a6a',
-  mist: '#8fa3b0', amber: '#d4924a', sage: '#7a9480',
-  red: '#c0484a', green: '#5a9070',
+  paper1: '#f4f6f2', paper2: '#e7ede8',
+  ink: '#24322c', inkMid: '#526159', inkFaint: '#78827c',
+  mist: '#829a90', amber: '#c38b45', sage: '#5f8774',
+  red: '#bc5957', green: '#4f806a',
 };

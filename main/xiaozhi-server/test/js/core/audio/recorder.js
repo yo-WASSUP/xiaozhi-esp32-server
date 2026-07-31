@@ -12,6 +12,7 @@ export class AudioRecorder {
         this.audioProcessor = null;
         this.audioProcessorType = null;
         this.audioSource = null;
+        this.mediaStream = null;
         this.opusEncoder = null;
         this.pcmDataBuffer = new Int16Array();
         this.audioBuffers = [];
@@ -30,6 +31,45 @@ export class AudioRecorder {
     setDeviceId(deviceId) {
         this.selectedDeviceId = deviceId || null;
         log(`麦克风已切换: ${deviceId ? deviceId : '默认设备'}`, 'info');
+    }
+
+    getAudioConstraints(deviceId = this.selectedDeviceId) {
+        const constraints = {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 16000,
+            channelCount: 1
+        };
+        if (deviceId) {
+            constraints.deviceId = { exact: deviceId };
+        }
+        return constraints;
+    }
+
+    async switchDevice(deviceId) {
+        const nextDeviceId = deviceId || null;
+        if (!this.isRecording) {
+            this.setDeviceId(nextDeviceId);
+            return true;
+        }
+
+        const nextStream = await navigator.mediaDevices.getUserMedia({
+            audio: this.getAudioConstraints(nextDeviceId)
+        });
+        const nextSource = this.audioContext.createMediaStreamSource(nextStream);
+        nextSource.connect(this.analyser);
+        nextSource.connect(this.audioProcessor);
+
+        const previousSource = this.audioSource;
+        const previousStream = this.mediaStream;
+        this.audioSource = nextSource;
+        this.mediaStream = nextStream;
+        this.setDeviceId(nextDeviceId);
+
+        try { previousSource?.disconnect(); } catch (_) { /* noop */ }
+        previousStream?.getTracks().forEach(track => track.stop());
+        return true;
     }
 
     // Set WebSocket instance
@@ -211,7 +251,7 @@ export class AudioRecorder {
         if (this.isRecording) return false;
         try {
             // Check if WebSocketHandler instance exists
-            const { getWebSocketHandler } = await import('../network/websocket.js?v=0127');
+            const { getWebSocketHandler } = await import('../network/websocket.js?v=0133');
             const wsHandler = getWebSocketHandler();
             // If machine is speaking, send abort message
             if (wsHandler && wsHandler.isRemoteSpeaking && wsHandler.currentSessionId) {
@@ -226,11 +266,9 @@ export class AudioRecorder {
                 return false;
             }
             log('请至少录制1-2秒音频以确保收集足够的数据', 'info');
-            const audioConstraints = { echoCancellation: true, noiseSuppression: true, sampleRate: 16000, channelCount: 1 };
-            if (this.selectedDeviceId) {
-                audioConstraints.deviceId = { exact: this.selectedDeviceId };
-            }
+            const audioConstraints = this.getAudioConstraints();
             const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+            this.mediaStream = stream;
             this.audioContext = this.getAudioContext();
             if (this.audioContext.state === 'suspended') {
                 await this.audioContext.resume();
@@ -316,6 +354,10 @@ export class AudioRecorder {
                 this.audioSource.disconnect();
                 this.audioSource = null;
             }
+            if (this.mediaStream) {
+                this.mediaStream.getTracks().forEach(track => track.stop());
+                this.mediaStream = null;
+            }
             if (this.visualizationRequest) {
                 cancelAnimationFrame(this.visualizationRequest);
                 this.visualizationRequest = null;
@@ -363,7 +405,7 @@ export function getAudioRecorder() {
  * Check if microphone is available
  * @returns {Promise<boolean>} Returns true if available, false if not available
  */
-export async function checkMicrophoneAvailability() {
+export async function checkMicrophoneAvailability(deviceId = null) {
     // Check if browser supports getUserMedia API
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         log('浏览器不支持getUserMedia API', 'warning');
@@ -371,7 +413,17 @@ export async function checkMicrophoneAvailability() {
     }
     try {
         // Try to access microphone
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000, channelCount: 1 } });
+        const audioConstraints = {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 16000,
+            channelCount: 1
+        };
+        if (deviceId) {
+            audioConstraints.deviceId = { exact: deviceId };
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
         // Immediately stop all tracks to release microphone
         stream.getTracks().forEach(track => track.stop());
         log('麦克风可用性检查成功', 'success');

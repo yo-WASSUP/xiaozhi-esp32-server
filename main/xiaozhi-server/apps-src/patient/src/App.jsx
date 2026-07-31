@@ -3,6 +3,8 @@ import { DEVICE_ID } from './constants';
 import PaperBg from './components/PaperBg';
 import TopBar from './components/TopBar';
 import ConnectBar from './components/ConnectBar';
+import HomeScreen, { APP_TITLES } from './screens/HomeScreen';
+import ComingSoonScreen from './screens/ComingSoonScreen';
 import ChatScreen from './screens/ChatScreen';
 import InboxScreen from './screens/InboxScreen';
 import DignityDebugPanel from './screens/DignityDebugPanel';
@@ -142,9 +144,11 @@ function mergeInterviewSegments(current, incoming) {
 }
 
 export default function App() {
+  const [activeApp, setActiveApp] = useState('home');
   const [aiState, setAiState]     = useState('idle');
   const [msg, setMsg]             = useState(null);
   const [lastHeard, setLastHeard] = useState('');
+  const [audioLevels, setAudioLevels] = useState({ input: 0, output: 0 });
   const [incoming, setIncoming]   = useState(null);   // {caller, callType}
   const [inCall, setInCall]       = useState(null);
   const [callState, setCallState] = useState('idle');
@@ -202,6 +206,7 @@ export default function App() {
   const incomingRef = useRef(null);
   const callStateRef = useRef('idle');
   const dignityModeRef = useRef(false);
+  const activeAppRef = useRef('home');
   const ordinaryVoiceAwakeRef = useRef(false);
   const dignityLiveTurnStartedAtRef = useRef(null);
   const dignityDebugTurnStartedAtRef = useRef(null);
@@ -217,6 +222,7 @@ export default function App() {
   useEffect(() => { incomingRef.current = incoming; }, [incoming]);
   useEffect(() => { callStateRef.current = callState; }, [callState]);
   useEffect(() => { dignityModeRef.current = dignityMode; }, [dignityMode]);
+  useEffect(() => { activeAppRef.current = activeApp; }, [activeApp]);
   useEffect(() => { ordinaryVoiceAwakeRef.current = ordinaryVoiceAwake; }, [ordinaryVoiceAwake]);
   useEffect(() => { patientWakeupRef.current = patientWakeup; }, [patientWakeup]);
 
@@ -243,6 +249,7 @@ export default function App() {
 
   const unread = contacts.reduce((s, c) => s + (c.unread || 0), 0);
   const dignityDebugEnabled = new URLSearchParams(window.location.search).get('dignity_debug') === '1';
+  const robotDebugEnabled = new URLSearchParams(window.location.search).get('robot_debug') === '1';
   const kwsWakeupEnabled = patientWakeup?.enabled === true && String(patientWakeup?.mode || '').toLowerCase() === 'sherpa_onnx_kws';
 
   const loadContacts = useCallback(async () => {
@@ -322,9 +329,9 @@ export default function App() {
     setAssistantHold(true);
     assistantHoldRef.current = true;
     if (recordingRef.current && window.XiaozhiClient) {
-      try { await window.XiaozhiClient.stopRecording(); } catch (_) { }
       recordingRef.current = false;
       setRecording(false);
+      try { await window.XiaozhiClient.stopRecording(); } catch (_) { }
       userSpeakingRef.current = false;
       setUserSpeaking(false);
       setAiState('idle');
@@ -333,9 +340,9 @@ export default function App() {
 
   const stopNormalRecording = useCallback(async () => {
     if (recordingRef.current && window.XiaozhiClient) {
-      try { await window.XiaozhiClient.stopRecording(); } catch (_) { }
       recordingRef.current = false;
       setRecording(false);
+      try { await window.XiaozhiClient.stopRecording(); } catch (_) { }
     }
     userSpeakingRef.current = false;
     setUserSpeaking(false);
@@ -392,10 +399,15 @@ export default function App() {
   }, []);
 
   const resumeAssistantAndStart = useCallback(async ({ allowInCall = false, delay = 200 } = {}) => {
+    const assistantPageActive = activeAppRef.current === 'voice' || activeAppRef.current === 'dignity';
+    if (!allowInCall && !incomingRef.current && !assistantPageActive) {
+      await pauseAssistantListening();
+      return;
+    }
     resumeAssistantListening();
     await sleep(delay);
     await startListening({ allowInCall });
-  }, [resumeAssistantListening, startListening]);
+  }, [pauseAssistantListening, resumeAssistantListening, startListening]);
 
   const sendClientState = useCallback(async (payload) => {
     if (!window.XiaozhiClient || typeof window.XiaozhiClient.sendClientState !== 'function') return false;
@@ -415,15 +427,44 @@ export default function App() {
     }
   }, []);
 
-  const toggleDignityMode = useCallback(async () => {
-    if (!connectedRef.current) {
-      setConnectStatus('请先连接小暖，再切换尊严疗法模式');
+  const openPatientApp = useCallback(async (appId) => {
+    activeAppRef.current = appId;
+    setActiveApp(appId);
+
+    if (appId === 'voice') {
+      if (dignityModeRef.current) {
+        await sendDignityAction('stop', { patient_id: DEVICE_ID });
+      }
+      resumeAssistantListening();
       return;
     }
-    const nextAction = dignityMode ? 'stop' : 'start';
-    const ok = await sendDignityAction(nextAction, { patient_id: DEVICE_ID });
-    if (!ok) setConnectStatus('尊严疗法模式切换失败，请稍后再试');
-  }, [dignityMode, sendDignityAction]);
+
+    if (appId === 'dignity') {
+      if (!connectedRef.current) {
+        setConnectStatus('请先连接小暖，再开始尊严疗法');
+        return;
+      }
+      if (!dignityModeRef.current) {
+        const ok = await sendDignityAction('start', { patient_id: DEVICE_ID });
+        if (!ok) setConnectStatus('尊严疗法启动失败，请稍后再试');
+      }
+      return;
+    }
+
+    await pauseAssistantListening();
+    await stopWakeWordListening();
+  }, [pauseAssistantListening, resumeAssistantListening, sendDignityAction, stopWakeWordListening]);
+
+  const returnToHome = useCallback(async () => {
+    activeAppRef.current = 'home';
+    setActiveApp('home');
+    await pauseAssistantListening();
+    await stopWakeWordListening();
+    if (dignityModeRef.current) {
+      const ok = await sendDignityAction('stop', { patient_id: DEVICE_ID });
+      if (!ok) setConnectStatus('尊严疗法退出失败，请稍后再试');
+    }
+  }, [pauseAssistantListening, sendDignityAction, stopWakeWordListening]);
 
   const runDignityDebugTurn = useCallback(async (text) => {
     setDignityDebugBusy(true);
@@ -806,7 +847,7 @@ export default function App() {
     setVoiceMode(normalized);
     localStorage.setItem('xiaonuan_voice_mode', normalized);
     window.XiaozhiClient?.setVoiceMode?.(normalized);
-    setConnectStatus(normalized === 'doubao_s2s' ? '正在切换到豆包端到端...' : '正在切换到标准模式...');
+    setConnectStatus(normalized === 'doubao_s2s' ? '正在切换到端到端模式...' : '正在切换到标准模式...');
     if (connectedRef.current) {
       window.XiaozhiClient?.disconnect?.();
     } else {
@@ -923,6 +964,13 @@ export default function App() {
       setUserSpeaking(active);
       userSpeakingRef.current = active;
     };
+    const onAudioLevel = e => {
+      const detail = e.detail || {};
+      setAudioLevels({
+        input: Number(detail.input) || 0,
+        output: Number(detail.output) || 0,
+      });
+    };
     const onWakeWordDetected = async (e) => {
       if (!kwsWakeupEnabled || patientWakeupRef.current?.enabled !== true) return;
       if (!connectedRef.current || !micOkRef.current || dignityModeRef.current || inCallRef.current) return;
@@ -957,7 +1005,7 @@ export default function App() {
         setVoiceMode('cascade');
         localStorage.setItem('xiaonuan_voice_mode', 'cascade');
         window.XiaozhiClient?.setVoiceMode?.('cascade');
-        setConnectStatus(`豆包连接失败，已切换标准模式：${detail.reason}`);
+        setConnectStatus(`端到端连接失败，已切换标准模式：${detail.reason}`);
       } else if (detail.mode === 'doubao_s2s') {
         setConnectStatus('');
       }
@@ -979,8 +1027,13 @@ export default function App() {
       const data = detail.data || {};
       if (event === 'mode_started') {
         const autoVoiceMode = data.auto_voice_mode === true || data.source === 'voice_command';
+        activeAppRef.current = 'dignity';
+        setActiveApp('dignity');
         setDignityMode(true);
         setDignityVoiceMode(autoVoiceMode);
+        setLastHeard('');
+        setUserSpeaking(false);
+        userSpeakingRef.current = false;
         setDignityStatus(data);
         setDignityOpeningReply(data.reply || '');
         setDignityDocument(data.document || '');
@@ -998,7 +1051,10 @@ export default function App() {
         setDignityVoiceMode(false);
         setDignityReadingKind('');
         setDignityStatus(data);
-        if (kwsWakeupEnabled) {
+        if (activeAppRef.current !== 'voice') {
+          void pauseAssistantListening();
+          void stopWakeWordListening();
+        } else if (kwsWakeupEnabled) {
           setOrdinaryVoiceAwake(false);
           ordinaryVoiceAwakeRef.current = false;
           setUserSpeaking(false);
@@ -1095,6 +1151,7 @@ export default function App() {
     window.addEventListener('xz:llm', onLlm);
     window.addEventListener('xz:stt', onStt);
     window.addEventListener('xz:voice-activity', onVoiceActivity);
+    window.addEventListener('xz:audio-level', onAudioLevel);
     window.addEventListener('xz:wakeword-detected', onWakeWordDetected);
     window.addEventListener('xz:wakeword-state', onWakeWordState);
     window.addEventListener('xz:error', onErr);
@@ -1109,6 +1166,7 @@ export default function App() {
       window.removeEventListener('xz:llm', onLlm);
       window.removeEventListener('xz:stt', onStt);
       window.removeEventListener('xz:voice-activity', onVoiceActivity);
+      window.removeEventListener('xz:audio-level', onAudioLevel);
       window.removeEventListener('xz:wakeword-detected', onWakeWordDetected);
       window.removeEventListener('xz:wakeword-state', onWakeWordState);
       window.removeEventListener('xz:error', onErr);
@@ -1131,8 +1189,14 @@ export default function App() {
   }, [dignityStatus?.transcript]);
 
   useEffect(() => {
+    if (activeApp !== 'voice' && activeApp !== 'dignity') {
+      stopNormalRecording();
+      stopWakeWordListening();
+      return;
+    }
     if (!connected || !micOk || assistantHold || inCall) return;
-    if (dignityMode) {
+    if (activeApp === 'dignity') {
+      if (!dignityMode) return;
       if (dignityVoiceMode) startListening();
       return;
     }
@@ -1142,7 +1206,7 @@ export default function App() {
       return;
     }
     startListening();
-  }, [assistantHold, connected, dignityMode, dignityVoiceMode, inCall, kwsWakeupEnabled, micOk, ordinaryVoiceAwake, startListening, startWakeWordListening, stopNormalRecording]);
+  }, [activeApp, assistantHold, connected, dignityMode, dignityVoiceMode, inCall, kwsWakeupEnabled, micOk, ordinaryVoiceAwake, startListening, startWakeWordListening, stopNormalRecording, stopWakeWordListening]);
 
   useEffect(() => {
     if (!kwsWakeupEnabled) {
@@ -1165,10 +1229,12 @@ export default function App() {
   useEffect(() => {
     if (settingsOpen || assistantToolsOpen) {
       pauseAssistantListening();
-    } else {
+    } else if (activeApp === 'voice' || activeApp === 'dignity') {
       resumeAssistantListening();
+    } else {
+      pauseAssistantListening();
     }
-  }, [assistantToolsOpen, pauseAssistantListening, resumeAssistantListening, settingsOpen]);
+  }, [activeApp, assistantToolsOpen, pauseAssistantListening, resumeAssistantListening, settingsOpen]);
 
   useEffect(() => () => {
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
@@ -1191,10 +1257,12 @@ export default function App() {
       deviceId: DEVICE_ID,
       role: 'patient',
       onIncoming: ({ fromName, callType }) => {
-        setIncoming({
+        const nextIncoming = {
           caller: { from: fromName || '家人', avatar: '家' },
           callType,
-        });
+        };
+        incomingRef.current = nextIncoming;
+        setIncoming(nextIncoming);
         setCallState('incoming');
         resumeAssistantAndStart();
       },
@@ -1341,28 +1409,21 @@ export default function App() {
   return (
     <PaperBg>
       <TopBar
+        activeApp={activeApp}
+        appTitle={APP_TITLES[activeApp] || ''}
         connected={connected}
         recording={recording}
         micOk={micOk}
         connectStatus={connectStatus}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onOpenAssistantTools={() => setAssistantToolsOpen(true)}
-        dignityMode={dignityMode}
-        onToggleDignityMode={toggleDignityMode}
+        onHome={returnToHome}
       />
-      <main style={{
-        position: 'absolute',
-        top: 72,
-        bottom: 0,
-        left: 0,
-        right: 0,
-        zIndex: 5,
-        display: 'grid',
-        gridTemplateColumns: 'minmax(470px, 45%) minmax(620px, 55%)',
-        gap: 0,
-        overflow: 'hidden',
-      }}>
-        <section style={{ position: 'relative', minWidth: 0, borderRight: '0.5px solid rgba(143,163,176,0.22)', overflow: 'hidden' }}>
+      <main className="patient-app-shell">
+        {activeApp === 'home' && (
+          <HomeScreen unread={unread} onOpenApp={openPatientApp} />
+        )}
+
+        {activeApp === 'voice' && (
+          <section className="patient-app-page patient-app-page--voice">
           <ChatScreen
             aiState={aiState}
             msg={msg}
@@ -1370,16 +1431,32 @@ export default function App() {
             connected={connected}
             recording={recording}
             userSpeaking={userSpeaking}
-            dignityMode={dignityMode}
-            dignityStatus={dignityStatus}
+            inputLevel={audioLevels.input}
+            outputLevel={audioLevels.output}
             ordinaryVoiceAwake={ordinaryVoiceAwake || !kwsWakeupEnabled}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenAssistantTools={() => setAssistantToolsOpen(true)}
           />
-          <RobotActionDebugPanel actions={robotActionLog} />
-        </section>
-        <section style={{ position: 'relative', minWidth: 0, overflow: 'hidden', background: 'rgba(255,250,242,0.28)' }}>
-          <RightPanelTitle title={dignityMode ? '尊严疗法' : '家人信息'} />
-          <div style={rightPanelBodyStyle}>
-            {dignityMode && dignityDebugEnabled ? (
+          {robotDebugEnabled && <RobotActionDebugPanel actions={robotActionLog} />}
+          </section>
+        )}
+
+        {activeApp === 'family' && (
+          <section className="patient-app-page patient-app-page--family">
+            <InboxScreen
+              contacts={contacts}
+              refreshContacts={loadContacts}
+              eventTick={eventTick}
+              maxUploadMb={maxUploadMb}
+              onOpenContact={markThreadRead}
+              onUnbindContact={unbindFamily}
+            />
+          </section>
+        )}
+
+        {activeApp === 'dignity' && (
+          <section className="patient-app-page patient-app-page--dignity">
+            {dignityDebugEnabled ? (
               <DignityDebugPanel
                 turns={dignityTurns}
                 status={dignityStatus}
@@ -1406,9 +1483,16 @@ export default function App() {
                 onDocumentChange={updateDignityDocument}
                 onToggleVoiceMode={toggleDignityVoiceMode}
               />
-            ) : dignityMode ? (
+            ) : (
               <DignityTherapyPanel
                 status={dignityStatus}
+                aiState={aiState}
+                msg={msg}
+                lastHeard={lastHeard}
+                connected={connected}
+                userSpeaking={userSpeaking}
+                inputLevel={audioLevels.input}
+                outputLevel={audioLevels.output}
                 openingReply={dignityOpeningReply}
                 documentBusy={dignityDocumentBusy}
                 documentConfirmBusy={dignityDocumentConfirmBusy}
@@ -1441,14 +1525,20 @@ export default function App() {
                 onReadFamilyLetter={() => readDignityContent('letter', familyLetter)}
                 onStopReading={() => stopDignityReading()}
               />
-            ) : (
-              <InboxScreen contacts={contacts} refreshContacts={loadContacts} eventTick={eventTick} maxUploadMb={maxUploadMb} onOpenContact={markThreadRead} onUnbindContact={unbindFamily} />
             )}
-          </div>
-        </section>
+          </section>
+        )}
+
+        {['digital', 'aroma', 'smartbed'].includes(activeApp) && (
+          <ComingSoonScreen
+            appId={activeApp}
+            title={APP_TITLES[activeApp]}
+            onHome={returnToHome}
+          />
+        )}
       </main>
 
-      {(!connected || !micOk || connectStatus) && (
+      {(activeApp === 'voice' || activeApp === 'dignity') && (!connected || !micOk || connectStatus) && (
         <ConnectBar
           connected={connected} onConnect={handleManualConnect} recording={recording} micOk={micOk}
           connectStatus={connectStatus}
@@ -1531,14 +1621,6 @@ function AssistantToolsModal({
   );
 }
 
-function RightPanelTitle({ title }) {
-  return (
-    <div style={rightPanelTitleBarStyle}>
-      <div style={rightPanelTitleStyle}>{title}</div>
-    </div>
-  );
-}
-
 function RobotActionDebugPanel({ actions }) {
   const latest = Array.isArray(actions) ? actions[0] : null;
   const items = Array.isArray(actions) ? actions : [];
@@ -1577,29 +1659,6 @@ function RobotActionDebugPanel({ actions }) {
     </div>
   );
 }
-
-const rightPanelTitleBarStyle = {
-  position: 'absolute',
-  top: 0,
-  left: 0,
-  right: 0,
-  height: 58,
-  zIndex: 8,
-  display: 'flex',
-  alignItems: 'center',
-  padding: '0 30px',
-  borderBottom: `1px solid ${C.mist}22`,
-  background: 'rgba(243,233,212,.72)',
-  backdropFilter: 'blur(12px)',
-};
-
-const rightPanelTitleStyle = {
-  color: C.ink,
-  fontSize: 21,
-  lineHeight: 1.2,
-  fontWeight: 700,
-  fontFamily: 'Noto Serif SC, serif',
-};
 
 const assistantModalOverlayStyle = {
   position: 'fixed',
@@ -1688,15 +1747,6 @@ const assistantModalBodyStyle = {
   minHeight: 0,
   overflow: 'auto',
   padding: 24,
-};
-
-const rightPanelBodyStyle = {
-  position: 'absolute',
-  top: 58,
-  left: 0,
-  right: 0,
-  bottom: 0,
-  overflow: 'hidden',
 };
 
 const robotActionPanelStyle = {

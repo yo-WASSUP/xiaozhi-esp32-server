@@ -3,7 +3,7 @@ import { getConfig, saveConnectionUrls } from '../../config/manager.js?v=0128';
 import { uiController } from '../../ui/controller.js?v=0127';
 import { log } from '../../utils/logger.js?v=0127';
 import { getAudioPlayer } from '../audio/player.js?v=0127';
-import { getAudioRecorder } from '../audio/recorder.js?v=0127';
+import { getAudioRecorder } from '../audio/recorder.js?v=0129';
 import { executeMcpTool, getMcpTools, setWebSocket as setMcpWebSocket } from '../mcp/tools.js?v=0127';
 import { webSocketConnect } from './ota-connector.js?v=0127';
 

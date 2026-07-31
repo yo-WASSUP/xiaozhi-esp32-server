@@ -4,7 +4,1000 @@ html, body, #root {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #f3e9d4;
+  background: #eef2ee;
+}
+
+body {
+  color: #26332d;
+  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+}
+
+button, input, textarea {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 3px solid rgba(52, 111, 90, .32);
+  outline-offset: 3px;
+}
+
+.patient-topbar {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 30;
+  height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 0 34px;
+  border-bottom: 1px solid rgba(53, 73, 64, .12);
+  background: rgba(250, 252, 249, .94);
+  box-shadow: 0 2px 14px rgba(35, 52, 44, .05);
+  backdrop-filter: blur(14px);
+}
+
+.patient-topbar__start,
+.patient-topbar__end,
+.patient-brand,
+.patient-topbar__home,
+.patient-topbar__status {
+  display: flex;
+  align-items: center;
+}
+
+.patient-topbar__start {
+  min-width: 0;
+  gap: 18px;
+}
+
+.patient-topbar__end {
+  flex-shrink: 0;
+  gap: 16px;
+}
+
+.patient-brand {
+  gap: 12px;
+}
+
+.patient-brand__mark {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: #4c7b68;
+  box-shadow: 0 5px 14px rgba(54, 103, 82, .2);
+  font-family: "Noto Serif SC", serif;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.patient-brand strong,
+.patient-brand small {
+  display: block;
+}
+
+.patient-brand strong {
+  color: #23312b;
+  font-family: "Noto Serif SC", serif;
+  font-size: 19px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.patient-brand small {
+  margin-top: 3px;
+  color: #6b776f;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.patient-topbar__home {
+  height: 44px;
+  gap: 8px;
+  padding: 0 13px;
+  border: 1px solid rgba(55, 78, 68, .18);
+  border-radius: 8px;
+  color: #355a4a;
+  background: #fff;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.patient-topbar__home:hover {
+  border-color: rgba(53, 104, 83, .38);
+  background: #f4f8f5;
+}
+
+.patient-topbar__divider {
+  width: 1px;
+  height: 30px;
+  background: rgba(53, 73, 64, .16);
+}
+
+.patient-topbar__title {
+  overflow: hidden;
+  color: #23312b;
+  font-family: "Noto Serif SC", serif;
+  font-size: 22px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.patient-topbar__status {
+  gap: 8px;
+  color: #607068;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.patient-topbar__status > span {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.patient-topbar__status--active {
+  color: #b76650;
+}
+
+.patient-topbar__status--active > span {
+  animation: dotPulse 1.2s ease-in-out infinite;
+  box-shadow: 0 0 0 5px rgba(183, 102, 80, .11);
+}
+
+.patient-topbar__status--ready {
+  color: #4c7b68;
+}
+
+.patient-topbar__status--waiting {
+  color: #ad7b37;
+}
+
+.patient-topbar__notice {
+  color: #b34f4f;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.patient-topbar__notice--truncate {
+  max-width: 230px;
+  overflow: hidden;
+  color: #737d77;
+  text-overflow: ellipsis;
+}
+
+.patient-topbar__clock {
+  min-width: 68px;
+  text-align: right;
+}
+
+.patient-topbar__clock strong,
+.patient-topbar__clock span {
+  display: block;
+}
+
+.patient-topbar__clock strong {
+  color: #27342e;
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 500;
+}
+
+.patient-topbar__clock span {
+  margin-top: 4px;
+  color: #79827d;
+  font-size: 11px;
+}
+
+.patient-app-shell {
+  position: absolute;
+  inset: 76px 0 0;
+  z-index: 5;
+  overflow: hidden;
+  background: #eef2ee;
+}
+
+.patient-app-page {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.patient-app-page--voice {
+  background: #fefdf9;
+}
+
+.patient-app-page--family,
+.patient-app-page--dignity {
+  background: #f7f9f6;
+}
+
+.patient-app-page--dignity > div {
+  margin: 0 auto;
+  max-width: 1680px;
+}
+
+.dignity-therapy {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(390px, .78fr) minmax(640px, 1.22fr);
+  gap: 22px;
+  padding: 22px;
+  overflow: hidden;
+  color: #24322c;
+  font-family: "Noto Sans SC", sans-serif;
+}
+
+.dignity-therapy__workspace {
+  min-width: 0;
+  height: 100%;
+  box-sizing: border-box;
+  display: grid;
+  align-content: start;
+  gap: 20px;
+  padding: 12px 10px 30px 18px;
+  overflow: auto;
+}
+
+.dignity-interview {
+  position: relative;
+  min-width: 0;
+  height: 100%;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-rows: auto minmax(210px, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 28px 20px;
+  overflow: hidden;
+  border: 1px solid rgba(71, 100, 86, .15);
+  border-radius: 18px;
+  background-image:
+    linear-gradient(180deg, rgba(255, 254, 249, .64), rgba(244, 248, 243, .88)),
+    var(--dignity-room-background);
+  background-position: center;
+  background-size: cover;
+  box-shadow: 0 18px 42px rgba(44, 65, 55, .09);
+  isolation: isolate;
+}
+
+.dignity-interview::after {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  content: "";
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 37%, rgba(195, 139, 69, .09), transparent 34%),
+    linear-gradient(110deg, transparent 48%, rgba(95, 135, 116, .055) 48.2%, transparent 48.7%);
+}
+
+.dignity-interview__header {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.dignity-interview__eyebrow {
+  display: block;
+  margin-bottom: 5px;
+  color: #6d7d75;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: .14em;
+}
+
+.dignity-interview__header h2 {
+  margin: 0;
+  color: #27362f;
+  font-family: "Noto Serif SC", serif;
+  font-size: 25px;
+  line-height: 1.3;
+  font-weight: 600;
+}
+
+.dignity-interview__status {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  box-sizing: border-box;
+  padding: 0 11px;
+  border: 1px solid rgba(85, 106, 96, .17);
+  border-radius: 999px;
+  color: #718078;
+  background: rgba(255, 254, 249, .72);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dignity-interview__status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #9ba7a1;
+}
+
+.dignity-interview__status.is-active {
+  color: #496858;
+  border-color: rgba(79, 128, 106, .22);
+  background: rgba(238, 246, 240, .78);
+}
+
+.dignity-interview__status.is-active i {
+  background: #5f8774;
+  box-shadow: 0 0 0 4px rgba(95, 135, 116, .12);
+}
+
+.dignity-interview__avatar {
+  min-height: 0;
+  display: grid;
+  place-items: center;
+}
+
+.dignity-interview__avatar .robot-avatar {
+  transform: scale(.84);
+}
+
+.dignity-interview__conversation {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px 17px;
+  border: 1px solid rgba(73, 101, 88, .14);
+  border-radius: 12px;
+  background: rgba(255, 254, 249, .75);
+  box-shadow: 0 10px 28px rgba(45, 67, 57, .06);
+  backdrop-filter: blur(10px);
+}
+
+.dignity-interview__turn {
+  min-width: 0;
+}
+
+.dignity-interview__turn + .dignity-interview__turn {
+  padding-top: 12px;
+  border-top: 1px solid rgba(80, 107, 94, .1);
+}
+
+.dignity-interview__turn > span {
+  display: block;
+  margin-bottom: 6px;
+  color: #668074;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dignity-interview__turn p {
+  overflow: hidden;
+  display: -webkit-box;
+  margin: 0;
+  -webkit-box-orient: vertical;
+  color: #33443c;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.dignity-interview__turn--user p {
+  color: #63726b;
+  font-size: 15px;
+  -webkit-line-clamp: 2;
+}
+
+.dignity-interview__turn--assistant p {
+  font-family: "Noto Serif SC", serif;
+  font-size: 21px;
+  font-weight: 600;
+  -webkit-line-clamp: 4;
+}
+
+.dignity-interview__turn p.is-quiet {
+  color: #87928d;
+  font-weight: 500;
+}
+
+.dignity-interview__activity {
+  min-width: 168px;
+  display: flex;
+  justify-content: center;
+  justify-self: center;
+  padding: 3px 16px;
+  border-radius: 999px;
+  background: rgba(255, 254, 249, .58);
+}
+
+.voice-screen {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  background-image: var(--voice-room-background);
+  background-position: center;
+  background-size: cover;
+}
+
+.voice-screen::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  background: rgba(255, 254, 249, .08);
+}
+
+.voice-screen__settings {
+  position: absolute;
+  top: 24px;
+  right: 30px;
+  z-index: 12;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 1px solid rgba(54, 79, 67, .17);
+  border-radius: 8px;
+  color: #435a4f;
+  background: rgba(255, 254, 249, .82);
+  box-shadow: 0 4px 14px rgba(46, 67, 57, .06);
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.voice-screen__settings:hover {
+  border-color: rgba(54, 98, 78, .34);
+  background: #fffefa;
+}
+
+.voice-screen__main {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  width: min(1320px, 100%);
+  display: grid;
+  grid-template-columns: minmax(340px, .85fr) minmax(480px, 1.15fr);
+  align-items: center;
+  gap: 74px;
+  margin: 0 auto;
+  padding: 48px 74px 66px;
+}
+
+.voice-screen__avatar {
+  display: grid;
+  place-items: center;
+}
+
+.voice-screen__conversation {
+  width: 100%;
+  max-width: 620px;
+  padding: 24px 8px 24px 38px;
+  border-left: 2px solid rgba(83, 126, 106, .24);
+}
+
+.voice-screen__heard {
+  margin-bottom: 30px;
+}
+
+.voice-screen__heard > span,
+.voice-screen__reply > span {
+  display: block;
+  margin-bottom: 9px;
+  color: #5e7569;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.voice-screen__heard p,
+.voice-screen__reply p {
+  overflow: hidden;
+  display: -webkit-box;
+  margin: 0;
+  -webkit-box-orient: vertical;
+  text-wrap: pretty;
+}
+
+.voice-screen__heard p {
+  color: #69766f;
+  font-size: 19px;
+  line-height: 1.65;
+  -webkit-line-clamp: 2;
+}
+
+.voice-screen__reply p {
+  color: #26332d;
+  font-family: "Noto Serif SC", serif;
+  font-size: 32px;
+  line-height: 1.65;
+  font-weight: 600;
+  letter-spacing: 0;
+  -webkit-line-clamp: 5;
+}
+
+.voice-screen__reply p.voice-screen__reply--quiet {
+  color: #65736c;
+  font-weight: 500;
+}
+
+.voice-screen__activity {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  z-index: 8;
+  min-width: 250px;
+  display: flex;
+  justify-content: center;
+  padding: 7px 18px;
+  border: 1px solid rgba(67, 96, 82, .1);
+  border-radius: 22px;
+  background: rgba(255, 254, 249, .68);
+  backdrop-filter: blur(10px);
+  transform: translateX(-50%);
+}
+
+.wave-meter {
+  width: 100%;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.wave-meter__label {
+  min-width: 108px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #526d60;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.wave-meter--output .wave-meter__label {
+  color: #64799a;
+}
+
+.wave-meter__bars {
+  width: 92px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.patient-home {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto auto;
+  align-content: start;
+  gap: 26px;
+  padding: 46px 42px 40px;
+  background: #f1f4f0;
+}
+
+.patient-home__intro {
+  width: min(1180px, 100%);
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr);
+  align-items: center;
+  gap: 20px;
+  min-height: 0;
+  margin: 0 auto;
+  padding-bottom: 22px;
+  border-bottom: 1px solid rgba(49, 70, 60, .12);
+}
+
+.patient-home__panda {
+  width: 80px;
+  height: 84px;
+  overflow: hidden;
+}
+
+.patient-home__panda-scale {
+  width: 280px;
+  height: 318px;
+  transform: scale(.285);
+  transform-origin: left top;
+}
+
+.patient-home__welcome {
+  min-width: 0;
+}
+
+.patient-home__eyebrow {
+  margin-bottom: 5px;
+  color: #4d7564;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.patient-home h1 {
+  color: #24322c;
+  font-family: "Noto Serif SC", serif;
+  font-size: 28px;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.patient-home__apps {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+}
+
+.patient-home__section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding: 0 2px;
+}
+
+.patient-home__section-head h2 {
+  color: #33413a;
+  font-size: 15px;
+  line-height: 1.3;
+  font-weight: 700;
+}
+
+.patient-home__section-head span {
+  color: #8a938e;
+  font-size: 12px;
+}
+
+.patient-app-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-rows: 142px;
+  gap: 14px;
+}
+
+.patient-app-card {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 94px minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 17px 14px 12px;
+  overflow: hidden;
+  border: 1px solid rgba(49, 70, 60, .11);
+  border-radius: 8px;
+  color: #26332d;
+  background: #fbfcfa;
+  box-shadow: 0 4px 14px rgba(40, 61, 51, .045);
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow .18s ease, border-color .18s ease, background .18s ease;
+}
+
+.patient-app-card:hover,
+.patient-app-card:focus-visible {
+  z-index: 1;
+  border-color: rgba(58, 105, 84, .3);
+  background: #fff;
+  box-shadow: 0 9px 22px rgba(40, 61, 51, .09);
+}
+
+.patient-app-card:active {
+  background: #f7f9f6;
+}
+
+.app-illustration {
+  display: block;
+  flex: 0 0 auto;
+  background-repeat: no-repeat;
+  background-size: 300% 200%;
+}
+
+.patient-app-card__icon {
+  width: 94px;
+  height: 94px;
+}
+
+.patient-app-card__copy {
+  min-width: 0;
+}
+
+.patient-app-card__copy strong,
+.patient-app-card__copy span {
+  display: block;
+}
+
+.patient-app-card__copy strong {
+  color: #26332d;
+  font-family: "Noto Serif SC", serif;
+  font-size: 20px;
+  line-height: 1.3;
+  font-weight: 700;
+}
+
+.patient-app-card__copy span {
+  margin-top: 5px;
+  overflow: hidden;
+  color: #68766f;
+  font-size: 13px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.patient-app-card__arrow {
+  color: #98a39d;
+}
+
+.patient-app-card__status {
+  position: absolute;
+  top: 10px;
+  right: 11px;
+  color: #8a918d;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.patient-app-card__badge {
+  position: absolute;
+  top: 12px;
+  left: 80px;
+  min-width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0 6px;
+  border: 2px solid #fff;
+  border-radius: 12px;
+  color: #fff;
+  background: #c55551;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.coming-soon {
+  --soon-accent: #b9873f;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 36px;
+  color: #28362f;
+  background: #fefdf9;
+  text-align: center;
+}
+
+.coming-soon--aroma {
+  --soon-accent: #ad6f82;
+}
+
+.coming-soon--smartbed {
+  --soon-accent: #4b8582;
+}
+
+.coming-soon__mark {
+  width: 154px;
+  height: 154px;
+  margin-bottom: 16px;
+}
+
+.coming-soon__kicker {
+  color: var(--soon-accent);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.coming-soon h1 {
+  margin-top: 9px;
+  color: #28362f;
+  font-family: "Noto Serif SC", serif;
+  font-size: 38px;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.coming-soon p {
+  margin-top: 12px;
+  color: #6b766f;
+  font-size: 17px;
+  line-height: 1.7;
+}
+
+.coming-soon button {
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 28px;
+  padding: 0 20px;
+  border: 1px solid var(--soon-accent);
+  border-radius: 8px;
+  color: #fff;
+  background: var(--soon-accent);
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+@media (max-width: 1180px), (max-height: 700px) {
+  .patient-topbar {
+    padding: 0 24px;
+  }
+
+  .patient-home {
+    grid-template-rows: auto auto;
+    gap: 18px;
+    padding: 24px 26px;
+  }
+
+  .patient-home__intro {
+    grid-template-columns: 84px minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .patient-home__panda {
+    width: 78px;
+    height: 86px;
+  }
+
+  .patient-home__panda-scale {
+    transform: scale(.28);
+  }
+
+  .patient-home h1 {
+    font-size: 25px;
+  }
+
+  .patient-app-grid {
+    grid-auto-rows: 124px;
+    gap: 12px;
+  }
+
+  .patient-app-card {
+    grid-template-columns: 80px minmax(0, 1fr) 20px;
+    gap: 10px;
+    padding: 10px 14px 10px 8px;
+  }
+
+  .patient-app-card__icon {
+    width: 80px;
+    height: 80px;
+  }
+
+  .patient-app-card__copy strong {
+    font-size: 20px;
+  }
+
+  .patient-app-card__copy span {
+    margin-top: 5px;
+    font-size: 13px;
+  }
+
+  .patient-topbar__notice--truncate {
+    display: none;
+  }
+
+  .voice-screen__main {
+    grid-template-columns: minmax(270px, .8fr) minmax(420px, 1.2fr);
+    gap: 42px;
+    padding: 34px 48px 58px;
+  }
+
+  .voice-screen__avatar .robot-avatar {
+    transform: scale(.8);
+  }
+
+  .voice-screen__conversation {
+    padding: 18px 4px 18px 30px;
+  }
+
+  .voice-screen__heard {
+    margin-bottom: 20px;
+  }
+
+  .voice-screen__heard p {
+    font-size: 17px;
+  }
+
+  .voice-screen__reply p {
+    font-size: 26px;
+    line-height: 1.55;
+    -webkit-line-clamp: 4;
+  }
+
+  .voice-screen__settings {
+    top: 16px;
+    right: 22px;
+  }
+
+  .voice-screen__activity {
+    bottom: 12px;
+  }
+
+  .dignity-therapy {
+    grid-template-columns: minmax(330px, .72fr) minmax(560px, 1.28fr);
+    gap: 14px;
+    padding: 14px;
+  }
+
+  .dignity-therapy__workspace {
+    padding: 8px 8px 24px 12px;
+  }
+
+  .dignity-interview {
+    grid-template-rows: auto minmax(170px, 1fr) auto auto;
+    padding: 18px 20px 14px;
+  }
+
+  .dignity-interview__avatar .robot-avatar {
+    transform: scale(.7);
+  }
+
+  .dignity-interview__header h2 {
+    font-size: 22px;
+  }
+
+  .dignity-interview__turn--assistant p {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 920px) {
+  .patient-topbar__status,
+  .patient-topbar__notice {
+    display: none;
+  }
+
+  .patient-app-card {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .patient-app-card__icon {
+    width: 72px;
+    height: 72px;
+  }
+
+  .patient-app-card__arrow {
+    display: none;
+  }
+
+  .dignity-therapy {
+    display: block;
+    padding: 12px;
+    overflow: auto;
+  }
+
+  .dignity-interview {
+    height: auto;
+    min-height: 620px;
+    margin-bottom: 18px;
+  }
+
+  .dignity-therapy__workspace {
+    height: auto;
+    padding: 8px 4px 26px;
+    overflow: visible;
+  }
 }
 
 ::-webkit-scrollbar { width: 0; }

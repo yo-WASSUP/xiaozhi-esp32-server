@@ -3,6 +3,7 @@ import base64
 import gzip
 import json
 import os
+import re
 import struct
 import time
 import uuid
@@ -17,6 +18,30 @@ from core.utils.opus_encoder_utils import OpusEncoderUtils
 
 
 TAG = __name__
+
+XIAONUAN_IDENTITY_GUARD = (
+    '你的名字是“小暖”，你是患者身边的安宁疗护陪伴助手。'
+    '当用户询问你是谁、使用了什么模型或来自哪个平台时，始终以“小暖”的身份自然回答。'
+    '不要自称豆包、字节跳动、语言模型或其他产品名称。'
+)
+
+EMOTION_CONTROL_PATTERN = re.compile(
+    r"<!--\s*emotion\s*:\s*[\s\S]*?-->",
+    re.IGNORECASE,
+)
+
+
+def clean_realtime_text(text: str) -> str:
+    return EMOTION_CONTROL_PATTERN.sub("", str(text or "")).strip()
+
+
+def build_system_role(connection_prompt: str, configured_role: str) -> str:
+    parts = [
+        str(connection_prompt or "").strip(),
+        str(configured_role or "").strip(),
+        XIAONUAN_IDENTITY_GUARD,
+    ]
+    return "\n\n".join(part for part in parts if part)
 
 MESSAGE_FULL_CLIENT = 0x1
 MESSAGE_AUDIO_CLIENT = 0x2
@@ -263,10 +288,16 @@ class DoubaoS2SClient:
         self.end_smooth_window_ms = int(
             self.config.get("end_smooth_window_ms", 800)
         )
-        self.system_role = (
+        configured_role = (
             self.config.get("system_role")
             or "你是小暖，一名温暖、耐心、简洁的中文陪伴助手。"
-        ).strip()
+        )
+        connection_prompt = (
+            getattr(self.conn, "prompt", "")
+            if self.config.get("inherit_connection_prompt", True) is not False
+            else ""
+        )
+        self.system_role = build_system_role(connection_prompt, configured_role)
         self.speaking_style = self.config.get(
             "speaking_style", "自然、温和、简洁，语速稍慢"
         ).strip()
@@ -434,12 +465,12 @@ class DoubaoS2SClient:
             self.audio_queue.put_nowait(pcm)
 
     async def interrupt(self):
-        if not self.active or not self.session_id:
+        if not self.active or not self.session_id or self.interrupt_sent:
             return
+        self.interrupt_sent = True
         await self._send_frame(
             build_json_frame(EVENT_CLIENT_INTERRUPT, self.session_id, {})
         )
-        self.interrupt_sent = True
         await self._stop_client_playback()
 
     async def _send_audio_loop(self):
@@ -472,10 +503,14 @@ class DoubaoS2SClient:
                 if self.responding and not self.interrupt_sent:
                     await self.interrupt()
             elif event == EVENT_ASR_RESPONSE:
-                self.user_text = self._merge_text(self.user_text, text)
+                self.user_text = self._latest_hypothesis(self.user_text, text)
                 await self._send_vad(True)
+                if text and self.responding and not self.interrupt_sent:
+                    await self.interrupt()
             elif event == EVENT_ASR_ENDED:
-                self.user_text = self._merge_text(self.user_text, text)
+                self.user_text = self._latest_hypothesis(self.user_text, text)
+                if text and self.responding and not self.interrupt_sent:
+                    await self.interrupt()
                 await self._send_vad(False)
                 if self.user_text:
                     await self._send_text("stt", self.user_text)
@@ -526,16 +561,23 @@ class DoubaoS2SClient:
             await sendAudio(self.conn, opus_packets, frame_duration=60)
 
     async def _finalize_assistant_text(self):
-        if self.assistant_text and not self.assistant_finalized:
+        if (
+            self.assistant_text
+            and not self.assistant_finalized
+            and not self.conn.client_abort
+        ):
             await self._send_text("llm", self.assistant_text)
             self.assistant_finalized = True
 
     async def _send_text(self, message_type: str, text: str):
+        clean_text = clean_realtime_text(text)
+        if not clean_text:
+            return
         await self.conn.websocket.send(
             json.dumps(
                 {
                     "type": message_type,
-                    "text": text,
+                    "text": clean_text,
                     "session_id": self.conn.session_id,
                 },
                 ensure_ascii=False,
@@ -602,13 +644,24 @@ class DoubaoS2SClient:
             await self.upstream.send(frame)
 
     @staticmethod
+    def _latest_hypothesis(current: str, incoming: str) -> str:
+        latest = str(incoming or "").strip()
+        return latest or current
+
+    @staticmethod
     def _merge_text(current: str, incoming: str) -> str:
         if not incoming:
             return current
+        if not current:
+            return incoming
         if incoming.startswith(current):
             return incoming
-        if current.endswith(incoming):
+        if incoming in current:
             return current
+        max_overlap = min(len(current), len(incoming))
+        for overlap in range(max_overlap, 0, -1):
+            if current[-overlap:] == incoming[:overlap]:
+                return current + incoming[overlap:]
         return current + incoming
 
     async def close(self):

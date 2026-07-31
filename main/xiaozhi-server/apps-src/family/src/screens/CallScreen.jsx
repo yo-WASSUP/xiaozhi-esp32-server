@@ -1,4 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
+import {
+  Microphone,
+  MicrophoneSlash,
+  Phone,
+  PhoneDisconnect,
+  User,
+  VideoCamera,
+  VideoCameraSlash,
+  WarningCircle,
+} from '@phosphor-icons/react';
 import { C } from '../theme';
 import { DEVICE_ID, SENDER_NAME } from '../constants';
 import Card from '../components/Card';
@@ -30,14 +40,14 @@ export default function CallScreen() {
       onRemoteStream: setRemoteStream,
       onAccepted: () => { /* 对端接听 - 等连接建好 */ },
       onRejected: (reason) => {
-        setFlash(reason === 'busy' ? '⚠ 对方正忙' : '对方拒绝了');
+        setFlash(reason === 'busy' ? '对方正忙' : '对方拒绝了');
         setTimeout(() => setFlash(''), 2500);
       },
       onEnded: (reason) => {
         setLocalStream(null); setRemoteStream(null);
         setSecs(0); setMuted(false); setCamOff(false);
         if (reason === 'peer-absent') {
-          setFlash('⚠ 对方不在线');
+          setFlash('对方不在线');
           setTimeout(() => setFlash(''), 2500);
         }
       },
@@ -79,7 +89,7 @@ export default function CallScreen() {
     try {
       await clientRef.current.placeCall({ callType: nextCallType, fromName: SENDER_NAME });
     } catch (e) {
-      setFlash('⚠ 无法使用摄像头/麦克风: ' + e.message);
+      setFlash('无法使用摄像头或麦克风：' + e.message);
       setTimeout(() => setFlash(''), 3000);
     }
   };
@@ -88,57 +98,57 @@ export default function CallScreen() {
   const doCam = () => { const v = !camOff; setCamOff(v); clientRef.current && clientRef.current.toggleCamera(v); };
 
   if (callState === 'idle') return (
-    <div style={{ position: 'absolute', top: 0, bottom: 80, left: 0, right: 0, overflow: 'auto', padding: '52px 16px 24px', animation: 'fadeUp .4s ease' }}>
-      <div style={{ fontSize: 22, color: C.ink, fontFamily: 'Noto Serif SC,serif', fontWeight: 300, letterSpacing: '.06em', marginBottom: 4 }}>联系家人</div>
-      <div style={{ fontSize: 13, color: C.inkFaint, fontFamily: 'Noto Sans SC', fontWeight: 300, marginBottom: 24 }}>小暖会协助家人接听通话</div>
+    <div className="screen" style={{ padding: 'calc(24px + env(safe-area-inset-top)) 16px 24px' }}>
+      <div className="screen-title">联系家人</div>
+      <div className="screen-subtitle" style={{ marginBottom: 24 }}>小暖会协助家人接听通话</div>
 
       <Card style={{ padding: '18px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 14 }}>
-        <div style={{ width: 54, height: 54, borderRadius: '50%', background: `radial-gradient(circle at 33% 30%,${C.amber}cc,#b87340aa)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>👴</div>
+        <div style={{ width: 56, height: 56, borderRadius: 16, background: C.primaryContainer, color: C.amber, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><User size={28} weight="duotone" /></div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 17, color: C.ink, fontFamily: 'Noto Sans SC', fontWeight: 400, marginBottom: 3 }}>家人</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: C.sage, boxShadow: `0 0 6px ${C.sage}` }} />
-            <span style={{ fontSize: 13, color: C.sage, fontFamily: 'Noto Sans SC', fontWeight: 300 }}>在线 · 正在休息</span>
+            <span style={{ fontSize: 13, color: C.sage, fontWeight: 500 }}>在线，正在休息</span>
           </div>
         </div>
         <div style={{ fontSize: 12, color: C.inkFaint, fontFamily: 'Noto Sans SC', fontWeight: 300 }}>平板在线</div>
       </Card>
 
-      <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, marginBottom: 20 }}>
         {[
-          ['video', '视频通话', '📹', C.amber],
-          ['voice', '语音通话', '📞', C.sage],
-        ].map(([t, l, ic, cl]) => (
-          <button key={t} onClick={() => dial(t)} style={{ flex: 1, padding: '20px 12px', borderRadius: 20, border: `1.5px solid ${cl}66`, background: `${cl}14`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, transition: 'all .2s', boxShadow: `0 4px 18px ${cl}22` }}>
-            <span style={{ fontSize: 32 }}>{ic}</span>
-            <span style={{ fontSize: 15, color: cl, fontFamily: 'Noto Sans SC', fontWeight: 400 }}>{l}</span>
+          { type: 'video', label: '视频通话', Icon: VideoCamera },
+          { type: 'voice', label: '语音通话', Icon: Phone },
+        ].map(({ type, label, Icon }) => (
+          <button type="button" className="tap-button" key={type} onClick={() => dial(type)} style={{ padding: '20px 12px', borderRadius: 16, border: `1px solid ${C.outline}`, background: '#fff', color: C.amber, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, boxShadow: '0 8px 24px rgba(47,107,85,.06)' }}>
+            <span style={{ width: 48, height: 48, borderRadius: 16, background: C.primaryContainer, display: 'grid', placeItems: 'center' }}><Icon size={25} weight="duotone" /></span>
+            <span style={{ fontSize: 15, fontWeight: 650 }}>{label}</span>
           </button>
         ))}
       </div>
 
-      {flash && <div style={{ marginTop: 12, padding: '8px 14px', borderRadius: 10, background: flash.startsWith('⚠') ? `${C.red}22` : `${C.sage}22`, fontSize: 13, color: flash.startsWith('⚠') ? C.red : C.sage, fontFamily: 'Noto Sans SC', fontWeight: 300, textAlign: 'center' }}>{flash}</div>}
+      {flash && <div role="alert" style={{ marginTop: 12, padding: '11px 14px', borderRadius: 14, background: `${C.red}12`, fontSize: 13, color: C.red, fontWeight: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}><WarningCircle size={18} weight="fill" />{flash}</div>}
     </div>
   );
 
   if (callState === 'calling') return (
-    <div style={{ position: 'absolute', top: 0, bottom: 80, left: 0, right: 0, background: `radial-gradient(circle at 50% 40%,#1a2a18,#080e08)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 28, animation: 'fadeIn .4s ease' }}>
+    <div className="screen" style={{ background: 'linear-gradient(180deg,#1a2922,#0d1511)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 28, animation: 'fadeIn .3s ease' }}>
       <div style={{ position: 'relative', width: 160, height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {[0, 1, 2].map(i => (
           <div key={i} style={{ position: 'absolute', inset: -(i * 22), borderRadius: '50%', border: `1.5px solid ${C.sage}${['44', '2a', '18'][i]}`, animation: `ripple ${1.6 + i * .4}s ease-out ${i * .35}s infinite`, pointerEvents: 'none' }} />
         ))}
-        <div style={{ width: 100, height: 100, borderRadius: '50%', background: `radial-gradient(circle at 33% 30%,${C.amber}cc,#b87340aa)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 44 }}>👴</div>
+        <div style={{ width: 100, height: 100, borderRadius: 28, background: C.primaryContainer, color: C.amber, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><User size={48} weight="duotone" /></div>
       </div>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 26, color: 'rgba(255,255,255,.88)', fontFamily: 'Noto Serif SC,serif', fontWeight: 300, marginBottom: 6 }}>正在呼叫家人…</div>
+        <div style={{ fontSize: 26, color: 'rgba(255,255,255,.92)', fontWeight: 650, marginBottom: 6 }}>正在呼叫家人</div>
         <div style={{ fontSize: 14, color: 'rgba(255,255,255,.4)', fontFamily: 'Noto Sans SC', fontWeight: 300 }}>等待对方接听</div>
       </div>
-      <button onClick={hangup} style={{ width: 70, height: 70, borderRadius: '50%', background: '#c0484a', border: 'none', cursor: 'pointer', fontSize: 28, marginTop: 16, boxShadow: '0 4px 20px rgba(192,72,74,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>📵</button>
+      <button type="button" aria-label="取消呼叫" onClick={hangup} style={{ width: 68, height: 68, borderRadius: 22, background: C.red, color: '#fff', border: 'none', cursor: 'pointer', marginTop: 16, boxShadow: '0 8px 24px rgba(179,38,30,.28)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><PhoneDisconnect size={29} weight="fill" /></button>
     </div>
   );
 
   // active / connecting
   return (
-    <div style={{ position: 'absolute', top: 0, bottom: 80, left: 0, right: 0, background: `radial-gradient(circle at 50% 40%,#1a2a18,#080e08)`, display: 'flex', flexDirection: 'column', animation: 'fadeIn .4s ease' }}>
+    <div className="screen" style={{ background: 'linear-gradient(180deg,#1a2922,#0d1511)', display: 'flex', flexDirection: 'column', animation: 'fadeIn .3s ease' }}>
       <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {callType === 'video' ? (
           <video ref={remoteVideoRef} autoPlay playsInline
@@ -147,7 +157,7 @@ export default function CallScreen() {
           <>
             <audio ref={remoteAudioRef} autoPlay />
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 72, marginBottom: 12, opacity: .55 }}>👴</div>
+              <User size={72} color="rgba(255,255,255,.52)" weight="duotone" style={{ marginBottom: 12 }} />
               <div style={{ fontSize: 16, color: 'rgba(255,255,255,.4)', fontFamily: 'Noto Sans SC', fontWeight: 300 }}>
                 {callState === 'connecting' ? '正在接通…' : '语音通话中'}
               </div>
@@ -155,7 +165,7 @@ export default function CallScreen() {
           </>
         )}
         <div style={{ position: 'absolute', top: 20, left: 0, right: 0, textAlign: 'center', zIndex: 2 }}>
-          <div style={{ fontSize: 20, color: 'rgba(255,255,255,.88)', fontFamily: 'Noto Serif SC,serif', fontWeight: 300, marginBottom: 4, textShadow: '0 2px 8px rgba(0,0,0,.5)' }}>家人</div>
+          <div style={{ fontSize: 20, color: 'rgba(255,255,255,.92)', fontWeight: 650, marginBottom: 4, textShadow: '0 2px 8px rgba(0,0,0,.5)' }}>家人</div>
           <div style={{ fontSize: 14, color: 'rgba(255,255,255,.55)', fontFamily: 'Noto Sans SC', fontWeight: 300, letterSpacing: '.1em', textShadow: '0 2px 8px rgba(0,0,0,.5)' }}>
             {callState === 'connecting' ? '接通中…' : fmt(secs)}
           </div>
@@ -164,25 +174,25 @@ export default function CallScreen() {
           <div style={{ position: 'absolute', top: 20, right: 16, width: 110, height: 150, borderRadius: 12, background: '#1a2218', border: '1px solid rgba(255,255,255,.12)', overflow: 'hidden', zIndex: 2, boxShadow: '0 4px 18px rgba(0,0,0,.5)' }}>
             <video ref={localVideoRef} autoPlay playsInline muted
               style={{ width: '100%', height: '100%', objectFit: 'cover', background: '#000', opacity: camOff ? 0 : 1 }} />
-            {camOff && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: 'rgba(255,255,255,.4)' }}>📵</div>}
+            {camOff && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,.5)' }}><VideoCameraSlash size={26} /></div>}
           </div>
         )}
       </div>
 
       <div style={{ padding: '16px 32px 20px', display: 'flex', justifyContent: 'space-around', alignItems: 'center', background: 'rgba(0,0,0,.3)' }}>
         {[
-          { icon: muted ? '🔇' : '🎤', label: muted ? '已静音' : '静音', act: doMute, on: muted },
-          { icon: camOff ? '📵' : '📹', label: camOff ? '摄像头关' : '摄像头', act: doCam, on: camOff, hide: callType !== 'video' },
+          { Icon: muted ? MicrophoneSlash : Microphone, label: muted ? '已静音' : '静音', act: doMute, on: muted },
+          { Icon: camOff ? VideoCameraSlash : VideoCamera, label: camOff ? '摄像头关' : '摄像头', act: doCam, on: camOff, hide: callType !== 'video' },
         ].filter(b => !b.hide).map((b, i) => (
           <button key={i} onClick={b.act} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer' }}>
-            <div style={{ width: 52, height: 52, borderRadius: '50%', background: b.on ? 'rgba(255,255,255,.22)' : 'rgba(255,255,255,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
-              {b.icon}
+            <div style={{ width: 52, height: 52, borderRadius: 17, color: '#fff', background: b.on ? 'rgba(255,255,255,.22)' : 'rgba(255,255,255,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <b.Icon size={23} weight={b.on ? 'fill' : 'regular'} />
             </div>
             <span style={{ fontSize: 11, color: 'rgba(255,255,255,.45)', fontFamily: 'Noto Sans SC', fontWeight: 300 }}>{b.label}</span>
           </button>
         ))}
         <button onClick={hangup} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer' }}>
-          <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#c0484acc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 14px rgba(192,72,74,.5)' }}>📵</div>
+          <div style={{ width: 52, height: 52, borderRadius: 17, background: C.red, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 18px rgba(179,38,30,.3)' }}><PhoneDisconnect size={23} weight="fill" /></div>
           <span style={{ fontSize: 11, color: 'rgba(255,255,255,.45)', fontFamily: 'Noto Sans SC', fontWeight: 300 }}>挂断</span>
         </button>
       </div>

@@ -172,7 +172,7 @@ export default function InboxScreen({ contacts, refreshContacts, eventTick, maxU
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {contacts.length === 0 ? (
-            <div style={{ textAlign: 'center', color: C.inkFaint, fontFamily: 'Noto Serif SC,serif', fontWeight: 300, fontSize: 16, lineHeight: 2, opacity: .5, marginTop: 60, padding: '0 20px' }}>
+            <div style={{ textAlign: 'center', color: C.inkFaint, fontFamily: 'Noto Serif SC,serif', fontWeight: 400, fontSize: 16, lineHeight: 2, opacity: .78, marginTop: 60, padding: '0 20px' }}>
               还没有家人的消息<br />等家人发来问候
             </div>
           ) : contacts.map(c => (
@@ -189,7 +189,7 @@ export default function InboxScreen({ contacts, refreshContacts, eventTick, maxU
       {/* 右：当前会话 */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {!activeContact ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.inkFaint, fontFamily: 'Noto Serif SC,serif', fontWeight: 300, fontSize: 18, opacity: .5 }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.inkFaint, fontFamily: 'Noto Serif SC,serif', fontWeight: 400, fontSize: 18, opacity: .78 }}>
             选一位家人开始看 TA 的消息
           </div>
         ) : (
@@ -218,7 +218,7 @@ export default function InboxScreen({ contacts, refreshContacts, eventTick, maxU
             </div>
             <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '18px 28px 22px' }}>
               {thread.length === 0 && (
-                <div style={{ textAlign: 'center', color: C.inkFaint, fontFamily: 'Noto Serif SC,serif', fontWeight: 300, fontSize: 16, opacity: .5, marginTop: 80 }}>
+                <div style={{ textAlign: 'center', color: C.inkFaint, fontFamily: 'Noto Serif SC,serif', fontWeight: 400, fontSize: 16, opacity: .78, marginTop: 80 }}>
                   还没有消息
                 </div>
               )}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { FilmStrip, MusicNotesSimple, UploadSimple } from '@phosphor-icons/react';
 import { DEVICE_ID } from '../constants';
 import { C } from '../theme';
 
@@ -189,8 +190,14 @@ export default function LegacyVideoScreen() {
   return (
     <div style={screenStyle}>
       <header style={heroStyle}>
-        <div>
-          <div style={eyebrowStyle}>生命记忆影像</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 46, height: 46, borderRadius: 15, background: C.primaryContainer, color: C.amber, display: 'grid', placeItems: 'center' }}>
+            <FilmStrip size={24} weight="duotone" />
+          </div>
+          <div>
+            <div style={eyebrowStyle}>生命记忆影像</div>
+            <div style={mutedStyle}>整理素材，生成可珍藏的家庭影像</div>
+          </div>
         </div>
       </header>
 
@@ -209,7 +216,7 @@ export default function LegacyVideoScreen() {
         </div>
 
         <button onClick={() => fileRef.current?.click()} disabled={busy} style={uploadDropStyle}>
-          <span style={uploadIconStyle}>＋</span>
+          <span style={uploadIconStyle}><UploadSimple size={21} weight="bold" /></span>
           <span style={uploadTextStyle}>上传照片、视频或音乐</span>
         </button>
 
@@ -341,7 +348,7 @@ function AssetCard({ asset, busy, onChange, onSave, onDelete }) {
       <div style={assetPreviewWrapStyle}>
         {asset.type === 'audio' ? (
           <div style={audioPreviewStyle}>
-            <div style={audioIconStyle}>♪</div>
+            <div style={audioIconStyle}><MusicNotesSimple size={24} weight="duotone" /></div>
             <audio src={asset.url} controls preload="metadata" style={audioControlStyle} />
           </div>
         ) : asset.type === 'video' ? (
@@ -414,47 +421,47 @@ function trimDocument(value) {
 
 const screenStyle = {
   position: 'absolute',
-  inset: '0 0 80px 0',
+  inset: '0 0 calc(72px + env(safe-area-inset-bottom)) 0',
   overflow: 'auto',
-  padding: '34px 14px 18px',
-  animation: 'fadeUp .4s ease',
+  padding: 'calc(24px + env(safe-area-inset-top)) 16px 24px',
+  animation: 'fadeUp .24s cubic-bezier(.2,0,0,1)',
 };
 const heroStyle = { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 14 };
-const eyebrowStyle = { fontSize: 24, color: C.amber, fontFamily: 'Noto Sans SC', fontWeight: 600, marginBottom: 4 };
-const titleStyle = { margin: 0, maxWidth: 260, fontSize: 22, lineHeight: 1.25, color: C.ink, fontFamily: 'Noto Serif SC,serif', fontWeight: 500, letterSpacing: 0 };
+const eyebrowStyle = { fontSize: 23, color: C.ink, fontFamily: 'Noto Sans SC', fontWeight: 650, letterSpacing: '-.02em', marginBottom: 2 };
+const titleStyle = { margin: 0, maxWidth: 260, fontSize: 22, lineHeight: 1.25, color: C.ink, fontFamily: 'Noto Sans SC', fontWeight: 650, letterSpacing: 0 };
 const statusRowStyle = { display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10, marginBottom: 4 };
-const statusPillStyle = (active) => ({ flex: '0 0 auto', height: 28, display: 'inline-flex', alignItems: 'center', padding: '0 10px', borderRadius: 999, border: `1px solid ${active ? C.sage : C.mist}55`, background: active ? 'rgba(122,148,128,.16)' : 'rgba(255,250,242,.62)', color: active ? C.ink : C.inkFaint, fontSize: 12, fontFamily: 'Noto Sans SC' });
+const statusPillStyle = (active) => ({ flex: '0 0 auto', height: 30, display: 'inline-flex', alignItems: 'center', padding: '0 11px', borderRadius: 12, border: `1px solid ${active ? C.amber : C.outline}`, background: active ? C.primaryContainer : '#fff', color: active ? C.amber : C.inkFaint, fontSize: 12, fontFamily: 'Noto Sans SC', fontWeight: 500 });
 const bandStyle = { borderTop: `1px solid ${C.mist}26`, padding: '14px 0 16px' };
 const sectionHeadStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 };
-const sectionTitleStyle = { fontSize: 16, color: C.ink, fontFamily: 'Noto Serif SC,serif', fontWeight: 500 };
+const sectionTitleStyle = { fontSize: 17, color: C.ink, fontFamily: 'Noto Sans SC', fontWeight: 650 };
 const mutedStyle = { fontSize: 12, color: C.inkFaint, fontFamily: 'Noto Sans SC', marginTop: 3, lineHeight: 1.35 };
-const uploadDropStyle = { width: '100%', minHeight: 88, border: `1px dashed ${C.amber}88`, borderRadius: 8, background: 'rgba(255,250,242,.58)', color: C.ink, display: 'grid', placeItems: 'center', gap: 3, padding: 14, cursor: 'pointer', marginBottom: 12 };
-const uploadIconStyle = { width: 34, height: 34, borderRadius: 999, display: 'grid', placeItems: 'center', background: `${C.amber}2f`, color: C.ink, fontSize: 24, lineHeight: 1 };
+const uploadDropStyle = { width: '100%', minHeight: 96, border: `1px dashed ${C.amber}88`, borderRadius: 16, background: '#fff', color: C.ink, display: 'grid', placeItems: 'center', gap: 5, padding: 14, cursor: 'pointer', marginBottom: 12 };
+const uploadIconStyle = { width: 40, height: 40, borderRadius: 14, display: 'grid', placeItems: 'center', background: C.primaryContainer, color: C.amber, lineHeight: 1 };
 const uploadTextStyle = { fontFamily: 'Noto Sans SC', fontSize: 15, fontWeight: 600 };
 const assetScrollerStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))', gap: 10 };
-const assetCardStyle = (selected) => ({ minWidth: 0, overflow: 'hidden', border: `1px solid ${selected ? C.amber : C.mist}55`, borderRadius: 8, background: selected ? `${C.amber}14` : 'rgba(255,250,242,.64)' });
+const assetCardStyle = (selected) => ({ minWidth: 0, overflow: 'hidden', border: `1px solid ${selected ? C.amber : C.outline}`, borderRadius: 16, background: selected ? C.primaryContainer : '#fff' });
 const assetPreviewWrapStyle = { position: 'relative', aspectRatio: '1 / 1', background: 'rgba(30,24,16,.12)' };
 const previewMediaStyle = { display: 'block', width: '100%', height: '100%', objectFit: 'cover' };
-const audioPreviewStyle = { width: '100%', height: '100%', display: 'grid', alignContent: 'center', justifyItems: 'center', gap: 12, padding: 12, boxSizing: 'border-box', background: 'rgba(122,148,128,.12)' };
-const audioIconStyle = { width: 44, height: 44, borderRadius: 999, display: 'grid', placeItems: 'center', background: `${C.sage}26`, color: C.ink, fontSize: 24, fontFamily: 'Noto Sans SC' };
+const audioPreviewStyle = { width: '100%', height: '100%', display: 'grid', alignContent: 'center', justifyItems: 'center', gap: 12, padding: 12, boxSizing: 'border-box', background: C.primaryContainer };
+const audioIconStyle = { width: 44, height: 44, borderRadius: 14, display: 'grid', placeItems: 'center', background: '#fff', color: C.amber, fontFamily: 'Noto Sans SC' };
 const audioControlStyle = { width: '100%', maxWidth: 132 };
-const assetSelectStyle = (selected) => ({ position: 'absolute', top: 8, right: 8, border: 0, borderRadius: 999, height: 26, padding: '0 9px', color: selected ? '#fff' : C.ink, background: selected ? C.sage : 'rgba(255,250,242,.88)', fontSize: 12, fontFamily: 'Noto Sans SC', cursor: 'pointer' });
+const assetSelectStyle = (selected) => ({ position: 'absolute', top: 8, right: 8, border: 0, borderRadius: 10, height: 28, padding: '0 9px', color: selected ? '#fff' : C.ink, background: selected ? C.sage : 'rgba(255,255,255,.92)', fontSize: 12, fontFamily: 'Noto Sans SC', cursor: 'pointer' });
 const assetBodyStyle = { padding: 8 };
-const compactInputStyle = { width: '100%', boxSizing: 'border-box', height: 34, border: `1px solid ${C.mist}33`, borderRadius: 6, padding: '0 8px', background: 'rgba(255,250,242,.86)', color: C.ink, fontFamily: 'Noto Sans SC', outline: 'none' };
+const compactInputStyle = { width: '100%', boxSizing: 'border-box', height: 40, border: `1px solid ${C.outline}`, borderRadius: 12, padding: '0 10px', background: '#fff', color: C.ink, fontFamily: 'Noto Sans SC', outline: 'none' };
 const assetMetaStyle = { marginTop: 6, fontSize: 11, color: C.inkFaint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
 const textDangerStyle = { marginTop: 8, border: 0, background: 'transparent', color: '#813d32', padding: 0, fontSize: 12, fontFamily: 'Noto Sans SC', cursor: 'pointer' };
-const documentEditorStyle = { width: '100%', boxSizing: 'border-box', minHeight: 168, borderRadius: 8, border: `1px solid ${C.mist}26`, background: 'rgba(255,250,242,.58)', padding: 11, color: C.inkMid, fontSize: 13, lineHeight: 1.65, fontFamily: 'Noto Sans SC', resize: 'vertical', outline: 'none' };
-const primaryButtonStyle = { height: 36, border: `1px solid ${C.amber}70`, background: `${C.amber}24`, color: C.ink, borderRadius: 8, padding: '0 13px', fontFamily: 'Noto Sans SC', cursor: 'pointer', whiteSpace: 'nowrap' };
+const documentEditorStyle = { width: '100%', boxSizing: 'border-box', minHeight: 168, borderRadius: 16, border: `1px solid ${C.outline}`, background: '#fff', padding: 12, color: C.inkMid, fontSize: 13, lineHeight: 1.65, fontFamily: 'Noto Sans SC', resize: 'vertical', outline: 'none' };
+const primaryButtonStyle = { height: 44, border: `1px solid ${C.amber}70`, background: C.primaryContainer, color: C.amber, borderRadius: 14, padding: '0 14px', fontFamily: 'Noto Sans SC', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' };
 const sceneListStyle = { display: 'grid', gap: 10 };
-const emptyPanelStyle = { minHeight: 76, borderRadius: 8, border: `1px solid ${C.mist}24`, background: 'rgba(255,250,242,.45)', display: 'grid', placeItems: 'center', color: C.inkFaint, fontSize: 13, fontFamily: 'Noto Sans SC' };
-const sceneStyle = { display: 'grid', gap: 8, borderRadius: 8, border: `1px solid ${C.mist}28`, background: 'rgba(255,250,242,.62)', padding: 10 };
+const emptyPanelStyle = { minHeight: 76, borderRadius: 16, border: `1px solid ${C.outline}`, background: '#fff', display: 'grid', placeItems: 'center', color: C.inkFaint, fontSize: 13, fontFamily: 'Noto Sans SC' };
+const sceneStyle = { display: 'grid', gap: 8, borderRadius: 16, border: `1px solid ${C.outline}`, background: '#fff', padding: 12 };
 const sceneTopStyle = { display: 'grid', gridTemplateColumns: '34px minmax(0, 1fr) 46px', gap: 8, alignItems: 'center' };
-const sceneIndexStyle = { height: 30, borderRadius: 999, display: 'grid', placeItems: 'center', background: `${C.sage}22`, color: C.inkMid, fontSize: 12, fontFamily: 'Noto Sans SC' };
+const sceneIndexStyle = { height: 32, borderRadius: 10, display: 'grid', placeItems: 'center', background: C.primaryContainer, color: C.amber, fontSize: 12, fontFamily: 'Noto Sans SC' };
 const sceneTitleInputStyle = { ...compactInputStyle, fontWeight: 600 };
-const sceneDeleteStyle = { height: 30, border: 0, borderRadius: 6, background: 'rgba(148,65,47,.10)', color: '#813d32', fontSize: 12, fontFamily: 'Noto Sans SC', cursor: 'pointer' };
+const sceneDeleteStyle = { height: 32, border: 0, borderRadius: 10, background: `${C.red}12`, color: C.red, fontSize: 12, fontFamily: 'Noto Sans SC', cursor: 'pointer' };
 const sceneTextStyle = { ...compactInputStyle, minHeight: 86, height: 'auto', resize: 'vertical', lineHeight: 1.5, padding: 9 };
 const selectStyle = { ...compactInputStyle, color: C.inkMid };
-const optionPanelStyle = { display: 'grid', gap: 14, marginTop: 12, padding: 10, borderRadius: 8, border: `1px solid ${C.mist}24`, background: 'rgba(255,250,242,.45)' };
+const optionPanelStyle = { display: 'grid', gap: 14, marginTop: 12, padding: 12, borderRadius: 16, border: `1px solid ${C.outline}`, background: '#fff' };
 const optionGroupStyle = { display: 'grid', gap: 8 };
 const optionTitleStyle = { color: C.inkMid, fontSize: 13, fontFamily: 'Noto Sans SC', fontWeight: 600 };
 const segmentGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 };
@@ -463,10 +470,10 @@ const optionButtonStyle = (active) => ({
   minWidth: 0,
   height: 40,
   border: `1px solid ${active ? C.amber : C.mist}66`,
-  borderRadius: 8,
+  borderRadius: 12,
   padding: '0 8px',
-  background: active ? `${C.amber}26` : 'rgba(255,250,242,.76)',
-  color: active ? C.ink : C.inkMid,
+  background: active ? C.primaryContainer : '#fff',
+  color: active ? C.amber : C.inkMid,
   fontFamily: 'Noto Sans SC',
   fontSize: 13,
   fontWeight: active ? 600 : 400,
@@ -475,8 +482,8 @@ const optionButtonStyle = (active) => ({
   textOverflow: 'ellipsis',
   cursor: 'pointer',
 });
-const renderButtonStyle = (enabled) => ({ width: '100%', height: 44, marginTop: 12, border: `1px solid ${enabled ? C.green : C.mist}66`, background: enabled ? 'rgba(90,144,112,.20)' : 'rgba(255,250,242,.58)', color: enabled ? C.ink : C.inkFaint, borderRadius: 8, fontFamily: 'Noto Sans SC', fontSize: 15, fontWeight: 600, cursor: enabled ? 'pointer' : 'default' });
-const videoStyle = { display: 'block', width: '100%', borderRadius: 8, background: '#111', marginTop: 10 };
-const smallLinkStyle = { display: 'inline-flex', alignItems: 'center', height: 34, padding: '0 12px', borderRadius: 8, border: `1px solid ${C.amber}66`, color: C.ink, background: `${C.amber}20`, textDecoration: 'none', fontSize: 13, fontFamily: 'Noto Sans SC', whiteSpace: 'nowrap' };
-const emptyStyle = { minHeight: 80, borderRadius: 8, border: `1px solid ${C.mist}22`, display: 'grid', placeItems: 'center', color: C.inkFaint, fontSize: 13, fontFamily: 'Noto Sans SC', background: 'rgba(255,250,242,.44)' };
+const renderButtonStyle = (enabled) => ({ width: '100%', height: 48, marginTop: 12, border: 0, background: enabled ? C.amber : C.surfaceVariant, color: enabled ? C.onPrimary : C.inkFaint, borderRadius: 14, fontFamily: 'Noto Sans SC', fontSize: 15, fontWeight: 650, cursor: enabled ? 'pointer' : 'default' });
+const videoStyle = { display: 'block', width: '100%', borderRadius: 16, background: '#111', marginTop: 10 };
+const smallLinkStyle = { display: 'inline-flex', alignItems: 'center', height: 40, padding: '0 12px', borderRadius: 12, border: `1px solid ${C.amber}66`, color: C.amber, background: C.primaryContainer, textDecoration: 'none', fontSize: 13, fontWeight: 600, fontFamily: 'Noto Sans SC', whiteSpace: 'nowrap' };
+const emptyStyle = { minHeight: 80, borderRadius: 16, border: `1px solid ${C.outline}`, display: 'grid', placeItems: 'center', color: C.inkFaint, fontSize: 13, fontFamily: 'Noto Sans SC', background: '#fff' };
 const toastStyle = { position: 'fixed', bottom: 92, left: '50%', transform: 'translateX(-50%)', maxWidth: 'calc(100vw - 40px)', background: C.ink, color: '#fff', borderRadius: 14, padding: '8px 14px', fontSize: 13, zIndex: 100, fontFamily: 'Noto Sans SC' };

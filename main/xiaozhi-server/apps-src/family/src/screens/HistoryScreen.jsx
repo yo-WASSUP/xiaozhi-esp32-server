@@ -4,6 +4,7 @@ import { moodMeta, padDays } from '../utils/emotion';
 import { useEmotionData } from '../hooks/useEmotionData';
 import Card from '../components/Card';
 import SLabel from '../components/SLabel';
+import MoodIcon from '../components/MoodIcon';
 
 export default function HistoryScreen({ onUnbind, unbindBusy = false }) {
   const { trend, today, loading } = useEmotionData();
@@ -15,9 +16,9 @@ export default function HistoryScreen({ onUnbind, unbindBusy = false }) {
     : null;
 
   return (
-    <div style={{ position: 'absolute', top: 0, bottom: 80, left: 0, right: 0, overflow: 'auto', padding: '52px 16px 24px', animation: 'fadeUp .4s ease' }}>
-      <div style={{ fontSize: 22, color: C.ink, fontFamily: 'Noto Serif SC,serif', fontWeight: 300, letterSpacing: '.06em', marginBottom: 4 }}>历史记录</div>
-      <div style={{ fontSize: 13, color: C.inkFaint, fontFamily: 'Noto Sans SC', fontWeight: 300, marginBottom: 18 }}>家人的情绪与对话记录</div>
+    <div className="screen" style={{ padding: 'calc(24px + env(safe-area-inset-top)) 16px 24px' }}>
+      <div className="screen-title">陪伴记录</div>
+      <div className="screen-subtitle" style={{ marginBottom: 20 }}>查看家人的情绪趋势与最近陪伴摘要</div>
 
       <Card style={{ padding: '18px', marginBottom: 16 }}>
         <SLabel>最近摘要</SLabel>
@@ -31,10 +32,11 @@ export default function HistoryScreen({ onUnbind, unbindBusy = false }) {
                 共 {today.conversation_count} 轮
               </div>
             </div>
-            <div style={{ fontSize: 15, color: C.inkMid, fontFamily: 'Noto Serif SC,serif', fontWeight: 300, lineHeight: 1.8, letterSpacing: '.02em' }}>{today.summary || '暂无摘要内容'}</div>
+            <div style={{ fontSize: 15, color: C.inkMid, fontWeight: 400, lineHeight: 1.75 }}>{today.summary || '暂无摘要内容'}</div>
             {dominantMood && (
-              <div style={{ marginTop: 10, fontSize: 12, color: dominantMood.color, fontFamily: 'Noto Sans SC', fontWeight: 300 }}>
-                主要情绪：{dominantMood.emoji} {dominantMood.label}
+              <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: dominantMood.color, fontWeight: 500 }}>
+                <MoodIcon mood={today.dominant_mood} size={18} decorative />
+                主要情绪：{dominantMood.label}
               </div>
             )}
           </>
@@ -61,8 +63,8 @@ export default function HistoryScreen({ onUnbind, unbindBusy = false }) {
                 <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 0 }}>
                   <div style={{ fontSize: 9, color: hasData ? C.inkFaint : C.mist, fontFamily: 'Noto Sans SC' }}>{hasData ? d.score : '-'}</div>
                   <div
-                    title={`${d.dayLabel} · ${d.label} (${d.count} 次)`}
-                    style={{ height: Math.max(h, hasData ? 4 : 2), width: '100%', borderRadius: 4, background: hasData ? (isToday ? C.amber : d.color) : `${C.mist}22`, opacity: hasData ? 1 : 0.35, boxShadow: isToday && hasData ? `0 2px 8px ${C.amber}44` : 'none' }}
+                    title={`${d.dayLabel}，${d.label}，${d.count} 次`}
+                    style={{ height: Math.max(h, hasData ? 4 : 2), width: '100%', borderRadius: 6, background: hasData ? (isToday ? C.amber : d.color) : `${C.mist}22`, opacity: hasData ? 1 : 0.35 }}
                   />
                   <div style={{ fontSize: 9, color: isToday ? C.amber : C.inkFaint, fontFamily: 'Noto Sans SC', fontWeight: isToday ? 400 : 300, whiteSpace: 'nowrap' }}>{d.dayLabel}</div>
                 </div>
@@ -96,7 +98,7 @@ const unbindButtonStyle = (busy) => ({
   height: 40,
   marginTop: 12,
   border: `1px solid ${C.red}44`,
-  borderRadius: 8,
+  borderRadius: 14,
   background: `${C.red}10`,
   color: C.red,
   fontSize: 13,

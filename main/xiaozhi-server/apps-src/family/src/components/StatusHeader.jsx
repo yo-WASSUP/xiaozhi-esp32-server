@@ -1,6 +1,7 @@
 import { C } from '../theme';
 import { SENDER_NAME } from '../constants';
 import { moodMeta } from '../utils/emotion';
+import MoodIcon from './MoodIcon';
 
 export default function StatusHeader({ today }) {
   const mood = today && today.dominant_mood;
@@ -11,15 +12,15 @@ export default function StatusHeader({ today }) {
     : meta.score >= 45 ? '家人今天还算平稳'
     : '家人今天情绪偏低，多关心一下';
   return (
-    <div style={{ padding: '52px 22px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+    <div style={{ padding: 'calc(24px + env(safe-area-inset-top)) 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
       <div>
-        <div style={{ fontSize: 13, color: C.inkFaint, fontFamily: 'Noto Sans SC', fontWeight: 300, letterSpacing: '.1em', marginBottom: 4 }}>您好，{SENDER_NAME}</div>
-        <div style={{ fontSize: 22, color: C.ink, fontFamily: 'Noto Serif SC,serif', fontWeight: 300, letterSpacing: '.06em' }}>{headline}</div>
+        <div style={{ fontSize: 13, color: C.inkFaint, fontWeight: 500, marginBottom: 5 }}>您好，{SENDER_NAME}</div>
+        <div style={{ fontSize: 24, color: C.ink, fontWeight: 650, letterSpacing: '-.02em', lineHeight: 1.3 }}>{headline}</div>
       </div>
-      <div style={{ textAlign: 'right' }}>
-        <div style={{ fontSize: 28, marginBottom: 2 }}>{mood && mood !== '无数据' ? meta.emoji : '·'}</div>
-        <div style={{ fontSize: 12, color: meta.color, fontFamily: 'Noto Sans SC', fontWeight: 300 }}>
-          {mood && mood !== '无数据' ? `情绪 · ${meta.label}` : '暂无情绪记录'}
+      <div style={{ minWidth: 78, padding: '10px 12px', borderRadius: 16, background: C.card, border: `1px solid ${C.outline}`, display: 'grid', justifyItems: 'center', gap: 4 }}>
+        {mood && mood !== '无数据' ? <MoodIcon mood={mood} size={24} decorative /> : null}
+        <div style={{ fontSize: 12, color: meta.color, fontWeight: 500, whiteSpace: 'nowrap' }}>
+          {mood && mood !== '无数据' ? meta.label : '暂无记录'}
         </div>
       </div>
     </div>
