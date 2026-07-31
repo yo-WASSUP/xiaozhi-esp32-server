@@ -40,6 +40,14 @@ class DoubaoS2SProtocolTests(unittest.TestCase):
         self.assertEqual(merge("您好", "，今天好吗"), "您好，今天好吗")
         self.assertEqual(merge("我想问一下", "问一下今天的天气"), "我想问一下今天的天气")
         self.assertEqual(merge("今天天气", "天气很好"), "今天天气很好")
+        self.assertEqual(
+            merge("第一句话。第二句话。", "第二句话。"),
+            "第一句话。第二句话。",
+        )
+        self.assertEqual(
+            merge("第一句话。", "第二句话。"),
+            "第一句话。第二句话。",
+        )
 
     def test_asr_hypotheses_replace_earlier_revisions(self):
         latest = DoubaoS2SClient._latest_hypothesis

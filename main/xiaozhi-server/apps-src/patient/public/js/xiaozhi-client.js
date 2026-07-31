@@ -145,26 +145,26 @@ function smoothLevel(previous, next) {
   return previous + (next - previous) * factor;
 }
 
-function interruptRemoteSpeech(reason = 'user_speech') {
+function interruptRemoteSpeech(reason = 'user_speech', force = false) {
   const now = Date.now();
-  if (!isRemoteSpeaking || now - lastInterruptAt < 800) return false;
+  player.clearAllAudio();
+  bargeInFrames = 0;
+  if ((!isRemoteSpeaking && !force) || now - lastInterruptAt < 800) return false;
   const websocket = wsHandler.getWebSocket?.();
   if (!websocket || websocket.readyState !== WebSocket.OPEN) return false;
 
   lastInterruptAt = now;
-  bargeInFrames = 0;
   websocket.send(JSON.stringify({
     type: 'abort',
     session_id: wsHandler.currentSessionId || '',
     reason,
   }));
-  player.clearAllAudio();
   isRemoteSpeaking = false;
   window.dispatchEvent(new CustomEvent('xz:barge-in', {
     detail: { reason }
   }));
   window.dispatchEvent(new CustomEvent('xz:state', {
-    detail: { state: 'listening' }
+    detail: { state: force ? 'idle' : 'listening' }
   }));
   return true;
 }
@@ -353,7 +353,7 @@ const realClient = {
   },
 
   interrupt(reason = 'user_request') {
-    return interruptRemoteSpeech(reason);
+    return interruptRemoteSpeech(reason, true);
   },
 
   async listMicrophones() {

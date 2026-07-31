@@ -173,6 +173,7 @@ export default function App() {
   const [dignityDebugBusy, setDignityDebugBusy] = useState(false);
   const [dignityDocumentBusy, setDignityDocumentBusy] = useState(false);
   const [dignityDocumentConfirmBusy, setDignityDocumentConfirmBusy] = useState(false);
+  const [dignityMemoryBusy, setDignityMemoryBusy] = useState(false);
   const [dignityDocument, setDignityDocument] = useState('');
   const [dignityDocumentUrl, setDignityDocumentUrl] = useState('');
   const [legacyCardBusy, setLegacyCardBusy] = useState(false);
@@ -456,15 +457,21 @@ export default function App() {
   }, [pauseAssistantListening, resumeAssistantListening, sendDignityAction, stopWakeWordListening]);
 
   const returnToHome = useCallback(async () => {
+    try {
+      await window.XiaozhiClient?.interrupt?.('leave_voice_page');
+    } catch (e) {
+      console.error('退出语音页面时停止播放失败', e);
+    }
     activeAppRef.current = 'home';
     setActiveApp('home');
+    void stopTtsPlayback();
     await pauseAssistantListening();
     await stopWakeWordListening();
     if (dignityModeRef.current) {
       const ok = await sendDignityAction('stop', { patient_id: DEVICE_ID });
       if (!ok) setConnectStatus('尊严疗法退出失败，请稍后再试');
     }
-  }, [pauseAssistantListening, sendDignityAction, stopWakeWordListening]);
+  }, [pauseAssistantListening, sendDignityAction, stopTtsPlayback, stopWakeWordListening]);
 
   const runDignityDebugTurn = useCallback(async (text) => {
     setDignityDebugBusy(true);
@@ -524,6 +531,19 @@ export default function App() {
   const updateDignityDocument = useCallback((nextDocument) => {
     setDignityDocument(nextDocument);
   }, []);
+
+  const saveDignityMemory = useCallback(async (memory) => {
+    setDignityMemoryBusy(true);
+    const ok = await sendDignityAction('update_memory', {
+      patient_id: DEVICE_ID,
+      memory,
+    });
+    if (!ok) {
+      setDignityMemoryBusy(false);
+      setConnectStatus('生命记忆保存请求发送失败');
+    }
+    return ok;
+  }, [sendDignityAction]);
 
   const loadDignityArtifacts = useCallback(async () => {
     try {
@@ -1105,6 +1125,15 @@ export default function App() {
       } else if (event === 'document_started') {
         setDignityDocumentBusy(true);
         setDignityDocumentConfirmBusy(false);
+      } else if (event === 'memory_update_started') {
+        setDignityMemoryBusy(true);
+      } else if (event === 'memory_updated') {
+        setDignityMemoryBusy(false);
+        setDignityStatus(prev => ({ ...(prev || {}), dignity_memory: data.dignity_memory || {} }));
+        setConnectStatus('');
+      } else if (event === 'memory_error') {
+        setDignityMemoryBusy(false);
+        setConnectStatus(data.message || '生命记忆保存失败');
       } else if (event === 'document_complete') {
         setDignityDocumentBusy(false);
         setDignityDocument(data.document || '');
@@ -1127,6 +1156,7 @@ export default function App() {
         dignityLiveTurnStartedAtRef.current = null;
         dignityDebugTurnStartedAtRef.current = null;
         setDignityDebugBusy(false);
+        setDignityMemoryBusy(false);
         setDignityDocumentBusy(false);
         setDignityDocumentConfirmBusy(false);
         setConnectStatus(data.message || '尊严疗法模式处理失败');
@@ -1496,6 +1526,7 @@ export default function App() {
                 openingReply={dignityOpeningReply}
                 documentBusy={dignityDocumentBusy}
                 documentConfirmBusy={dignityDocumentConfirmBusy}
+                memoryBusy={dignityMemoryBusy}
                 document={dignityDocument}
                 documentUrl={dignityDocumentUrl}
                 legacyCardBusy={legacyCardBusy}
@@ -1518,6 +1549,7 @@ export default function App() {
                 onSaveFamilyLetter={saveFamilyLetter}
                 onConfirmDocument={confirmDignityDocument}
                 onDocumentChange={updateDignityDocument}
+                onSaveMemory={saveDignityMemory}
                 onToggleVoiceMode={toggleDignityVoiceMode}
                 readingKind={dignityReadingKind}
                 onReadDocument={() => readDignityContent('document', dignityDocument)}

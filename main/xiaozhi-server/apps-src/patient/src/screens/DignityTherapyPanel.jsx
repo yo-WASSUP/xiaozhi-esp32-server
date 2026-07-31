@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { C } from '../theme';
 import RobotAvatar from '../components/RobotAvatar';
 import WaveBars from '../components/WaveBars';
@@ -111,46 +111,127 @@ function collectMemorySections(memory) {
     .filter(section => section.items.length);
 }
 
+function memoryItemText(item) {
+  if (typeof item === 'string') return item.trim();
+  if (item && typeof item === 'object') {
+    return Object.values(item).filter(Boolean).map(value => String(value).trim()).filter(Boolean).join(' ');
+  }
+  return String(item || '').trim();
+}
+
+function memoryToDraft(memory) {
+  return Object.keys(MEMORY_LABELS).reduce((draft, key) => {
+    const items = Array.isArray(memory?.[key]) ? memory[key] : [];
+    draft[key] = items.map(memoryItemText).filter(Boolean);
+    return draft;
+  }, {});
+}
+
 function MemoryPanel({
-  sections,
+  memory,
   itemCount,
-  ready,
   busy,
-  cardBusy,
-  onGenerateDocument,
-  onGenerateLegacyCard,
+  onSave,
 }) {
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(() => memoryToDraft(memory));
+  const sections = collectMemorySections(memory);
+
+  useEffect(() => {
+    if (!editing) setDraft(memoryToDraft(memory));
+  }, [memory, editing]);
+
+  const beginEditing = () => {
+    setDraft(memoryToDraft(memory));
+    setOpen(true);
+    setEditing(true);
+  };
+  const cancelEditing = () => {
+    setDraft(memoryToDraft(memory));
+    setEditing(false);
+  };
+  const updateItem = (key, index, value) => {
+    setDraft(current => ({
+      ...current,
+      [key]: current[key].map((item, itemIndex) => (itemIndex === index ? value : item)),
+    }));
+  };
+  const removeItem = (key, index) => {
+    setDraft(current => ({
+      ...current,
+      [key]: current[key].filter((_, itemIndex) => itemIndex !== index),
+    }));
+  };
+  const addItem = (key) => {
+    setDraft(current => ({ ...current, [key]: [...current[key], ''] }));
+  };
+  const save = async () => {
+    const nextMemory = Object.keys(MEMORY_LABELS).reduce((result, key) => {
+      result[key] = draft[key].map(item => item.trim()).filter(Boolean);
+      return result;
+    }, {});
+    const ok = await onSave(nextMemory);
+    if (ok) setEditing(false);
+  };
+
   return (
     <section style={memoryPanelStyle}>
       <div style={sectionHeadStyle}>
         <div>
           <span style={sectionTitleStyle}>生命记忆</span>
           <span style={memoryCountStyle}>{itemCount} 条</span>
+          <div style={subTextStyle}>访谈会自动整理，您也可以补充、修改或删除。</div>
         </div>
         <div style={headActionsStyle}>
-          <button onClick={() => setOpen(v => !v)} style={memoryToggleStyle}>
-            {open ? '收起记忆' : '展开记忆'}
-          </button>
-          <button
-            onClick={onGenerateDocument}
-            disabled={busy || !ready}
-            title={ready ? '' : `至少需要 ${MIN_MEMORY_ITEMS_FOR_DOCUMENT} 条生命记忆`}
-            style={generateButtonStyle(ready)}
-          >
-            {busy ? '正在整理' : ready ? '生成人生故事' : '记忆不足'}
-          </button>
-          <button
-            onClick={onGenerateLegacyCard}
-            disabled={cardBusy || !ready}
-            title={ready ? '' : `至少需要 ${MIN_MEMORY_ITEMS_FOR_DOCUMENT} 条生命记忆`}
-            style={cardButtonStyle(ready)}
-          >
-            {cardBusy ? '生成中' : ready ? '生成传承卡片' : '记忆不足'}
-          </button>
+          {!editing && (
+            <button type="button" onClick={() => setOpen(value => !value)} style={memoryToggleStyle}>
+              {open ? '收起' : '查看全部'}
+            </button>
+          )}
+          {!editing && <button type="button" onClick={beginEditing} style={smallButtonStyle(true)}>编辑记忆</button>}
         </div>
       </div>
-      {open && (
+      {editing ? (
+        <div className="dignity-memory-editor" style={memoryEditorStyle}>
+          {Object.entries(MEMORY_LABELS).map(([key, title]) => (
+            <section key={key} style={memoryEditorSectionStyle}>
+              <div style={memoryEditorSectionHeadStyle}>
+                <div>
+                  <div style={memorySectionTitleStyle}>{title}</div>
+                  <div style={memoryEditorHintStyle}>{draft[key].length} 条</div>
+                </div>
+                <button type="button" onClick={() => addItem(key)} style={textActionButtonStyle}>添加一条</button>
+              </div>
+              {draft[key].length ? (
+                <div style={memoryEditorItemsStyle}>
+                  {draft[key].map((item, index) => (
+                    <div key={`${key}-${index}`} style={memoryEditorItemStyle}>
+                      <label htmlFor={`memory-${key}-${index}`} style={editorLabelStyle}>记忆 {index + 1}</label>
+                      <textarea
+                        id={`memory-${key}-${index}`}
+                        value={item}
+                        onChange={event => updateItem(key, index, event.target.value)}
+                        rows={2}
+                        style={memoryTextareaStyle}
+                      />
+                      <button type="button" onClick={() => removeItem(key, index)} style={removeMemoryButtonStyle}>删除</button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={memoryEditorEmptyStyle}>这一类还没有内容，可以手动添加。</div>
+              )}
+            </section>
+          ))}
+          <div style={memoryEditorActionsStyle}>
+            <button type="button" onClick={cancelEditing} disabled={busy} style={memoryToggleStyle}>取消</button>
+            <button type="button" onClick={save} disabled={busy} style={saveMemoryButtonStyle(!busy)}>
+              {busy ? '保存中' : '保存生命记忆'}
+            </button>
+          </div>
+        </div>
+      ) : open && (
         sections.length ? (
           <div style={memoryListStyle}>
             {sections.map(section => (
@@ -168,6 +249,64 @@ function MemoryPanel({
           <div style={emptyMemoryStyle}>还没有记录到可整理的生命记忆。</div>
         )
       )}
+    </section>
+  );
+}
+
+function ArtifactLauncherPanel({
+  ready,
+  document,
+  documentUrl,
+  documentBusy,
+  card,
+  cardImageUrl,
+  cardBusy,
+  onGenerateDocument,
+  onGenerateLegacyCard,
+}) {
+  const disabledHint = `至少需要 ${MIN_MEMORY_ITEMS_FOR_DOCUMENT} 条生命记忆`;
+  return (
+    <section style={artifactLauncherStyle}>
+      <div>
+        <div style={sectionTitleStyle}>整理成果</div>
+        <div style={subTextStyle}>生命记忆确认后，再整理人生故事或传承卡片。</div>
+      </div>
+      <div className="dignity-artifact-grid" style={artifactGridStyle}>
+        <article className="dignity-artifact-action" style={artifactActionStyle}>
+          <div>
+            <div style={artifactTitleStyle}>人生故事</div>
+            <div style={artifactDescriptionStyle}>
+              {documentUrl ? '故事已确认保存，可继续修改。' : document ? '已有故事草稿，您可以继续编辑。' : '整理为一篇可编辑、可下载的人生故事。'}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onGenerateDocument}
+            disabled={documentBusy || !ready}
+            title={ready ? '' : disabledHint}
+            style={artifactPrimaryButtonStyle(!documentBusy && ready)}
+          >
+            {documentBusy ? '正在整理' : document ? '重新整理' : ready ? '生成人生故事' : '记忆不足'}
+          </button>
+        </article>
+        <article className="dignity-artifact-action" style={artifactActionStyle}>
+          <div>
+            <div style={artifactTitleStyle}>传承卡片</div>
+            <div style={artifactDescriptionStyle}>
+              {cardImageUrl ? '卡片已经生成，可编辑或下载分享。' : card ? '卡片内容已生成，等待图片完成。' : '把重要片段整理成便于保存和分享的图文卡片。'}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onGenerateLegacyCard}
+            disabled={cardBusy || !ready}
+            title={ready ? '' : disabledHint}
+            style={artifactSecondaryButtonStyle(!cardBusy && ready)}
+          >
+            {cardBusy ? '生成中' : card || cardImageUrl ? '重新生成' : ready ? '生成传承卡片' : '记忆不足'}
+          </button>
+        </article>
+      </div>
     </section>
   );
 }
@@ -270,13 +409,36 @@ function FamilyLetterPanel({ letter, imageUrl, busy, ready, reading, template, o
   const addParagraph = () => {
     updateLetter({ paragraphs: [...paragraphs, ''] });
   };
+
+  if (!letter && !imageUrl) {
+    return (
+      <section className="dignity-compact-letter" style={compactLetterPanelStyle}>
+        <div>
+          <div style={sectionTitleStyle}>写给家人的一封信</div>
+          <div style={subTextStyle}>
+            {busy ? '正在根据生命记忆整理家信，请稍候。' : '准备好后，再把想说的话整理成一封家信。'}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onGenerate}
+          disabled={busy || !ready}
+          title={ready ? '' : `至少需要 ${MIN_MEMORY_ITEMS_FOR_DOCUMENT} 条生命记忆`}
+          style={artifactSecondaryButtonStyle(!busy && ready)}
+        >
+          {busy ? '正在生成' : ready ? '生成家信' : '记忆不足'}
+        </button>
+      </section>
+    );
+  }
+
   return (
     <section style={legacyCardPanelStyle}>
       <style>{letterAnimationCss}</style>
       <div style={sectionHeadStyle}>
         <div>
           <div style={sectionTitleStyle}>写给家人的一封信</div>
-          <div style={subTextStyle}>{imageUrl ? `已装入${selectedTemplate.name}信封，点击信封查看` : '正在整理并生成家信'}</div>
+          <div style={subTextStyle}>{imageUrl ? `已装入${selectedTemplate.name}信封，点击信封查看` : '家信内容已经整理完成'}</div>
         </div>
         <div style={headActionsStyle}>
           {open && <ReadButton active={reading} disabled={!canRead} onRead={onRead} onStop={onStopReading} />}
@@ -310,9 +472,7 @@ function FamilyLetterPanel({ letter, imageUrl, busy, ready, reading, template, o
         </button>
       </div>
       {busy ? (
-        <div style={loadingTextStyle}>正在生成家信...</div>
-      ) : !letter && !imageUrl ? (
-        <div style={emptyArtifactStyle}>选择一款信纸，生成后会装入电子信封。</div>
+        <div style={loadingTextStyle}>正在更新家信...</div>
       ) : !open ? (
         <button type="button" onClick={() => setOpen(true)} style={envelopeStyle(selectedTemplate.swatch, selectedTemplate.envelope)}>
           <span style={envelopeLinerStyle(selectedTemplate.swatch, selectedTemplate.preview)} />
@@ -417,6 +577,7 @@ export default function DignityTherapyPanel({
   openingReply,
   documentBusy,
   documentConfirmBusy,
+  memoryBusy,
   document,
   documentUrl,
   legacyCardBusy,
@@ -437,6 +598,7 @@ export default function DignityTherapyPanel({
   onSaveFamilyLetter,
   onConfirmDocument,
   onDocumentChange,
+  onSaveMemory,
   onToggleVoiceMode,
   readingKind,
   onReadDocument,
@@ -474,10 +636,19 @@ export default function DignityTherapyPanel({
         </section>
 
         <MemoryPanel
-          sections={memorySections}
+          memory={status?.dignity_memory || {}}
           itemCount={memoryItemCount}
+          busy={memoryBusy}
+          onSave={onSaveMemory}
+        />
+
+        <ArtifactLauncherPanel
           ready={documentReady}
-          busy={documentBusy}
+          document={document}
+          documentUrl={documentUrl}
+          documentBusy={documentBusy}
+          card={legacyCard}
+          cardImageUrl={legacyCardImageUrl}
           cardBusy={legacyCardBusy}
           onGenerateDocument={onGenerateDocument}
           onGenerateLegacyCard={onGenerateLegacyCard}
@@ -533,8 +704,26 @@ const primaryButtonStyle = (active) => ({ height: 50, minWidth: 154, padding: '0
 const memoryPanelStyle = { padding: '2px 0 22px', borderBottom: `1px solid ${C.mist}22`, display: 'grid', gap: 12 };
 const memoryToggleStyle = { height: 40, padding: '0 14px', borderRadius: 8, border: `1px solid ${C.mist}55`, background: 'rgba(255,250,242,.58)', color: C.inkMid, fontSize: 15, fontWeight: 600, whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'Noto Sans SC' };
 const memoryCountStyle = { marginLeft: 10, color: C.inkFaint, fontSize: 15, fontFamily: 'Noto Sans SC' };
-const generateButtonStyle = (enabled) => ({ height: 40, padding: '0 16px', borderRadius: 8, border: `1px solid ${enabled ? C.amber : C.mist}66`, background: enabled ? `${C.amber}22` : 'rgba(255,250,242,.46)', color: enabled ? C.ink : C.inkFaint, fontSize: 15, fontWeight: enabled ? 700 : 500, fontFamily: 'Noto Sans SC', cursor: enabled ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' });
-const cardButtonStyle = (enabled) => ({ height: 40, padding: '0 16px', borderRadius: 8, border: `1px solid ${enabled ? C.sage : C.mist}66`, background: enabled ? `${C.sage}22` : 'rgba(255,250,242,.46)', color: enabled ? C.ink : C.inkFaint, fontSize: 15, fontWeight: enabled ? 700 : 500, fontFamily: 'Noto Sans SC', cursor: enabled ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' });
+const memoryEditorStyle = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, padding: 14, border: `1px solid ${C.mist}33`, borderRadius: 12, background: 'rgba(255,250,242,.5)' };
+const memoryEditorSectionStyle = { minWidth: 0, display: 'grid', alignContent: 'start', gap: 10, padding: 12, borderRadius: 10, border: `1px solid ${C.mist}22`, background: 'rgba(255,254,250,.86)' };
+const memoryEditorSectionHeadStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 };
+const memoryEditorHintStyle = { marginTop: 2, color: C.inkFaint, fontSize: 12 };
+const memoryEditorItemsStyle = { display: 'grid', gap: 10 };
+const memoryEditorItemStyle = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 7, alignItems: 'end' };
+const memoryTextareaStyle = { gridColumn: '1 / -1', width: '100%', minHeight: 64, boxSizing: 'border-box', resize: 'vertical', borderRadius: 8, border: `1px solid ${C.mist}44`, padding: '9px 10px', outline: 'none', background: '#fffefa', color: C.inkMid, fontSize: 14, lineHeight: 1.55, fontFamily: 'Noto Sans SC' };
+const memoryEditorEmptyStyle = { padding: '10px 0', color: C.inkFaint, fontSize: 13, lineHeight: 1.6 };
+const memoryEditorActionsStyle = { gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 2 };
+const textActionButtonStyle = { height: 34, padding: '0 11px', borderRadius: 8, border: `1px solid ${C.sage}55`, background: `${C.sage}12`, color: C.sage, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans SC', whiteSpace: 'nowrap' };
+const removeMemoryButtonStyle = { justifySelf: 'end', border: 0, background: 'transparent', color: C.red, padding: 0, fontSize: 13, fontFamily: 'Noto Sans SC', cursor: 'pointer' };
+const saveMemoryButtonStyle = (enabled) => ({ height: 40, padding: '0 16px', borderRadius: 8, border: `1px solid ${enabled ? C.sage : C.mist}66`, background: enabled ? C.sage : 'rgba(130,154,144,.18)', color: enabled ? '#fffaf2' : C.inkFaint, fontSize: 15, fontWeight: 700, fontFamily: 'Noto Sans SC', cursor: enabled ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' });
+const artifactLauncherStyle = { display: 'grid', gap: 12, padding: '2px 0 22px', borderBottom: `1px solid ${C.mist}22` };
+const artifactGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 };
+const artifactActionStyle = { minWidth: 0, minHeight: 116, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '15px 16px', borderRadius: 12, border: `1px solid ${C.mist}2f`, background: 'rgba(255,250,242,.62)' };
+const artifactTitleStyle = { color: C.ink, fontSize: 17, fontWeight: 700, fontFamily: 'Noto Sans SC' };
+const artifactDescriptionStyle = { maxWidth: 330, marginTop: 5, color: C.inkFaint, fontSize: 13, lineHeight: 1.55 };
+const artifactPrimaryButtonStyle = (enabled) => ({ flex: '0 0 auto', height: 40, padding: '0 15px', borderRadius: 8, border: `1px solid ${enabled ? C.amber : C.mist}66`, background: enabled ? C.amber : 'rgba(130,154,144,.14)', color: enabled ? '#fffaf2' : C.inkFaint, fontSize: 14, fontWeight: 700, fontFamily: 'Noto Sans SC', cursor: enabled ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' });
+const artifactSecondaryButtonStyle = (enabled) => ({ flex: '0 0 auto', height: 40, padding: '0 15px', borderRadius: 8, border: `1px solid ${enabled ? C.sage : C.mist}66`, background: enabled ? C.sage : 'rgba(130,154,144,.14)', color: enabled ? '#fffaf2' : C.inkFaint, fontSize: 14, fontWeight: 700, fontFamily: 'Noto Sans SC', cursor: enabled ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' });
+const compactLetterPanelStyle = { minHeight: 84, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 18, padding: '15px 16px', borderRadius: 12, border: `1px solid ${C.mist}2f`, background: 'rgba(255,250,242,.62)', marginBottom: 18 };
 const templatePanelStyle = { display: 'grid', gap: 8, padding: '10px 12px', border: `1px solid ${C.mist}22`, borderRadius: 8, background: 'rgba(255,250,242,.42)' };
 const templateLabelStyle = { color: C.inkMid, fontSize: 14, fontWeight: 700 };
 const templateGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(5, minmax(82px, 1fr))', gap: 8 };
@@ -553,7 +742,6 @@ const sectionHeadStyle = { display: 'flex', justifyContent: 'space-between', gap
 const headActionsStyle = { display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' };
 const sectionTitleStyle = { color: C.ink, fontSize: 20, fontFamily: 'Noto Serif SC, serif', fontWeight: 600 };
 const loadingTextStyle = { color: C.inkFaint, fontSize: 15, padding: '12px 0' };
-const emptyArtifactStyle = { color: C.inkFaint, fontSize: 15, lineHeight: 1.7, padding: '12px 14px', border: `1px dashed ${C.mist}55`, borderRadius: 8, background: 'rgba(255,250,242,.48)', marginTop: 10 };
 const documentEditorStyle = { width: '100%', minHeight: 330, resize: 'vertical', boxSizing: 'border-box', border: `1px solid ${C.mist}26`, borderRadius: 8, padding: '16px 17px', outline: 'none', color: C.inkMid, background: 'rgba(255,250,242,.84)', fontSize: 16, lineHeight: 1.8, fontFamily: 'Noto Sans SC', boxShadow: 'inset 0 1px 0 rgba(255,255,255,.7)' };
 const smallButtonStyle = (enabled) => ({ height: 40, padding: '0 16px', borderRadius: 8, border: `1px solid ${enabled ? C.sage : C.mist}66`, background: enabled ? `${C.sage}22` : 'rgba(255,250,242,.52)', color: enabled ? C.ink : C.inkFaint, fontSize: 15, fontWeight: enabled ? 700 : 500, cursor: enabled ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap', fontFamily: 'Noto Sans SC' });
 const readButtonStyle = (active, enabled) => ({ height: 40, padding: '0 16px', borderRadius: 8, border: `1px solid ${active ? C.green : enabled ? C.sage : C.mist}66`, background: active ? `${C.green}24` : enabled ? `${C.sage}20` : 'rgba(255,250,242,.52)', color: enabled ? C.ink : C.inkFaint, fontSize: 15, fontWeight: enabled ? 700 : 500, cursor: enabled ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap', fontFamily: 'Noto Sans SC' });

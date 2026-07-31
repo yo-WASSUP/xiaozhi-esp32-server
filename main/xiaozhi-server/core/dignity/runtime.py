@@ -8,7 +8,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from xml.sax.saxutils import escape
 
 from core.dignity.engine.config import (
@@ -28,7 +28,7 @@ from core.dignity.engine.prompts import (
     build_dignity_document_user_prompt,
     build_memory_reply_user_prompt,
 )
-from core.dignity.engine.state_updates import merge_dignity_memory
+from core.dignity.engine.state_updates import initial_dignity_memory, merge_dignity_memory
 from core.dignity.interview_audio import (
     apply_audio_edits_to_memory,
     merge_and_save_transcript_segments,
@@ -267,15 +267,46 @@ def _load_persisted_memory(conn) -> Dict[str, Any]:
         return {}
 
 
-def _save_persisted_memory(conn, memory: Dict[str, Any]) -> None:
+def _save_persisted_memory(conn, memory: Dict[str, Any]) -> bool:
     try:
         MEMORY_DIR.mkdir(parents=True, exist_ok=True)
         with _memory_path(conn).open("w", encoding="utf-8") as file:
             json.dump(memory, file, ensure_ascii=False, indent=2)
+        return True
     except Exception as exc:
         logger = getattr(conn, "logger", None)
         if logger:
             logger.bind(tag=TAG).debug(f"尊严访谈记忆保存失败: {exc}")
+        return False
+
+
+def _normalize_edited_memory(value: Any) -> Dict[str, List[str]]:
+    normalized = initial_dignity_memory()
+    if not isinstance(value, dict):
+        return normalized
+
+    for key in normalized:
+        items = value.get(key)
+        if not isinstance(items, list):
+            continue
+        cleaned: List[str] = []
+        seen = set()
+        for item in items[:80]:
+            if isinstance(item, dict):
+                text = " ".join(
+                    str(field).strip()
+                    for field in item.values()
+                    if field is not None and str(field).strip()
+                )
+            else:
+                text = str(item or "").strip()
+            text = re.sub(r"\s+", " ", text)[:800].strip()
+            if not text or text in seen:
+                continue
+            cleaned.append(text)
+            seen.add(text)
+        normalized[key] = cleaned
+    return normalized
 
 
 def _apply_persisted_memory(conn, state: DignityState) -> DignityState:
@@ -331,6 +362,32 @@ async def reset_dignity_debug(conn) -> None:
     payload = _state_payload(conn.dignity_debug_state)
     _write_dignity_log(conn, "debug_reset", payload, source="debug")
     await send_dignity_event(conn, "debug_reset", payload)
+
+
+async def update_dignity_memory(conn, msg_json: Optional[Dict[str, Any]] = None) -> None:
+    _ensure_dignity_runtime(conn)
+    msg_json = msg_json or {}
+    conn.dignity_patient_id = msg_json.get("patient_id") or conn.dignity_patient_id
+    if not isinstance(msg_json.get("memory"), dict):
+        await send_dignity_event(conn, "memory_error", {"message": "生命记忆格式无效。"})
+        return
+
+    await send_dignity_event(conn, "memory_update_started", {})
+    memory = _normalize_edited_memory(msg_json["memory"])
+    if not _save_persisted_memory(conn, memory):
+        await send_dignity_event(conn, "memory_error", {"message": "生命记忆保存失败，请稍后重试。"})
+        return
+
+    for state in (conn.dignity_state, conn.dignity_debug_state):
+        if state is not None:
+            state["dignity_memory"] = memory
+
+    payload = {
+        "patient_id": _memory_key(conn),
+        "dignity_memory": memory,
+    }
+    _write_dignity_log(conn, "memory_updated", payload)
+    await send_dignity_event(conn, "memory_updated", payload)
 
 
 async def run_dignity_debug_turn(conn, text: str) -> None:

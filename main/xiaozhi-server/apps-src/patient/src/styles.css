@@ -252,6 +252,13 @@ a:focus-visible {
   overflow: auto;
 }
 
+@media (max-width: 1280px) {
+  .dignity-memory-editor,
+  .dignity-artifact-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
 .dignity-interview {
   position: relative;
   min-width: 0;
@@ -997,6 +1004,12 @@ a:focus-visible {
     height: auto;
     padding: 8px 4px 26px;
     overflow: visible;
+  }
+
+  .dignity-artifact-action,
+  .dignity-compact-letter {
+    align-items: flex-start !important;
+    flex-direction: column !important;
   }
 }
 

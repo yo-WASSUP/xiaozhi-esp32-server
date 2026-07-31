@@ -9,6 +9,7 @@ from core.dignity.runtime import (
     send_dignity_event,
     start_dignity_mode,
     stop_dignity_mode,
+    update_dignity_memory,
 )
 from core.handle.textMessageHandler import TextMessageHandler
 from core.handle.textMessageType import TextMessageType
@@ -43,6 +44,9 @@ class DignityTextMessageHandler(TextMessageHandler):
             return
         if action == "confirm_document":
             await confirm_dignity_document(conn, msg_json)
+            return
+        if action == "update_memory":
+            await update_dignity_memory(conn, msg_json)
             return
 
         conn.logger.bind(tag=TAG).warning(f"未知尊严疗法动作: {action}")

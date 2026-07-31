@@ -1,14 +1,6 @@
 {
-  "life_story_materials": [
-    "女儿送的一个好东西（具体物品待确认）",
-    "女儿送的一个小玩具（具体物品待确认）",
-    "女儿送的猪猪侠玩偶，放在床头"
-  ],
-  "important_relationships": [
-    "女儿：送贴心东西，患者感到感激",
-    "女儿：送贴心小玩具，患者感到感激",
-    "女儿：送猪猪侠玩偶，患者感到感激"
-  ],
+  "life_story_materials": [],
+  "important_relationships": [],
   "values_and_strengths": [],
   "messages_to_family": []
 }

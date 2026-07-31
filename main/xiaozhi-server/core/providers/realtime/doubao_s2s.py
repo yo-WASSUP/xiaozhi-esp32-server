@@ -531,11 +531,14 @@ class DoubaoS2SClient:
                 await self._send_pcm(audio, end_of_stream=False)
             elif event == EVENT_CHAT_RESPONSE and text:
                 self.assistant_text = self._merge_text(self.assistant_text, text)
-            elif event == EVENT_TTS_SEGMENT_END and text and not self.assistant_text:
-                self.assistant_text = text
+            elif event == EVENT_TTS_SEGMENT_END and text:
+                self.assistant_text = self._merge_text(self.assistant_text, text)
             elif event == EVENT_CHAT_ENDED:
                 if text:
-                    self.assistant_text = text
+                    self.assistant_text = self._merge_text(
+                        self.assistant_text,
+                        text,
+                    )
                 await self._finalize_assistant_text()
             elif event == EVENT_TTS_FINISHED:
                 if self.conn.client_abort:
