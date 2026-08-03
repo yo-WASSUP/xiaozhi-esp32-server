@@ -28,6 +28,37 @@ DEFAULT_STOP_COMMANDS = (
     "返回普通聊天",
 )
 
+DEFAULT_PAUSE_COMMANDS = (
+    "暂停访谈",
+    "先暂停",
+    "暂停一下",
+    "休息一下",
+    "歇一会儿",
+    "我累了",
+    "有点累",
+    "不想说了",
+    "先不聊了",
+    "别问了",
+)
+
+DEFAULT_RESUME_COMMANDS = (
+    "继续访谈",
+    "接着访谈",
+    "继续聊",
+    "接着聊",
+    "我休息好了",
+    "可以继续了",
+    "我们继续",
+)
+
+PAUSE_CANCEL_HINTS = (
+    "不累",
+    "不用休息",
+    "不想暂停",
+    "不要暂停",
+    "别暂停",
+)
+
 PREFIXES = ("小暖", "请", "请你", "麻烦", "帮我", "帮忙", "我要", "我想", "现在")
 SUFFIXES = ("吧", "一下", "可以吗", "好吗", "模式")
 NEGATION_HINTS = ("不要", "别", "不用", "不想", "先别", "暂时不要")
@@ -60,6 +91,33 @@ def detect_dignity_voice_command(
     return None
 
 
+def detect_dignity_session_command(
+    text: str,
+    *,
+    paused: bool,
+    config: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, str]]:
+    options = _session_command_options(config)
+    if not options["enabled"]:
+        return None
+
+    normalized = _normalize(text)
+    if not normalized:
+        return None
+
+    commands = options["resume_commands"] if paused else options["pause_commands"]
+    if not paused and any(_normalize(hint) in normalized for hint in PAUSE_CANCEL_HINTS):
+        return None
+
+    matched = _find_phrase(normalized, commands)
+    if not matched:
+        return None
+    return {
+        "action": "resume" if paused else "pause",
+        "matched_command": matched,
+    }
+
+
 def _voice_switch_options(config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     hospice_config = (config or {}).get("hospice", {}) or {}
     switch_config = hospice_config.get("dignity_voice_switch", {}) or {}
@@ -73,6 +131,22 @@ def _voice_switch_options(config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         "stop_commands": _configured_commands(
             switch_config.get("stop_commands"),
             DEFAULT_STOP_COMMANDS,
+        ),
+    }
+
+
+def _session_command_options(config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    hospice_config = (config or {}).get("hospice", {}) or {}
+    command_config = hospice_config.get("dignity_session_commands", {}) or {}
+    return {
+        "enabled": command_config.get("enabled", True) is not False,
+        "pause_commands": _configured_commands(
+            command_config.get("pause_commands"),
+            DEFAULT_PAUSE_COMMANDS,
+        ),
+        "resume_commands": _configured_commands(
+            command_config.get("resume_commands"),
+            DEFAULT_RESUME_COMMANDS,
         ),
     }
 
@@ -99,6 +173,13 @@ def _match_command(text: str, commands: tuple[str, ...]) -> Optional[str]:
         if text == command:
             return command
         if text.startswith(command) and _strip_affixes(text[len(command):]) == "":
+            return command
+    return None
+
+
+def _find_phrase(text: str, commands: tuple[str, ...]) -> Optional[str]:
+    for command in sorted((_normalize(item) for item in commands), key=len, reverse=True):
+        if command and command in text:
             return command
     return None
 

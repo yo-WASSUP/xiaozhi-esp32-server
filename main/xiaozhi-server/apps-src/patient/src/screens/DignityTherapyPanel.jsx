@@ -33,6 +33,7 @@ function DignityInterviewStage({
   inputLevel,
   outputLevel,
   voiceMode,
+  paused,
 }) {
   const passiveState = aiState === 'speaking' || aiState === 'thinking' ? aiState : 'idle';
   const displayState = voiceMode && aiState === 'idle' && connected && recording && userSpeaking
@@ -44,11 +45,15 @@ function DignityInterviewStage({
   const activityLevel = activitySource === 'input' ? inputLevel : outputLevel;
   const statusText = !connected
     ? '语音服务连接中'
+    : paused
+      ? '访谈已暂停'
     : voiceMode
       ? (userSpeaking ? '正在听您说' : '访谈进行中')
       : '访谈已暂停';
   const fallbackReply = !connected
     ? '语音服务正在连接，请稍等一会儿。'
+    : paused
+      ? '我们已经暂停。您想继续时，可以对我说“继续访谈”。'
     : voiceMode
       ? '我在这里。我们可以慢慢聊，您想到什么就说什么。'
       : '访谈已暂停，准备好后可以继续。';
@@ -57,7 +62,7 @@ function DignityInterviewStage({
 
   return (
     <aside
-      className={`dignity-interview dignity-interview--${displayState} dignity-interview--reply-${replyDensity}`}
+      className={`dignity-interview dignity-interview--${displayState} dignity-interview--reply-${replyDensity}${paused ? ' dignity-interview--paused' : ''}`}
       style={{ '--dignity-room-background': `url(${voiceRoomBackground})` }}
       aria-label="尊严疗法实时语音访谈"
     >
@@ -66,7 +71,7 @@ function DignityInterviewStage({
           <span className="dignity-interview__eyebrow">实时语音访谈</span>
           <h2>和小暖慢慢聊</h2>
         </div>
-        <span className={`dignity-interview__status ${voiceMode ? 'is-active' : ''}`}>
+        <span className={`dignity-interview__status ${voiceMode && !paused ? 'is-active' : ''}`}>
           <i aria-hidden="true" />
           {statusText}
         </span>
@@ -93,7 +98,7 @@ function DignityInterviewStage({
         <WaveBars
           source={activitySource}
           level={activityLevel}
-          active={connected && ((voiceMode && recording) || aiState === 'speaking')}
+          active={!paused && connected && ((voiceMode && recording) || aiState === 'speaking')}
         />
       </div>
     </aside>
@@ -589,6 +594,7 @@ export default function DignityTherapyPanel({
   familyLetter,
   familyLetterImageUrl,
   voiceMode,
+  paused,
   onGenerateDocument,
   onGenerateLegacyCard,
   onGenerateFamilyLetter,
@@ -625,14 +631,15 @@ export default function DignityTherapyPanel({
         inputLevel={inputLevel}
         outputLevel={outputLevel}
         voiceMode={voiceMode}
+        paused={paused}
       />
 
       <main className="dignity-therapy__workspace">
         <section style={controlPanelStyle}>
           <div style={kickerStyle}>尊严疗法</div>
           <div style={actionsStyle}>
-            <button onClick={onToggleVoiceMode} style={primaryButtonStyle(voiceMode)}>
-              {voiceMode ? '暂停访谈' : '开始访谈'}
+            <button onClick={onToggleVoiceMode} style={primaryButtonStyle(voiceMode && !paused)}>
+              {paused ? '继续访谈' : voiceMode ? '暂停访谈' : '开始访谈'}
             </button>
           </div>
         </section>

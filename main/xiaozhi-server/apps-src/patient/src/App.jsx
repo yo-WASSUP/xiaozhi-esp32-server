@@ -18,6 +18,7 @@ import useFamilyMessageReader from './hooks/useFamilyMessageReader';
 import { C } from './theme';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const DIGNITY_SILENCE_DELAYS_MS = [45000, 60000, 60000];
 
 function cleanReadableText(value) {
   return String(value || '')
@@ -203,6 +204,8 @@ export default function App() {
   const [interviewSegments, setInterviewSegments] = useState([]);
   const [interviewAudioBusy, setInterviewAudioBusy] = useState(false);
   const [dignityVoiceMode, setDignityVoiceMode] = useState(false);
+  const [dignityPaused, setDignityPaused] = useState(false);
+  const [dignitySilencePromptCount, setDignitySilencePromptCount] = useState(0);
   const [ordinaryVoiceAwake, setOrdinaryVoiceAwake] = useState(true);
   const [dignityReadingKind, setDignityReadingKind] = useState('');
   const [assistantToolsOpen, setAssistantToolsOpen] = useState(false);
@@ -232,6 +235,7 @@ export default function App() {
   const ttsPlaybackAbortRef = useRef(false);
   const speakingFallbackTimerRef = useRef(null);
   const dignityOpeningSpokenRef = useRef(false);
+  const dignitySilenceTimerRef = useRef(null);
   const assistantReplyRef = useRef({ sentenceId: '', text: '', final: false });
 
   useEffect(() => { connectedRef.current = connected; }, [connected]);
@@ -768,9 +772,22 @@ export default function App() {
 
   const toggleDignityVoiceMode = useCallback(async () => {
     if (!dignityMode) return;
+    if (dignityPaused) {
+      const ok = await sendDignityAction('resume', { patient_id: DEVICE_ID, source: 'patient_button' });
+      if (!ok) setConnectStatus('继续访谈失败，请稍后再试');
+      return;
+    }
     if (dignityVoiceMode) {
-      setDignityVoiceMode(false);
-      await pauseAssistantListening();
+      try {
+        await window.XiaozhiClient?.interrupt?.('dignity_pause');
+      } catch (_) { }
+      await stopTtsPlayback();
+      const ok = await sendDignityAction('pause', {
+        patient_id: DEVICE_ID,
+        source: 'patient_button',
+        reason: 'patient_request',
+      });
+      if (!ok) setConnectStatus('暂停访谈失败，请稍后再试');
       return;
     }
     if (!connectedRef.current || !micOkRef.current) {
@@ -795,7 +812,7 @@ export default function App() {
     }
     setDignityVoiceMode(true);
     await resumeAssistantAndStart();
-  }, [dignityMode, dignityOpeningReply, dignityStatus?.reply, dignityVoiceMode, pauseAssistantListening, resumeAssistantAndStart, speakViaTtsAndWait]);
+  }, [dignityMode, dignityOpeningReply, dignityPaused, dignityStatus?.reply, dignityVoiceMode, pauseAssistantListening, resumeAssistantAndStart, sendDignityAction, speakViaTtsAndWait, stopTtsPlayback]);
 
   const isHangupCommand = (text) => {
     const value = normalizeCommandText(text);
@@ -1058,6 +1075,7 @@ export default function App() {
       assistantReplyRef.current = { sentenceId: '', text: '', final: false };
       if (dignityModeRef.current) {
         setDignityLastHeard(e.detail?.text || '');
+        setDignitySilencePromptCount(0);
       } else {
         setOrdinaryLastHeard(e.detail?.text || '');
       }
@@ -1142,6 +1160,8 @@ export default function App() {
         setActiveApp('dignity');
         setDignityMode(true);
         setDignityVoiceMode(autoVoiceMode);
+        setDignityPaused(!!data.paused);
+        setDignitySilencePromptCount(Number(data.silence_prompt_count) || 0);
         setDignityLastHeard('');
         setUserSpeaking(false);
         userSpeakingRef.current = false;
@@ -1166,6 +1186,8 @@ export default function App() {
         assistantReplyRef.current = { sentenceId: '', text: '', final: false };
         setDignityMode(false);
         setDignityVoiceMode(false);
+        setDignityPaused(false);
+        setDignitySilencePromptCount(0);
         setDignityReadingKind('');
         setDignityStatus(data);
         if (activeAppRef.current !== 'voice') {
@@ -1181,8 +1203,38 @@ export default function App() {
         } else {
           void resumeAssistantAndStart();
         }
+      } else if (event === 'mode_paused') {
+        setDignityPaused(true);
+        setDignityStatus(data);
+        setDignitySilencePromptCount(Number(data.silence_prompt_count) || 0);
+        if (data.reply) {
+          setAiState('speaking');
+          assistantReplyRef.current = { sentenceId: '', text: data.reply, final: true };
+          setDignityMsg(data.reply);
+        }
+      } else if (event === 'mode_resumed') {
+        setDignityPaused(false);
+        setDignityVoiceMode(true);
+        setDignityStatus(data);
+        setDignitySilencePromptCount(0);
+        if (data.reply) {
+          setAiState('speaking');
+          assistantReplyRef.current = { sentenceId: '', text: data.reply, final: true };
+          setDignityMsg(data.reply);
+        }
+        void resumeAssistantAndStart();
+      } else if (event === 'silence_prompt') {
+        setDignityStatus(data);
+        setDignitySilencePromptCount(Number(data.silence_prompt_count) || 0);
+        if (data.reply) {
+          setAiState('speaking');
+          assistantReplyRef.current = { sentenceId: '', text: data.reply, final: true };
+          setDignityMsg(data.reply);
+        }
       } else if (event === 'turn_result' || event === 'nurse_alert') {
         const nextData = attachClientLatency(data, dignityLiveTurnStartedAtRef);
+        if (typeof nextData.paused === 'boolean') setDignityPaused(nextData.paused);
+        setDignitySilencePromptCount(Number(nextData.silence_prompt_count) || 0);
         setDignityStatus(nextData);
         setDignityTurns(items => [...items, nextData]);
         if (nextData.reply) {
@@ -1190,6 +1242,8 @@ export default function App() {
           setDignityMsg(nextData.reply);
         }
       } else if (event === 'state_updated') {
+        if (typeof data.paused === 'boolean') setDignityPaused(data.paused);
+        setDignitySilencePromptCount(Number(data.silence_prompt_count) || 0);
         setDignityStatus(prev => ({
           ...data,
           client_response_latency_ms: data.client_response_latency_ms ?? prev?.client_response_latency_ms,
@@ -1315,6 +1369,47 @@ export default function App() {
   }, [dignityMode, loadDignityArtifacts]);
 
   useEffect(() => {
+    if (dignitySilenceTimerRef.current) {
+      clearTimeout(dignitySilenceTimerRef.current);
+      dignitySilenceTimerRef.current = null;
+    }
+    const canPrompt = activeApp === 'dignity'
+      && dignityMode
+      && dignityVoiceMode
+      && !dignityPaused
+      && connected
+      && recording
+      && aiState === 'idle'
+      && !userSpeaking
+      && !assistantHold
+      && !inCall
+      && !settingsOpen
+      && !assistantToolsOpen
+      && !dignityReadingKind;
+    if (!canPrompt) return undefined;
+
+    const promptIndex = Math.min(
+      dignitySilencePromptCount,
+      DIGNITY_SILENCE_DELAYS_MS.length - 1,
+    );
+    dignitySilenceTimerRef.current = setTimeout(() => {
+      dignitySilenceTimerRef.current = null;
+      void sendDignityAction('silence_prompt', {
+        patient_id: DEVICE_ID,
+        source: 'silence_timer',
+        prompt_count: dignitySilencePromptCount,
+      });
+    }, DIGNITY_SILENCE_DELAYS_MS[promptIndex]);
+
+    return () => {
+      if (dignitySilenceTimerRef.current) {
+        clearTimeout(dignitySilenceTimerRef.current);
+        dignitySilenceTimerRef.current = null;
+      }
+    };
+  }, [activeApp, aiState, assistantHold, assistantToolsOpen, connected, dignityMode, dignityPaused, dignityReadingKind, dignitySilencePromptCount, dignityVoiceMode, inCall, recording, sendDignityAction, settingsOpen, userSpeaking]);
+
+  useEffect(() => {
     const nextSegments = segmentsFromTranscript(dignityStatus?.transcript);
     if (nextSegments.length) {
       setInterviewSegments(items => mergeInterviewSegments(items, nextSegments));
@@ -1373,6 +1468,7 @@ export default function App() {
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     if (callStateTimerRef.current) clearInterval(callStateTimerRef.current);
     if (speakingFallbackTimerRef.current) clearTimeout(speakingFallbackTimerRef.current);
+    if (dignitySilenceTimerRef.current) clearTimeout(dignitySilenceTimerRef.current);
     stopCallCommandRecognizer();
     stopPlayback();
     if (window.XiaozhiClient && typeof window.XiaozhiClient.releaseWakeWord === 'function') {
@@ -1606,6 +1702,7 @@ export default function App() {
                 familyLetter={familyLetter}
                 familyLetterImageUrl={familyLetterImageUrl}
                 voiceMode={dignityVoiceMode}
+                paused={dignityPaused}
                 recording={recording}
                 onRunTurn={runDignityDebugTurn}
                 onReset={resetDignityDebug}
@@ -1640,6 +1737,7 @@ export default function App() {
                 familyLetterImageUrl={familyLetterImageUrl}
                 familyLetterTemplate={familyLetterTemplate}
                 voiceMode={dignityVoiceMode}
+                paused={dignityPaused}
                 recording={recording}
                 onReset={resetDignityDebug}
                 onGenerateDocument={generateDignityDocument}

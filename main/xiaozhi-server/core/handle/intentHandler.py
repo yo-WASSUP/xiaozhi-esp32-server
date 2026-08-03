@@ -62,6 +62,14 @@ async def handle_user_intent(conn, text):
         conn.logger.bind(tag=TAG).info("通话中语音未命中患者端动作，已忽略普通对话处理")
         return True
 
+    try:
+        from core.dignity.runtime import handle_dignity_turn_if_active
+
+        if await handle_dignity_turn_if_active(conn, text):
+            return True
+    except Exception as e:
+        conn.logger.bind(tag=TAG).error(f"尊严疗法模式处理失败: {e}")
+
     if not getattr(conn, "dignity_active", False):
         if await handle_hospice_symptom_qa(conn, text):
             return True
@@ -77,14 +85,6 @@ async def handle_user_intent(conn, text):
                 return True
         except Exception as e:
             conn.logger.bind(tag=TAG).warning(f"机器人语音动作处理失败: {e}")
-
-    try:
-        from core.dignity.runtime import handle_dignity_turn_if_active
-
-        if await handle_dignity_turn_if_active(conn, text):
-            return True
-    except Exception as e:
-        conn.logger.bind(tag=TAG).error(f"尊严疗法模式处理失败: {e}")
 
     if await handle_hospice_patient_sleep(conn, text, filtered_text):
         return True

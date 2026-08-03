@@ -121,6 +121,14 @@ def _ensure_dignity_runtime(conn) -> None:
         conn.dignity_decision_model = None
     if not hasattr(conn, "dignity_dialogue_start_index"):
         conn.dignity_dialogue_start_index = None
+    if not hasattr(conn, "dignity_paused"):
+        conn.dignity_paused = False
+    if not hasattr(conn, "dignity_pause_reason"):
+        conn.dignity_pause_reason = ""
+    if not hasattr(conn, "dignity_paused_at"):
+        conn.dignity_paused_at = ""
+    if not hasattr(conn, "dignity_silence_prompt_count"):
+        conn.dignity_silence_prompt_count = 0
 
 
 def _get_decision_model(conn):
@@ -130,10 +138,10 @@ def _get_decision_model(conn):
     return conn.dignity_decision_model
 
 
-def _state_payload(state: Optional[DignityState]) -> Dict[str, Any]:
+def _state_payload(state: Optional[DignityState], conn=None) -> Dict[str, Any]:
     if not state:
         strategy = "continue_deeper"
-        return {
+        payload = {
             "current_stage": "rapport",
             "strategy": strategy,
             "robot_action": "listening",
@@ -146,12 +154,13 @@ def _state_payload(state: Optional[DignityState]) -> Dict[str, Any]:
             "dignity_memory": {},
             "transcript": [],
         }
+        return _attach_session_payload(payload, conn)
 
     decision_model = state.get("decision_model")
     strategy = str(state.get("strategy") or "continue_deeper")
     robot_action = _normalize_robot_action(strategy_to_robot_action(strategy))
     current_stage = state.get("current_stage", "rapport")
-    return {
+    payload = {
         "current_stage": current_stage,
         "strategy": strategy,
         "robot_action": robot_action,
@@ -169,6 +178,23 @@ def _state_payload(state: Optional[DignityState]) -> Dict[str, Any]:
         "raw_memory_content": getattr(decision_model, "last_raw_memory_content", ""),
         "response_latency_ms": state.get("response_latency_ms"),
     }
+    return _attach_session_payload(payload, conn)
+
+
+def _attach_session_payload(payload: Dict[str, Any], conn) -> Dict[str, Any]:
+    if conn is None:
+        return payload
+    payload.update(
+        {
+            "paused": bool(getattr(conn, "dignity_paused", False)),
+            "pause_reason": str(getattr(conn, "dignity_pause_reason", "") or ""),
+            "paused_at": str(getattr(conn, "dignity_paused_at", "") or ""),
+            "silence_prompt_count": int(
+                getattr(conn, "dignity_silence_prompt_count", 0) or 0
+            ),
+        }
+    )
+    return payload
 
 
 def _attach_dignity_trigger_payload(payload: Dict[str, Any], msg_json: Dict[str, Any]) -> None:
@@ -323,6 +349,10 @@ async def start_dignity_mode(conn, msg_json: Optional[Dict[str, Any]] = None) ->
     if not conn.dignity_active:
         conn.dignity_dialogue_start_index = len(conn.dialogue.dialogue)
     conn.dignity_active = True
+    conn.dignity_paused = False
+    conn.dignity_pause_reason = ""
+    conn.dignity_paused_at = ""
+    conn.dignity_silence_prompt_count = 0
     conn.dignity_patient_id = msg_json.get("patient_id") or conn.dignity_patient_id
 
     if conn.dignity_state is None:
@@ -333,7 +363,7 @@ async def start_dignity_mode(conn, msg_json: Optional[Dict[str, Any]] = None) ->
     conn.dignity_state = _apply_persisted_memory(conn, conn.dignity_state)
 
     conn.logger.bind(tag=TAG).info("尊严访谈模式已开启")
-    payload = _state_payload(conn.dignity_state)
+    payload = _state_payload(conn.dignity_state, conn)
     document_source = _load_dignity_document_source(conn)
     if document_source:
         payload.update(document_source)
@@ -346,17 +376,132 @@ async def stop_dignity_mode(conn, msg_json: Optional[Dict[str, Any]] = None) -> 
     _ensure_dignity_runtime(conn)
     msg_json = msg_json or {}
     conn.dignity_active = False
+    conn.dignity_paused = False
+    conn.dignity_pause_reason = ""
+    conn.dignity_paused_at = ""
+    conn.dignity_silence_prompt_count = 0
     start_index = conn.dignity_dialogue_start_index
     if isinstance(start_index, int) and 0 <= start_index <= len(conn.dialogue.dialogue):
         del conn.dialogue.dialogue[start_index:]
     conn.dignity_dialogue_start_index = None
     conn.logger.bind(tag=TAG).info("尊严访谈模式已关闭")
-    payload = _state_payload(conn.dignity_state)
+    payload = _state_payload(conn.dignity_state, conn)
     payload["robot_action"] = "idle"
     payload["eye_expression"] = "calm"
     _attach_dignity_trigger_payload(payload, msg_json)
     _write_dignity_log(conn, "mode_stopped", payload)
     await send_dignity_event(conn, "mode_stopped", payload)
+
+
+async def pause_dignity_mode(
+    conn,
+    msg_json: Optional[Dict[str, Any]] = None,
+    *,
+    reply: Optional[str] = None,
+) -> None:
+    _ensure_dignity_runtime(conn)
+    if not conn.dignity_active:
+        await send_dignity_event(conn, "error", {"message": "尊严访谈尚未开始。"})
+        return
+    if conn.dignity_paused:
+        return
+
+    msg_json = msg_json or {}
+    pause_reply = (reply or "好的，我们先暂停。您想继续时，可以对我说“继续访谈”。").strip()
+    conn.dignity_paused = True
+    conn.dignity_pause_reason = str(msg_json.get("reason") or "patient_request")
+    conn.dignity_paused_at = datetime.now().isoformat(timespec="seconds")
+
+    payload = _state_payload(conn.dignity_state, conn)
+    payload.update(
+        {
+            "reply": pause_reply,
+            "robot_action": "pause",
+            "eye_expression": "calm",
+        }
+    )
+    _attach_dignity_trigger_payload(payload, msg_json)
+    _write_dignity_log(conn, "mode_paused", payload)
+    await send_dignity_event(conn, "mode_paused", payload)
+    if pause_reply:
+        _speak_dignity_reply(conn, pause_reply)
+
+
+async def resume_dignity_mode(
+    conn,
+    msg_json: Optional[Dict[str, Any]] = None,
+) -> None:
+    _ensure_dignity_runtime(conn)
+    if not conn.dignity_active:
+        await send_dignity_event(conn, "error", {"message": "尊严访谈尚未开始。"})
+        return
+
+    msg_json = msg_json or {}
+    resume_reply = str(
+        msg_json.get("reply")
+        or "好的，我们继续。刚才说到这里，您愿意接着说吗？"
+    ).strip()
+    conn.dignity_paused = False
+    conn.dignity_pause_reason = ""
+    conn.dignity_paused_at = ""
+    conn.dignity_silence_prompt_count = 0
+
+    payload = _state_payload(conn.dignity_state, conn)
+    payload.update(
+        {
+            "reply": resume_reply,
+            "robot_action": "listening",
+            "eye_expression": "attentive",
+        }
+    )
+    _attach_dignity_trigger_payload(payload, msg_json)
+    _write_dignity_log(conn, "mode_resumed", payload)
+    await send_dignity_event(conn, "mode_resumed", payload)
+    if resume_reply:
+        _speak_dignity_reply(conn, resume_reply)
+
+
+async def prompt_dignity_after_silence(
+    conn,
+    msg_json: Optional[Dict[str, Any]] = None,
+) -> None:
+    _ensure_dignity_runtime(conn)
+    if not conn.dignity_active or conn.dignity_paused:
+        return
+
+    count = int(conn.dignity_silence_prompt_count or 0)
+    msg_json = msg_json or {}
+    try:
+        requested_count = int(msg_json.get("prompt_count", count))
+    except (TypeError, ValueError):
+        requested_count = count
+    if requested_count != count:
+        return
+    if count >= 2:
+        await pause_dignity_mode(
+            conn,
+            {"source": "silence_timer", "reason": "repeated_silence"},
+            reply="那我们先停一停。您想继续时，对我说“继续访谈”就好。",
+        )
+        return
+
+    prompts = (
+        "您可以慢慢想，我在这里。刚才说到这里，您愿意接着说一点吗？",
+        "如果刚才的话题不太好回答，我们也可以换个轻松一点的。您想继续聊，还是先休息一下？",
+    )
+    reply = prompts[count]
+    conn.dignity_silence_prompt_count = count + 1
+    payload = _state_payload(conn.dignity_state, conn)
+    payload.update(
+        {
+            "reply": reply,
+            "robot_action": "listening",
+            "eye_expression": "attentive",
+        }
+    )
+    _write_dignity_log(conn, "silence_prompt", payload)
+    await send_dignity_event(conn, "silence_prompt", payload)
+    _speak_dignity_reply(conn, reply)
 
 
 async def reset_dignity_debug(conn) -> None:
@@ -514,6 +659,32 @@ async def handle_dignity_turn_if_active(conn, text: str) -> bool:
     if not patient_text:
         return True
 
+    from core.dignity.voice_commands import detect_dignity_session_command
+
+    command = detect_dignity_session_command(
+        patient_text,
+        paused=bool(conn.dignity_paused),
+        config=getattr(conn, "config", None),
+    )
+    if command:
+        await send_stt_message(conn, patient_text)
+        payload = {
+            "source": "voice_command",
+            "trigger_text": patient_text,
+            "matched_command": command.get("matched_command", ""),
+        }
+        if command.get("action") == "resume":
+            await resume_dignity_mode(conn, payload)
+        else:
+            payload["reason"] = "patient_request"
+            await pause_dignity_mode(conn, payload)
+        return True
+
+    if conn.dignity_paused:
+        return True
+
+    conn.dignity_silence_prompt_count = 0
+
     started_at = perf_counter()
     await send_stt_message(conn, patient_text)
     conn.client_abort = False
@@ -538,7 +709,7 @@ async def handle_dignity_turn_if_active(conn, text: str) -> bool:
     state["response_latency_ms"] = int((perf_counter() - started_at) * 1000)
     conn.dignity_state = state
     _save_interview_audio_segments(conn, state)
-    payload = _state_payload(state)
+    payload = _state_payload(state, conn)
     payload["patient_text"] = patient_text
 
     if payload.get("strategy") == "handoff_nurse":
@@ -547,10 +718,16 @@ async def handle_dignity_turn_if_active(conn, text: str) -> bool:
     _write_dignity_log(conn, "turn_result", payload)
     await send_dignity_event(conn, "turn_result", payload)
 
-    _schedule_background_state_update(conn, state, "live")
     reply = (state.get("reply") or "").strip()
-    if reply:
+    if payload.get("strategy") == "pause":
+        await pause_dignity_mode(
+            conn,
+            {"source": "dignity_engine", "reason": "fatigue_or_refusal"},
+            reply=reply,
+        )
+    elif reply:
         _speak_dignity_reply(conn, reply)
+    _schedule_background_state_update(conn, state, "live")
     return True
 
 
@@ -590,7 +767,7 @@ async def _update_state_in_background(conn, state: DignityState, target: str) ->
         conn.dignity_state = updated_state
         event = "state_updated"
 
-    payload = _state_payload(updated_state)
+    payload = _state_payload(updated_state, conn if target == "live" else None)
     payload["patient_text"] = updated_state.get("patient_text", "")
     _save_interview_audio_segments(conn, updated_state)
     await send_dignity_event(conn, event, payload)
@@ -818,5 +995,6 @@ def _write_docx_package(path: Path, body_xml: str) -> None:
 def _speak_dignity_reply(conn, reply: str) -> None:
     from core.handle.intentHandler import speak_txt
 
+    conn.client_abort = False
     conn.sentence_id = str(uuid.uuid4().hex)
     speak_txt(conn, reply, record_dialogue=False)

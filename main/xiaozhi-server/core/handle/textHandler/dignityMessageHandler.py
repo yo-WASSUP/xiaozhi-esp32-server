@@ -5,6 +5,9 @@ from core.dignity.runtime import (
     confirm_dignity_document,
     generate_dignity_document,
     reset_dignity_debug,
+    pause_dignity_mode,
+    prompt_dignity_after_silence,
+    resume_dignity_mode,
     run_dignity_debug_turn,
     send_dignity_event,
     start_dignity_mode,
@@ -32,6 +35,15 @@ class DignityTextMessageHandler(TextMessageHandler):
             return
         if action == "stop":
             await stop_dignity_mode(conn)
+            return
+        if action == "pause":
+            await pause_dignity_mode(conn, msg_json)
+            return
+        if action == "resume":
+            await resume_dignity_mode(conn, msg_json)
+            return
+        if action == "silence_prompt":
+            await prompt_dignity_after_silence(conn, msg_json)
             return
         if action == "debug_turn":
             await run_dignity_debug_turn(conn, msg_json.get("text", ""))

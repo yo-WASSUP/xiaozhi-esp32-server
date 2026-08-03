@@ -20,6 +20,7 @@ export default function DignityDebugPanel({
   document,
   documentUrl,
   voiceMode,
+  paused,
   recording,
   onRunTurn,
   onReset,
@@ -51,8 +52,8 @@ export default function DignityDebugPanel({
           <div style={subStyle}>文本回合、结构化状态、记忆和人生故事调试保留在这里。</div>
         </div>
         <div style={buttonRowStyle}>
-          <button onClick={onToggleVoiceMode} disabled={busy} style={buttonStyle(voiceMode)}>
-            {voiceMode ? (recording ? '语音中' : '语音') : '语音'}
+          <button onClick={onToggleVoiceMode} disabled={busy} style={buttonStyle(voiceMode && !paused)}>
+            {paused ? '继续访谈' : voiceMode ? (recording ? '暂停访谈' : '语音') : '语音'}
           </button>
           <button onClick={onGenerateDocument} disabled={busy || documentBusy} style={buttonStyle(true)}>
             {documentBusy ? '生成中' : '生成故事'}
