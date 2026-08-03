@@ -18,7 +18,7 @@ import useFamilyMessageReader from './hooks/useFamilyMessageReader';
 import { C } from './theme';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-const DIGNITY_SILENCE_DELAYS_MS = [45000, 60000, 60000];
+const DIGNITY_SILENCE_DELAYS_MS = [15000, 30000, 30000];
 
 function cleanReadableText(value) {
   return String(value || '')
@@ -159,6 +159,13 @@ function mergeAssistantDisplayText(current, incoming) {
   return previous + next;
 }
 
+function mergeSafetyAlertList(items, alert) {
+  if (!alert?.alert_id) return Array.isArray(items) ? items : [];
+  const current = Array.isArray(items) ? items : [];
+  return [alert, ...current.filter(item => item?.alert_id !== alert.alert_id)]
+    .sort((a, b) => String(b?.created_at || '').localeCompare(String(a?.created_at || '')));
+}
+
 export default function App() {
   const [activeApp, setActiveApp] = useState('home');
   const [aiState, setAiState]     = useState('idle');
@@ -210,6 +217,9 @@ export default function App() {
   const [dignityReadingKind, setDignityReadingKind] = useState('');
   const [assistantToolsOpen, setAssistantToolsOpen] = useState(false);
   const [assistantToolView, setAssistantToolView] = useState('audio');
+  const [dignitySafetyAlerts, setDignitySafetyAlerts] = useState([]);
+  const [safetyAlertsBusy, setSafetyAlertsBusy] = useState(false);
+  const [safetyTaskBusyId, setSafetyTaskBusyId] = useState('');
   const [robotActionLog, setRobotActionLog] = useState([]);
 
   const connectingRef = useRef(false);
@@ -482,6 +492,45 @@ export default function App() {
       return false;
     }
   }, []);
+
+  const loadDignitySafetyAlerts = useCallback(async () => {
+    setSafetyAlertsBusy(true);
+    const ok = await sendDignityAction('list_safety_alerts', {
+      patient_id: DEVICE_ID,
+      limit: 50,
+    });
+    if (!ok) {
+      setSafetyAlertsBusy(false);
+      setConnectStatus('安全预警任务加载失败');
+    }
+  }, [sendDignityAction]);
+
+  const updateDignitySafetyTask = useCallback(async (alertId, taskAction, operator, note) => {
+    setSafetyTaskBusyId(alertId);
+    const ok = await sendDignityAction('update_safety_task', {
+      patient_id: DEVICE_ID,
+      alert_id: alertId,
+      task_action: taskAction,
+      operator,
+      note,
+    });
+    if (!ok) {
+      setSafetyTaskBusyId('');
+      setConnectStatus('安全预警处置请求发送失败');
+    }
+    return ok;
+  }, [sendDignityAction]);
+
+  const openSafetyDisposition = useCallback(() => {
+    setAssistantToolView('safety');
+    setAssistantToolsOpen(true);
+  }, []);
+
+  useEffect(() => {
+    if (assistantToolsOpen && assistantToolView === 'safety') {
+      void loadDignitySafetyAlerts();
+    }
+  }, [assistantToolView, assistantToolsOpen, loadDignitySafetyAlerts]);
 
   const openPatientApp = useCallback(async (appId) => {
     activeAppRef.current = appId;
@@ -1166,6 +1215,9 @@ export default function App() {
         setUserSpeaking(false);
         userSpeakingRef.current = false;
         setDignityStatus(data);
+        if (data.safety_alert) {
+          setDignitySafetyAlerts(items => mergeSafetyAlertList(items, data.safety_alert));
+        }
         setDignityOpeningReply(data.reply || '');
         setDignityDocument(data.document || '');
         setDignityDocumentUrl(data.document_url || '');
@@ -1222,7 +1274,7 @@ export default function App() {
           assistantReplyRef.current = { sentenceId: '', text: data.reply, final: true };
           setDignityMsg(data.reply);
         }
-        void resumeAssistantAndStart();
+        if (!assistantToolsOpen && !settingsOpen) void resumeAssistantAndStart();
       } else if (event === 'silence_prompt') {
         setDignityStatus(data);
         setDignitySilencePromptCount(Number(data.silence_prompt_count) || 0);
@@ -1231,7 +1283,39 @@ export default function App() {
           assistantReplyRef.current = { sentenceId: '', text: data.reply, final: true };
           setDignityMsg(data.reply);
         }
-      } else if (event === 'turn_result' || event === 'nurse_alert') {
+      } else if (event === 'safety_alert' || event === 'nurse_alert') {
+        if (typeof data.paused === 'boolean') setDignityPaused(data.paused);
+        setDignityStatus(data);
+        if (data.safety_alert) {
+          setDignitySafetyAlerts(items => mergeSafetyAlertList(items, data.safety_alert));
+        }
+        if (data.reply) {
+          assistantReplyRef.current = { sentenceId: '', text: data.reply, final: true };
+          setDignityMsg(data.reply);
+        }
+      } else if (event === 'safety_alerts_list') {
+        setSafetyAlertsBusy(false);
+        setDignitySafetyAlerts(Array.isArray(data.alerts) ? data.alerts : []);
+      } else if (event === 'safety_task_updated') {
+        setSafetyAlertsBusy(false);
+        setSafetyTaskBusyId('');
+        if (typeof data.paused === 'boolean') setDignityPaused(data.paused);
+        setDignitySafetyAlerts(Array.isArray(data.alerts) ? data.alerts : []);
+        setDignityStatus(prev => ({ ...(prev || {}), ...data }));
+        setConnectStatus('');
+      } else if (event === 'safety_task_error') {
+        setSafetyAlertsBusy(false);
+        setSafetyTaskBusyId('');
+        setConnectStatus(data.message || '安全预警任务处理失败');
+      } else if (event === 'safety_resume_blocked') {
+        setDignityPaused(true);
+        setDignityStatus(data);
+        setConnectStatus(data.message || '安全预警仍在处理中，请等待医护人员确认');
+        if (data.reply) {
+          assistantReplyRef.current = { sentenceId: '', text: data.reply, final: true };
+          setDignityMsg(data.reply);
+        }
+      } else if (event === 'turn_result') {
         const nextData = attachClientLatency(data, dignityLiveTurnStartedAtRef);
         if (typeof nextData.paused === 'boolean') setDignityPaused(nextData.paused);
         setDignitySilencePromptCount(Number(nextData.silence_prompt_count) || 0);
@@ -1316,6 +1400,8 @@ export default function App() {
         setDignityMemoryBusy(false);
         setDignityDocumentBusy(false);
         setDignityDocumentConfirmBusy(false);
+        setSafetyAlertsBusy(false);
+        setSafetyTaskBusyId('');
         setConnectStatus(data.message || '尊严疗法模式处理失败');
       }
     };
@@ -1362,7 +1448,7 @@ export default function App() {
       window.removeEventListener('xz:dignity', onDignity);
       window.removeEventListener('xz:ready', onReady);
     };
-  }, [connectXiaozhi, kwsWakeupEnabled, loadDignityArtifacts, pauseAssistantListening, resumeAssistantAndStart, resumeAssistantListening, scheduleReconnect, speakViaTts, startListening, stopNormalRecording, stopTtsPlayback, stopWakeWordListening]);
+  }, [assistantToolsOpen, connectXiaozhi, kwsWakeupEnabled, loadDignityArtifacts, pauseAssistantListening, resumeAssistantAndStart, resumeAssistantListening, scheduleReconnect, settingsOpen, speakViaTts, startListening, stopNormalRecording, stopTtsPlayback, stopWakeWordListening]);
 
   useEffect(() => {
     if (dignityMode) loadDignityArtifacts();
@@ -1458,11 +1544,11 @@ export default function App() {
     if (settingsOpen || assistantToolsOpen) {
       pauseAssistantListening();
     } else if (activeApp === 'voice' || activeApp === 'dignity') {
-      resumeAssistantListening();
+      void resumeAssistantAndStart();
     } else {
       pauseAssistantListening();
     }
-  }, [activeApp, assistantToolsOpen, pauseAssistantListening, resumeAssistantListening, settingsOpen]);
+  }, [activeApp, assistantToolsOpen, pauseAssistantListening, resumeAssistantAndStart, settingsOpen]);
 
   useEffect(() => () => {
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
@@ -1738,6 +1824,7 @@ export default function App() {
                 familyLetterTemplate={familyLetterTemplate}
                 voiceMode={dignityVoiceMode}
                 paused={dignityPaused}
+                safetyAlert={dignityStatus?.safety_alert}
                 recording={recording}
                 onReset={resetDignityDebug}
                 onGenerateDocument={generateDignityDocument}
@@ -1752,6 +1839,7 @@ export default function App() {
                 onDocumentChange={updateDignityDocument}
                 onSaveMemory={saveDignityMemory}
                 onToggleVoiceMode={toggleDignityVoiceMode}
+                onOpenSafetyTools={openSafetyDisposition}
                 readingKind={dignityReadingKind}
                 onReadDocument={() => readDignityContent('document', dignityDocument)}
                 onReadLegacyCard={() => readDignityContent('card', legacyCard)}
@@ -1803,8 +1891,166 @@ export default function App() {
         interviewAudioBusy={interviewAudioBusy}
         onToggleInterviewSegment={toggleInterviewSegmentDeleted}
         onSaveInterviewAudioSegments={saveInterviewAudioSegments}
+        safetyAlerts={dignitySafetyAlerts}
+        safetyAlertsBusy={safetyAlertsBusy}
+        safetyTaskBusyId={safetyTaskBusyId}
+        onRefreshSafetyAlerts={loadDignitySafetyAlerts}
+        onUpdateSafetyTask={updateDignitySafetyTask}
       />
     </PaperBg>
+  );
+}
+
+const SAFETY_TASK_STATUS = {
+  pending: '待确认',
+  acknowledged: '已接单',
+  escalated: '已升级',
+  released: '已解除暂停',
+  closed: '已关闭',
+};
+
+const SAFETY_CATEGORY_LABEL = {
+  emotional_distress: '情绪安全',
+  self_harm: '自伤风险',
+  medical: '医疗风险',
+  medical_emergency: '医疗急症',
+  violence: '暴力风险',
+  other: '其他风险',
+};
+
+function formatSafetyTime(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString('zh-CN', { hour12: false });
+}
+
+function SafetyDispositionPanel({ alerts, busy, busyId, onRefresh, onUpdate }) {
+  const [operator, setOperator] = useState('值班医护');
+  const items = [...(Array.isArray(alerts) ? alerts : [])].sort((a, b) => {
+    const aResolved = ['released', 'closed'].includes(a?.task?.status) ? 1 : 0;
+    const bResolved = ['released', 'closed'].includes(b?.task?.status) ? 1 : 0;
+    return aResolved - bResolved || String(b?.created_at || '').localeCompare(String(a?.created_at || ''));
+  });
+  const openCount = items.filter(item => !['released', 'closed'].includes(item?.task?.status)).length;
+
+  return (
+    <section style={safetyDispositionStyle}>
+      <div style={safetyDispositionHeaderStyle}>
+        <div>
+          <div style={safetyDispositionTitleStyle}>安全预警处置</div>
+          <div style={assistantModalSubStyle}>待处理 {openCount} 项 · 共 {items.length} 条记录</div>
+        </div>
+        <div style={safetyDispositionToolbarStyle}>
+          <label style={safetyOperatorLabelStyle}>
+            操作人
+            <input
+              value={operator}
+              onChange={event => setOperator(event.target.value)}
+              style={safetyOperatorInputStyle}
+              maxLength={60}
+            />
+          </label>
+          <button type="button" onClick={onRefresh} disabled={busy} style={safetyRefreshButtonStyle}>
+            {busy ? '刷新中' : '刷新任务'}
+          </button>
+        </div>
+      </div>
+
+      <div style={safetyPermissionNoticeStyle}>
+        医护工作区：正式部署时请接入医护账号权限，解除暂停和关闭任务均应保留操作审计。
+      </div>
+
+      {busy && !items.length ? (
+        <div style={safetyEmptyStyle}>正在加载安全预警任务...</div>
+      ) : items.length ? (
+        <div style={safetyTaskListStyle}>
+          {items.map(alert => (
+            <SafetyAlertTaskCard
+              key={alert.alert_id}
+              alert={alert}
+              operator={operator.trim() || '值班医护'}
+              busy={busyId === alert.alert_id}
+              onUpdate={onUpdate}
+            />
+          ))}
+        </div>
+      ) : (
+        <div style={safetyEmptyStyle}>目前没有安全预警记录。</div>
+      )}
+    </section>
+  );
+}
+
+function SafetyAlertTaskCard({ alert, operator, busy, onUpdate }) {
+  const [note, setNote] = useState(alert?.disposition_note || '');
+  const status = alert?.task?.status || 'pending';
+  const resolved = ['released', 'closed'].includes(status);
+  const applyAction = async (action) => {
+    const confirmations = {
+      escalate: '确认将此任务升级为 L3，并立即暂停访谈吗？',
+      release: '确认已经核实患者安全，并解除访谈暂停吗？',
+      close: '确认该预警已经完成处置并关闭任务吗？',
+    };
+    if (confirmations[action] && !window.confirm(confirmations[action])) return;
+    await onUpdate(alert.alert_id, action, operator, note);
+  };
+
+  return (
+    <article style={safetyTaskCardStyle(alert.level, resolved)}>
+      <div style={safetyTaskCardHeadStyle}>
+        <div style={safetyTaskIdentityStyle}>
+          <span style={safetyRiskBadgeStyle(alert.level)}>{alert.level || 'L1'}</span>
+          <div>
+            <div style={safetyTaskNameStyle}>{SAFETY_CATEGORY_LABEL[alert.category] || alert.category || '安全风险'}</div>
+            <div style={safetyTaskMetaStyle}>{formatSafetyTime(alert.created_at)} · {alert.patient_id || '当前患者'}</div>
+          </div>
+        </div>
+        <span style={safetyStatusBadgeStyle(status)}>{SAFETY_TASK_STATUS[status] || status}</span>
+      </div>
+
+      <div style={safetyEvidenceStyle}>患者原话：{alert.patient_text || alert.evidence || '未记录'}</div>
+      <div style={safetyReasonStyle}>判定依据：{alert.reason || '需要医护人员复核'}</div>
+      <div style={safetyDeadlineGridStyle}>
+        {alert.task?.review_deadline && <span>复核时限：{formatSafetyTime(alert.task.review_deadline)}</span>}
+        {alert.task?.confirm_deadline && <span>确认时限：{formatSafetyTime(alert.task.confirm_deadline)}</span>}
+        {alert.task?.contact_deadline && <span>联系时限：{formatSafetyTime(alert.task.contact_deadline)}</span>}
+        {alert.task?.close_deadline && <span>闭环时限：{formatSafetyTime(alert.task.close_deadline)}</span>}
+      </div>
+
+      <textarea
+        value={note}
+        onChange={event => setNote(event.target.value)}
+        placeholder="填写核实结果或处置备注"
+        disabled={resolved || busy}
+        style={safetyNoteStyle}
+        maxLength={500}
+      />
+
+      <div style={safetyTaskActionsStyle}>
+        {!resolved && status === 'pending' && (
+          <button type="button" disabled={busy} onClick={() => applyAction('acknowledge')} style={safetyActionButtonStyle('primary', busy)}>
+            确认接单
+          </button>
+        )}
+        {!resolved && alert.level !== 'L3' && (
+          <button type="button" disabled={busy} onClick={() => applyAction('escalate')} style={safetyActionButtonStyle('danger', busy)}>
+            升级为 L3
+          </button>
+        )}
+        {!resolved && (
+          <button type="button" disabled={busy} onClick={() => applyAction('release')} style={safetyActionButtonStyle('success', busy)}>
+            {alert.paused || ['L2', 'L3'].includes(alert.level) ? '解除暂停' : '确认安全'}
+          </button>
+        )}
+        {!resolved && (
+          <button type="button" disabled={busy} onClick={() => applyAction('close')} style={safetyActionButtonStyle('neutral', busy)}>
+            关闭任务
+          </button>
+        )}
+        {busy && <span style={safetyTaskBusyTextStyle}>正在保存...</span>}
+      </div>
+    </article>
   );
 }
 
@@ -1817,6 +2063,11 @@ function AssistantToolsModal({
   interviewAudioBusy,
   onToggleInterviewSegment,
   onSaveInterviewAudioSegments,
+  safetyAlerts,
+  safetyAlertsBusy,
+  safetyTaskBusyId,
+  onRefreshSafetyAlerts,
+  onUpdateSafetyTask,
 }) {
   if (!open) return null;
   return (
@@ -1836,9 +2087,20 @@ function AssistantToolsModal({
           <button type="button" onClick={() => onChange('video')} style={assistantModalTabStyle(active === 'video')}>
             生命影像审核
           </button>
+          <button type="button" onClick={() => onChange('safety')} style={assistantModalTabStyle(active === 'safety')}>
+            安全预警处置
+          </button>
         </div>
         <div style={assistantModalBodyStyle}>
-          {active === 'video' ? (
+          {active === 'safety' ? (
+            <SafetyDispositionPanel
+              alerts={safetyAlerts}
+              busy={safetyAlertsBusy}
+              busyId={safetyTaskBusyId}
+              onRefresh={onRefreshSafetyAlerts}
+              onUpdate={onUpdateSafetyTask}
+            />
+          ) : active === 'video' ? (
             <LegacyVideoScreen />
           ) : (
             <InterviewAudioEditor
@@ -1981,6 +2243,31 @@ const assistantModalBodyStyle = {
   overflow: 'auto',
   padding: 24,
 };
+
+const safetyDispositionStyle = { display: 'grid', gap: 16, color: C.ink, fontFamily: 'Noto Sans SC' };
+const safetyDispositionHeaderStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' };
+const safetyDispositionTitleStyle = { fontSize: 22, lineHeight: 1.2, fontWeight: 700, fontFamily: 'Noto Serif SC, serif' };
+const safetyDispositionToolbarStyle = { display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' };
+const safetyOperatorLabelStyle = { display: 'grid', gap: 4, color: C.inkFaint, fontSize: 12 };
+const safetyOperatorInputStyle = { width: 150, height: 38, boxSizing: 'border-box', borderRadius: 7, border: `1px solid ${C.mist}55`, background: 'rgba(255,250,242,.86)', color: C.ink, padding: '0 11px', outline: 'none', fontSize: 14, fontFamily: 'Noto Sans SC' };
+const safetyRefreshButtonStyle = { height: 38, padding: '0 14px', borderRadius: 7, border: `1px solid ${C.sage}66`, background: `${C.sage}20`, color: C.ink, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'Noto Sans SC' };
+const safetyPermissionNoticeStyle = { padding: '10px 12px', borderRadius: 7, border: '1px solid rgba(166,80,45,.28)', background: 'rgba(220,126,74,.10)', color: '#75462F', fontSize: 13, lineHeight: 1.55 };
+const safetyEmptyStyle = { minHeight: 180, display: 'grid', placeItems: 'center', borderRadius: 8, border: `1px dashed ${C.mist}66`, color: C.inkFaint, fontSize: 15 };
+const safetyTaskListStyle = { display: 'grid', gap: 14 };
+const safetyTaskCardStyle = (level, resolved) => ({ display: 'grid', gap: 11, padding: 16, borderRadius: 8, border: `1px solid ${level === 'L3' ? '#A94742' : level === 'L2' ? '#C87843' : '#B08A43'}55`, background: resolved ? 'rgba(239,236,228,.62)' : 'rgba(255,250,242,.88)', opacity: resolved ? .78 : 1, boxShadow: resolved ? 'none' : '0 10px 24px rgba(55,39,22,.08)' });
+const safetyTaskCardHeadStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 };
+const safetyTaskIdentityStyle = { display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 };
+const safetyRiskBadgeStyle = (level) => ({ flex: '0 0 auto', minWidth: 42, height: 29, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 999, background: level === 'L3' ? '#A94742' : level === 'L2' ? '#C87843' : '#A77B2D', color: '#fffaf2', fontSize: 13, fontWeight: 800 });
+const safetyTaskNameStyle = { color: C.ink, fontSize: 17, fontWeight: 700 };
+const safetyTaskMetaStyle = { marginTop: 3, color: C.inkFaint, fontSize: 12 };
+const safetyStatusBadgeStyle = (status) => ({ flex: '0 0 auto', height: 27, display: 'inline-flex', alignItems: 'center', padding: '0 10px', borderRadius: 999, border: `1px solid ${['released', 'closed'].includes(status) ? C.sage : C.amber}66`, background: ['released', 'closed'].includes(status) ? `${C.sage}1f` : `${C.amber}20`, color: C.inkMid, fontSize: 12, fontWeight: 700 });
+const safetyEvidenceStyle = { padding: '10px 12px', borderRadius: 7, background: 'rgba(239,229,209,.52)', color: C.ink, fontSize: 14, lineHeight: 1.65 };
+const safetyReasonStyle = { color: C.inkMid, fontSize: 13, lineHeight: 1.55 };
+const safetyDeadlineGridStyle = { display: 'flex', gap: '6px 16px', flexWrap: 'wrap', color: C.inkFaint, fontSize: 12, lineHeight: 1.5 };
+const safetyNoteStyle = { width: '100%', minHeight: 70, resize: 'vertical', boxSizing: 'border-box', borderRadius: 7, border: `1px solid ${C.mist}44`, background: 'rgba(255,250,242,.86)', color: C.inkMid, padding: '9px 11px', outline: 'none', fontSize: 14, lineHeight: 1.55, fontFamily: 'Noto Sans SC' };
+const safetyTaskActionsStyle = { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' };
+const safetyActionButtonStyle = (tone, disabled) => { const colors = { primary: ['#6F826F', 'rgba(111,130,111,.16)'], danger: ['#A94742', 'rgba(169,71,66,.14)'], success: ['#527965', 'rgba(82,121,101,.14)'], neutral: [C.inkMid, 'rgba(111,99,82,.10)'] }; const [color, background] = colors[tone] || colors.neutral; return { height: 36, padding: '0 13px', borderRadius: 7, border: `1px solid ${color}66`, background, color, fontSize: 13, fontWeight: 700, cursor: disabled ? 'wait' : 'pointer', opacity: disabled ? .58 : 1, fontFamily: 'Noto Sans SC' }; };
+const safetyTaskBusyTextStyle = { color: C.inkFaint, fontSize: 12 };
 
 const robotActionPanelStyle = {
   position: 'absolute',

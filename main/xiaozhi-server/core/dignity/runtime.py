@@ -34,6 +34,12 @@ from core.dignity.interview_audio import (
     merge_and_save_transcript_segments,
 )
 from core.dignity.engine.rules import strategy_to_eye_expression, strategy_to_robot_action
+from core.dignity.safety import (
+    RISK_LEVEL_RANK,
+    assess_safety_risk,
+    build_safety_task,
+    safety_reply,
+)
 from core.handle.sendAudioHandle import send_stt_message
 from core.utils.util import extract_json_from_string
 
@@ -41,6 +47,7 @@ TAG = __name__
 SERVER_ROOT = Path(__file__).resolve().parents[2]
 LOG_DIR = SERVER_ROOT / "data" / "dignity_logs"
 MEMORY_DIR = SERVER_ROOT / "data" / "dignity_memory"
+SAFETY_ALERT_DIR = SERVER_ROOT / "data" / "dignity_alerts"
 MEDIA_DIR = SERVER_ROOT / "data" / "hospice_media"
 DOCUMENT_DIR = MEDIA_DIR / "dignity_documents"
 DOCUMENT_SOURCE_DIR = DOCUMENT_DIR / "sources"
@@ -129,6 +136,8 @@ def _ensure_dignity_runtime(conn) -> None:
         conn.dignity_paused_at = ""
     if not hasattr(conn, "dignity_silence_prompt_count"):
         conn.dignity_silence_prompt_count = 0
+    if not hasattr(conn, "dignity_safety_alert"):
+        conn.dignity_safety_alert = None
 
 
 def _get_decision_model(conn):
@@ -192,6 +201,7 @@ def _attach_session_payload(payload: Dict[str, Any], conn) -> Dict[str, Any]:
             "silence_prompt_count": int(
                 getattr(conn, "dignity_silence_prompt_count", 0) or 0
             ),
+            "safety_alert": getattr(conn, "dignity_safety_alert", None),
         }
     )
     return payload
@@ -260,6 +270,8 @@ def _write_dignity_log(
             "input": data.get("patient_text", ""),
             "output": data.get("reply", ""),
         }
+        if data.get("safety_alert"):
+            record["safety_alert"] = data["safety_alert"]
         log_path = LOG_DIR / f"{now:%Y%m%d}.jsonl"
         with log_path.open("a", encoding="utf-8") as file:
             file.write(json.dumps(record, ensure_ascii=False) + "\n")
@@ -273,6 +285,208 @@ def _memory_key(conn) -> str:
     raw = str(getattr(conn, "dignity_patient_id", None) or "default_patient")
     key = re.sub(r"[^A-Za-z0-9_.-]+", "_", raw).strip("._")
     return key or "default_patient"
+
+
+def _create_safety_alert(
+    conn,
+    assessment: Dict[str, Any],
+    patient_text: str,
+) -> Dict[str, Any]:
+    now = datetime.now()
+    level = str(assessment.get("level") or "L1")
+    alert = {
+        "alert_id": uuid.uuid4().hex,
+        "created_at": now.isoformat(timespec="seconds"),
+        "patient_id": _memory_key(conn),
+        "session_id": str(getattr(conn, "session_id", "") or ""),
+        "level": level,
+        "category": str(assessment.get("category") or "other"),
+        "evidence": str(assessment.get("evidence") or ""),
+        "reason": str(assessment.get("reason") or ""),
+        "source": str(assessment.get("source") or "unknown"),
+        "patient_text": patient_text,
+        "paused": bool(assessment.get("requires_pause")),
+        "requires_handoff": bool(assessment.get("requires_handoff")),
+        "task": build_safety_task(level, now),
+    }
+    _write_safety_alert(conn, alert)
+    active_alert = getattr(conn, "dignity_safety_alert", None)
+    active_level = active_alert.get("level") if isinstance(active_alert, dict) else "L0"
+    if RISK_LEVEL_RANK.get(str(active_level), 0) > RISK_LEVEL_RANK.get(level, 0):
+        return active_alert
+    conn.dignity_safety_alert = alert
+    return alert
+
+
+def _write_safety_alert(conn, alert: Dict[str, Any]) -> None:
+    try:
+        SAFETY_ALERT_DIR.mkdir(parents=True, exist_ok=True)
+        alert_path = SAFETY_ALERT_DIR / f"{_memory_key(conn)}.jsonl"
+        with alert_path.open("a", encoding="utf-8") as file:
+            file.write(json.dumps(alert, ensure_ascii=False) + "\n")
+    except Exception as exc:
+        logger = getattr(conn, "logger", None)
+        if logger:
+            logger.bind(tag=TAG).error(f"尊严访谈安全预警保存失败: {exc}")
+
+
+def _load_safety_alerts(conn, limit: int = 50) -> List[Dict[str, Any]]:
+    alert_path = SAFETY_ALERT_DIR / f"{_memory_key(conn)}.jsonl"
+    if not alert_path.exists():
+        return []
+    latest: Dict[str, Dict[str, Any]] = {}
+    try:
+        with alert_path.open("r", encoding="utf-8") as file:
+            for line in file:
+                try:
+                    alert = json.loads(line)
+                except (TypeError, json.JSONDecodeError):
+                    continue
+                alert_id = str(alert.get("alert_id") or "")
+                if alert_id:
+                    latest[alert_id] = alert
+    except Exception as exc:
+        logger = getattr(conn, "logger", None)
+        if logger:
+            logger.bind(tag=TAG).error(f"尊严访谈安全预警读取失败: {exc}")
+        return []
+    alerts = sorted(
+        latest.values(),
+        key=lambda item: str(item.get("created_at") or ""),
+        reverse=True,
+    )
+    try:
+        safe_limit = int(limit or 50)
+    except (TypeError, ValueError):
+        safe_limit = 50
+    return alerts[: max(1, min(safe_limit, 200))]
+
+
+async def list_dignity_safety_alerts(
+    conn,
+    msg_json: Optional[Dict[str, Any]] = None,
+) -> None:
+    _ensure_dignity_runtime(conn)
+    msg_json = msg_json or {}
+    conn.dignity_patient_id = msg_json.get("patient_id") or conn.dignity_patient_id
+    payload = _state_payload(conn.dignity_state, conn)
+    payload["alerts"] = _load_safety_alerts(conn, msg_json.get("limit", 50))
+    await send_dignity_event(conn, "safety_alerts_list", payload)
+
+
+async def update_dignity_safety_task(
+    conn,
+    msg_json: Optional[Dict[str, Any]] = None,
+) -> None:
+    _ensure_dignity_runtime(conn)
+    msg_json = msg_json or {}
+    conn.dignity_patient_id = msg_json.get("patient_id") or conn.dignity_patient_id
+    alert_id = str(msg_json.get("alert_id") or "").strip()
+    action = str(msg_json.get("task_action") or "").strip().lower()
+    if not alert_id or action not in {"acknowledge", "escalate", "release", "close"}:
+        await send_dignity_event(
+            conn,
+            "safety_task_error",
+            {"message": "安全预警处置参数无效。"},
+        )
+        return
+
+    alerts = _load_safety_alerts(conn, 200)
+    alert = next((item for item in alerts if item.get("alert_id") == alert_id), None)
+    active_alert = getattr(conn, "dignity_safety_alert", None)
+    if alert is None and isinstance(active_alert, dict) and active_alert.get("alert_id") == alert_id:
+        alert = dict(active_alert)
+    if alert is None:
+        await send_dignity_event(
+            conn,
+            "safety_task_error",
+            {"message": "没有找到对应的安全预警任务。"},
+        )
+        return
+
+    now = datetime.now().isoformat(timespec="seconds")
+    operator = str(msg_json.get("operator") or "医护人员").strip()[:60]
+    note = str(msg_json.get("note") or "").strip()[:500]
+    task = alert.setdefault("task", {})
+    alert["last_operator"] = operator
+    alert["updated_at"] = now
+    if note:
+        alert["disposition_note"] = note
+
+    event_message = "安全预警任务已更新。"
+    should_write = True
+    if action == "acknowledge":
+        task["status"] = "acknowledged"
+        task["acknowledged_at"] = now
+        task["acknowledged_by"] = operator
+        event_message = "已确认接单，任务继续跟踪。"
+    elif action == "escalate":
+        alert["level"] = "L3"
+        alert["requires_handoff"] = True
+        alert["paused"] = True
+        task.update(
+            {
+                "status": "escalated",
+                "priority": "emergency",
+                "escalated_at": now,
+                "escalated_by": operator,
+                "recommended_action": "立即人工接管并核实患者现实安全",
+            }
+        )
+        conn.dignity_safety_alert = alert
+        _write_safety_alert(conn, alert)
+        should_write = False
+        event_message = "任务已升级为 L3 紧急处置。"
+        if conn.dignity_active and not conn.dignity_paused:
+            await pause_dignity_mode(
+                conn,
+                {"source": "clinician_escalation", "reason": "safety_L3"},
+                reply="为了您的安全，我们先暂停访谈，请等待医护人员确认。",
+            )
+    elif action == "release":
+        was_paused = bool(conn.dignity_paused)
+        task["status"] = "released"
+        task["released_at"] = now
+        task["released_by"] = operator
+        alert["resolved_at"] = now
+        conn.dignity_safety_alert = alert
+        if conn.dignity_active and conn.dignity_paused:
+            should_write = False
+            await resume_dignity_mode(
+                conn,
+                {
+                    "source": "clinician_release",
+                    "reply": "医护人员已经确认，我们可以继续。您想从哪里接着聊？",
+                },
+            )
+        else:
+            conn.dignity_safety_alert = None
+        event_message = (
+            "安全状态已确认，访谈暂停已解除。"
+            if was_paused
+            else "安全状态已确认，任务已完成。"
+        )
+    elif action == "close":
+        task["status"] = "closed"
+        task["closed_at"] = now
+        task["closed_by"] = operator
+        alert["resolved_at"] = now
+        if isinstance(active_alert, dict) and active_alert.get("alert_id") == alert_id:
+            conn.dignity_safety_alert = None
+        event_message = "安全预警任务已关闭。"
+
+    if should_write:
+        _write_safety_alert(conn, alert)
+    payload = _state_payload(conn.dignity_state, conn)
+    payload.update(
+        {
+            "updated_alert": alert,
+            "alerts": _load_safety_alerts(conn, 50),
+            "message": event_message,
+        }
+    )
+    _write_dignity_log(conn, "safety_task_updated", payload)
+    await send_dignity_event(conn, "safety_task_updated", payload)
 
 
 def _memory_path(conn) -> Path:
@@ -348,10 +562,12 @@ async def start_dignity_mode(conn, msg_json: Optional[Dict[str, Any]] = None) ->
     msg_json = msg_json or {}
     if not conn.dignity_active:
         conn.dignity_dialogue_start_index = len(conn.dialogue.dialogue)
+    active_alert = getattr(conn, "dignity_safety_alert", None)
+    safety_hold = isinstance(active_alert, dict) and active_alert.get("level") == "L3"
     conn.dignity_active = True
-    conn.dignity_paused = False
-    conn.dignity_pause_reason = ""
-    conn.dignity_paused_at = ""
+    conn.dignity_paused = safety_hold
+    conn.dignity_pause_reason = "safety_L3" if safety_hold else ""
+    conn.dignity_paused_at = datetime.now().isoformat(timespec="seconds") if safety_hold else ""
     conn.dignity_silence_prompt_count = 0
     conn.dignity_patient_id = msg_json.get("patient_id") or conn.dignity_patient_id
 
@@ -437,6 +653,30 @@ async def resume_dignity_mode(
         return
 
     msg_json = msg_json or {}
+    active_alert = getattr(conn, "dignity_safety_alert", None)
+    if (
+        isinstance(active_alert, dict)
+        and active_alert.get("level") == "L3"
+        and msg_json.get("source") != "clinician_release"
+    ):
+        payload = _state_payload(conn.dignity_state, conn)
+        payload.update(
+            {
+                "message": "紧急安全预警仍在处理中，请等待医护人员确认后继续。",
+                "reply": "为了您的安全，请先等待医护人员来陪您。",
+                "robot_action": "nurse_alert",
+                "eye_expression": "concern",
+            }
+        )
+        await send_dignity_event(conn, "safety_resume_blocked", payload)
+        return
+    if isinstance(active_alert, dict) and msg_json.get("source") == "clinician_release":
+        active_alert["resolved_at"] = datetime.now().isoformat(timespec="seconds")
+        task = active_alert.get("task")
+        if isinstance(task, dict):
+            task["status"] = "released"
+        _write_safety_alert(conn, active_alert)
+        conn.dignity_safety_alert = None
     resume_reply = str(
         msg_json.get("reply")
         or "好的，我们继续。刚才说到这里，您愿意接着说吗？"
@@ -708,18 +948,56 @@ async def handle_dignity_turn_if_active(conn, text: str) -> bool:
 
     state["response_latency_ms"] = int((perf_counter() - started_at) * 1000)
     conn.dignity_state = state
+    decision_model = state.get("decision_model")
+    raw_decision = getattr(decision_model, "last_raw_decision", None)
+    model_assessment = (
+        raw_decision.get("safety_assessment")
+        if isinstance(raw_decision, dict)
+        else None
+    )
+    assessment = assess_safety_risk(
+        patient_text,
+        model_assessment=model_assessment,
+        strategy=str(state.get("strategy") or ""),
+    )
+    if assessment["requires_alert"]:
+        state["safety_assessment"] = assessment
+        state["reply"] = safety_reply(assessment)
+        state["strategy"] = (
+            "handoff_nurse" if assessment["level"] in {"L2", "L3"} else "comfort"
+        )
+        transcript = state.get("transcript")
+        if isinstance(transcript, list) and transcript:
+            transcript[-1]["assistant"] = state["reply"]
+            transcript[-1]["strategy"] = state["strategy"]
+
     _save_interview_audio_segments(conn, state)
     payload = _state_payload(state, conn)
     payload["patient_text"] = patient_text
 
-    if payload.get("strategy") == "handoff_nurse":
-        _write_dignity_log(conn, "nurse_alert", payload)
-        await send_dignity_event(conn, "nurse_alert", payload)
+    if assessment["requires_alert"]:
+        alert = _create_safety_alert(conn, assessment, patient_text)
+        payload["safety_alert"] = alert
+        payload["robot_action"] = (
+            "nurse_alert" if assessment["level"] in {"L2", "L3"} else "comfort"
+        )
+        payload["eye_expression"] = "concern"
+        _write_dignity_log(conn, "safety_alert", payload)
+        await send_dignity_event(conn, "safety_alert", payload)
     _write_dignity_log(conn, "turn_result", payload)
     await send_dignity_event(conn, "turn_result", payload)
 
     reply = (state.get("reply") or "").strip()
-    if payload.get("strategy") == "pause":
+    if assessment["requires_pause"]:
+        await pause_dignity_mode(
+            conn,
+            {
+                "source": "safety_alert",
+                "reason": f"safety_{assessment['level']}",
+            },
+            reply=reply,
+        )
+    elif payload.get("strategy") == "pause":
         await pause_dignity_mode(
             conn,
             {"source": "dignity_engine", "reason": "fatigue_or_refusal"},
@@ -727,7 +1005,8 @@ async def handle_dignity_turn_if_active(conn, text: str) -> bool:
         )
     elif reply:
         _speak_dignity_reply(conn, reply)
-    _schedule_background_state_update(conn, state, "live")
+    if not assessment["requires_alert"]:
+        _schedule_background_state_update(conn, state, "live")
     return True
 
 

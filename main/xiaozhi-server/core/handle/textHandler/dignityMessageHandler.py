@@ -4,6 +4,7 @@ import time
 from core.dignity.runtime import (
     confirm_dignity_document,
     generate_dignity_document,
+    list_dignity_safety_alerts,
     reset_dignity_debug,
     pause_dignity_mode,
     prompt_dignity_after_silence,
@@ -13,6 +14,7 @@ from core.dignity.runtime import (
     start_dignity_mode,
     stop_dignity_mode,
     update_dignity_memory,
+    update_dignity_safety_task,
 )
 from core.handle.textMessageHandler import TextMessageHandler
 from core.handle.textMessageType import TextMessageType
@@ -59,6 +61,12 @@ class DignityTextMessageHandler(TextMessageHandler):
             return
         if action == "update_memory":
             await update_dignity_memory(conn, msg_json)
+            return
+        if action == "list_safety_alerts":
+            await list_dignity_safety_alerts(conn, msg_json)
+            return
+        if action == "update_safety_task":
+            await update_dignity_safety_task(conn, msg_json)
             return
 
         conn.logger.bind(tag=TAG).warning(f"未知尊严疗法动作: {action}")

@@ -23,6 +23,12 @@ def build_memory_reply_user_prompt(state: DignityState) -> str:
                     "mood": "calm|happy|sad|anxious|angry|tired|nostalgic|grateful|lonely",
                     "engagement": "high|medium|low",
                 },
+                "safety_assessment": {
+                    "level": "L0|L1|L2|L3",
+                    "category": "none|emotional_distress|self_harm|medical|medical_emergency|violence|other",
+                    "evidence": "必须逐字摘录患者本轮原话；没有风险时为空字符串",
+                    "reason": "简短判定理由",
+                },
                 "should_advance_stage": False,
                 "reply": "要直接说给患者听的一段中文",
             },
@@ -56,6 +62,14 @@ DIGNITY_REPLY_WITH_MEMORY_SYSTEM_PROMPT = """
 8. 遇到自伤、医疗决策、严重疼痛、财产等高风险内容，建议联系医护或家属，并选择 handoff_nurse。
 9. 回复尽量不超过 90 个中文字符。
 
+安全分级要求：
+- L0：没有安全风险线索。
+- L1：消极死亡愿望、明显绝望或自认拖累，但没有明确主动计划或近期行为。
+- L2：主动自伤想法、方法构想、既往自伤行为、回答含糊或无法排除安全问题；也包括严重疼痛或可能影响安全的医疗决定。
+- L3：当前或近期自伤意图、计划、可用手段、近期行为，或无法保证现实安全的紧急情况。
+- evidence 必须逐字摘录 patient_text 中支持判断的最短原话。不要根据人生故事中的他人经历或被否定的表达触发预警。
+- L1 选择 comfort 或 handoff_nurse；L2、L3 必须选择 handoff_nurse。不要在回复中承诺已经联系到具体人员。
+
 情绪字段要求：
 - mood 表示患者本轮主要情绪：calm、happy、sad、anxious、angry、tired、nostalgic、grateful、lonely。
 - engagement 表示患者本轮投入程度：high、medium、low。
@@ -65,6 +79,7 @@ DIGNITY_REPLY_WITH_MEMORY_SYSTEM_PROMPT = """
   "stage": "rapport|life_review|values|relationships|legacy_message|summary_confirm",
   "strategy": "continue_deeper|comfort|pause|switch_topic|ask_photo_context|output_rewrite|handoff_nurse|simple_followup|summarize_confirm",
   "emotion_state": {"mood": "calm", "engagement": "medium"},
+  "safety_assessment": {"level": "L0", "category": "none", "evidence": "", "reason": ""},
   "should_advance_stage": true 或 false,
   "reply": "最终要对患者说的话"
 }

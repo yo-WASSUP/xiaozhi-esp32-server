@@ -360,7 +360,7 @@ a:focus-visible {
 }
 
 .dignity-interview__avatar .robot-avatar {
-  transform: scale(.84);
+  transform: scale(.94);
 }
 
 .dignity-interview__conversation {
@@ -451,7 +451,7 @@ a:focus-visible {
 
 .dignity-interview--reply-long .robot-avatar,
 .dignity-interview--reply-very-long .robot-avatar {
-  transform: scale(.68);
+  transform: scale(.76);
 }
 
 .dignity-interview__turn p.is-quiet {
@@ -528,6 +528,10 @@ a:focus-visible {
 .voice-screen__avatar {
   display: grid;
   place-items: center;
+}
+
+.voice-screen__avatar .robot-avatar {
+  transform: scale(1.12);
 }
 
 .voice-screen__conversation {
@@ -610,7 +614,7 @@ a:focus-visible {
 }
 
 .voice-screen--reply-very-long .voice-screen__avatar .robot-avatar {
-  transform: scale(.74);
+  transform: scale(.82);
 }
 
 .voice-screen__reply p.voice-screen__reply--quiet {
@@ -985,7 +989,7 @@ a:focus-visible {
   }
 
   .voice-screen__avatar .robot-avatar {
-    transform: scale(.8);
+    transform: scale(.9);
   }
 
   .voice-screen__conversation {
@@ -1031,7 +1035,7 @@ a:focus-visible {
   }
 
   .dignity-interview__avatar .robot-avatar {
-    transform: scale(.7);
+    transform: scale(.78);
   }
 
   .dignity-interview__header h2 {
@@ -1558,24 +1562,24 @@ a:focus-visible {
 }
 
 @keyframes robotHeadIdle {
-  0%, 100% { transform: translateX(-50%) rotate(-.7deg); }
-  50% { transform: translateX(-50%) rotate(.8deg); }
+  0%, 100% { transform: translateX(-50%) translateY(0) rotate(-2.4deg); }
+  50% { transform: translateX(-50%) translateY(-2px) rotate(2.8deg); }
 }
 
 @keyframes robotHeadListen {
   0%, 68%, 100% { transform: translateX(-50%) translateY(0) rotate(0deg); }
-  76% { transform: translateX(-50%) translateY(4px) rotate(1deg); }
-  86% { transform: translateX(-50%) translateY(-2px) rotate(-.6deg); }
+  76% { transform: translateX(-50%) translateY(7px) rotate(3deg); }
+  86% { transform: translateX(-50%) translateY(-4px) rotate(-2.4deg); }
 }
 
 @keyframes robotHeadThink {
-  0%, 100% { transform: translateX(-50%) rotate(-2.2deg); }
-  50% { transform: translateX(-50%) translateY(-2px) rotate(2.8deg); }
+  0%, 100% { transform: translateX(-50%) rotate(-5deg); }
+  50% { transform: translateX(-50%) translateY(-4px) rotate(6deg); }
 }
 
 @keyframes robotHeadSpeak {
-  0%, 100% { transform: translateX(-50%) translateY(0) rotate(-.4deg); }
-  50% { transform: translateX(-50%) translateY(-3px) rotate(.5deg); }
+  0%, 100% { transform: translateX(-50%) translateY(1px) rotate(-3deg); }
+  50% { transform: translateX(-50%) translateY(-7px) rotate(3.6deg); }
 }
 
 @keyframes robotBodyBreathe {
@@ -1595,8 +1599,9 @@ a:focus-visible {
 }
 
 @keyframes robotMouthSpeak {
-  0%, 100% { transform: translateX(-50%) scaleY(.78); }
-  50% { transform: translateX(-50%) scaleY(1.24); }
+  0%, 100% { transform: translateX(-50%) scaleX(.92) scaleY(.52); }
+  45% { transform: translateX(-50%) scaleX(1.08) scaleY(1.72); }
+  72% { transform: translateX(-50%) scaleX(.97) scaleY(.86); }
 }
 
 @keyframes robotHeartBeat {
@@ -1608,34 +1613,34 @@ a:focus-visible {
 
 @keyframes robotArmLeft {
   0%, 100% { transform: rotate(5deg); }
-  50% { transform: rotate(2deg); }
+  50% { transform: rotate(-2deg); }
 }
 
 @keyframes robotArmRight {
   0%, 100% { transform: rotate(-5deg); }
-  50% { transform: rotate(-2deg); }
+  50% { transform: rotate(2deg); }
 }
 
 @keyframes robotArmWave {
   0%, 66%, 100% { transform: rotate(-5deg); }
-  74% { transform: rotate(-14deg); }
-  82% { transform: rotate(-2deg); }
-  90% { transform: rotate(-12deg); }
+  74% { transform: rotate(-30deg); }
+  82% { transform: rotate(4deg); }
+  90% { transform: rotate(-26deg); }
 }
 
 @keyframes robotArmThink {
   0%, 100% { transform: rotate(5deg); }
-  50% { transform: rotate(9deg); }
+  50% { transform: rotate(17deg); }
 }
 
 @keyframes robotArmSpeakLeft {
-  0%, 100% { transform: rotate(5deg); }
-  50% { transform: rotate(1deg); }
+  0%, 100% { transform: rotate(13deg); }
+  50% { transform: rotate(-7deg); }
 }
 
 @keyframes robotArmSpeakRight {
-  0%, 100% { transform: rotate(-1deg); }
-  50% { transform: rotate(-5deg); }
+  0%, 100% { transform: rotate(-13deg); }
+  50% { transform: rotate(7deg); }
 }
 
 @keyframes robotShadowBreathe {

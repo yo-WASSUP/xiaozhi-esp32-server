@@ -105,6 +105,55 @@ function DignityInterviewStage({
   );
 }
 
+const SAFETY_LEVEL_CONTENT = {
+  L1: {
+    title: '情绪安全提醒',
+    message: '已记录当前安全线索，并生成医护复核任务。访谈可以继续。',
+    color: '#8A641F',
+    background: 'rgba(236, 190, 88, .16)',
+  },
+  L2: {
+    title: '严重安全预警',
+    message: '已生成紧急确认任务。医护人员需要尽快核实当前安全状态。',
+    color: '#A6502D',
+    background: 'rgba(220, 126, 74, .16)',
+  },
+  L3: {
+    title: '紧急安全事件',
+    message: '访谈已立即暂停并转人工处理。请先不要独处，等待医护人员确认。',
+    color: '#973E38',
+    background: 'rgba(201, 86, 78, .16)',
+  },
+};
+
+function safetyTaskText(alert) {
+  const task = alert?.task || {};
+  if (alert?.level === 'L1') return '处理要求：12 小时内完成医护复核';
+  if (alert?.level === 'L2') return '处理要求：10 分钟内确认任务，30 分钟内首次联系';
+  if (alert?.level === 'L3') return '处理要求：立即人工接管';
+  return task.recommended_action || '';
+}
+
+function SafetyAlertBanner({ alert }) {
+  const content = SAFETY_LEVEL_CONTENT[alert?.level];
+  if (!content) return null;
+  return (
+    <section
+      role="alert"
+      aria-live={alert.level === 'L1' ? 'polite' : 'assertive'}
+      style={safetyAlertStyle(content)}
+    >
+      <div style={safetyAlertHeadStyle}>
+        <span style={safetyLevelStyle(content)}>{alert.level}</span>
+        <strong style={safetyAlertTitleStyle}>{content.title}</strong>
+      </div>
+      <div style={safetyAlertMessageStyle}>{content.message}</div>
+      <div style={safetyAlertTaskStyle}>{safetyTaskText(alert)}</div>
+      {alert.reason && <div style={safetyAlertReasonStyle}>判定依据：{alert.reason}</div>}
+    </section>
+  );
+}
+
 function collectMemorySections(memory) {
   return Object.entries(memory || {})
     .map(([key, value]) => {
@@ -595,6 +644,7 @@ export default function DignityTherapyPanel({
   familyLetterImageUrl,
   voiceMode,
   paused,
+  safetyAlert,
   onGenerateDocument,
   onGenerateLegacyCard,
   onGenerateFamilyLetter,
@@ -608,6 +658,7 @@ export default function DignityTherapyPanel({
   onDocumentChange,
   onSaveMemory,
   onToggleVoiceMode,
+  onOpenSafetyTools,
   readingKind,
   onReadDocument,
   onReadLegacyCard,
@@ -617,6 +668,7 @@ export default function DignityTherapyPanel({
   const memorySections = collectMemorySections(status?.dignity_memory);
   const memoryItemCount = memorySections.reduce((sum, section) => sum + section.items.length, 0);
   const documentReady = memoryItemCount >= MIN_MEMORY_ITEMS_FOR_DOCUMENT;
+  const safetyLocked = safetyAlert?.level === 'L3';
 
   return (
     <div className="dignity-therapy">
@@ -638,11 +690,20 @@ export default function DignityTherapyPanel({
         <section style={controlPanelStyle}>
           <div style={kickerStyle}>尊严疗法</div>
           <div style={actionsStyle}>
-            <button onClick={onToggleVoiceMode} style={primaryButtonStyle(voiceMode && !paused)}>
-              {paused ? '继续访谈' : voiceMode ? '暂停访谈' : '开始访谈'}
+            <button
+              onClick={onToggleVoiceMode}
+              disabled={safetyLocked}
+              style={primaryButtonStyle(voiceMode && !paused, safetyLocked)}
+            >
+              {safetyLocked ? '等待医护确认' : paused ? '继续访谈' : voiceMode ? '暂停访谈' : '开始访谈'}
+            </button>
+            <button type="button" onClick={onOpenSafetyTools} style={safetyToolsButtonStyle}>
+              安全预警处置
             </button>
           </div>
         </section>
+
+        <SafetyAlertBanner alert={safetyAlert} />
 
         <MemoryPanel
           memory={status?.dignity_memory || {}}
@@ -709,7 +770,15 @@ const controlPanelStyle = { display: 'grid', gap: 16, padding: '2px 0 18px', bor
 const kickerStyle = { color: C.ink, fontSize: 32, lineHeight: 1.15, fontFamily: 'Noto Serif SC, serif', fontWeight: 600 };
 const subTextStyle = { color: C.inkFaint, fontSize: 15, lineHeight: 1.6 };
 const actionsStyle = { display: 'flex', flexWrap: 'wrap', gap: 10 };
-const primaryButtonStyle = (active) => ({ height: 50, minWidth: 154, padding: '0 24px', borderRadius: 8, border: `1px solid ${active ? C.sage : C.amber}`, background: active ? `linear-gradient(135deg, ${C.sage}, #9fb196)` : `linear-gradient(135deg, ${C.amber}, #d9a85e)`, color: '#fffaf2', fontSize: 16, fontWeight: 700, fontFamily: 'Noto Sans SC', cursor: 'pointer', boxShadow: `0 10px 22px ${active ? 'rgba(122,148,128,.24)' : 'rgba(184,130,54,.25)'}` });
+const primaryButtonStyle = (active, disabled = false) => ({ height: 50, minWidth: 154, padding: '0 24px', borderRadius: 8, border: `1px solid ${active ? C.sage : C.amber}`, background: active ? `linear-gradient(135deg, ${C.sage}, #9fb196)` : `linear-gradient(135deg, ${C.amber}, #d9a85e)`, color: '#fffaf2', fontSize: 16, fontWeight: 700, fontFamily: 'Noto Sans SC', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? .68 : 1, boxShadow: `0 10px 22px ${active ? 'rgba(122,148,128,.24)' : 'rgba(184,130,54,.25)'}` });
+const safetyToolsButtonStyle = { height: 50, padding: '0 18px', borderRadius: 8, border: '1px solid rgba(166,80,45,.48)', background: 'rgba(220,126,74,.12)', color: '#82482F', fontSize: 15, fontWeight: 700, fontFamily: 'Noto Sans SC', cursor: 'pointer' };
+const safetyAlertStyle = (content) => ({ display: 'grid', gap: 8, padding: '15px 17px', borderRadius: 8, border: `1px solid ${content.color}66`, background: content.background, boxShadow: `0 10px 24px ${content.color}18` });
+const safetyAlertHeadStyle = { display: 'flex', alignItems: 'center', gap: 9 };
+const safetyLevelStyle = (content) => ({ minWidth: 38, height: 25, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 999, color: '#fffaf2', background: content.color, fontSize: 13, fontWeight: 800, letterSpacing: '.03em' });
+const safetyAlertTitleStyle = { color: C.ink, fontSize: 17, fontFamily: 'Noto Serif SC, serif' };
+const safetyAlertMessageStyle = { color: C.inkMid, fontSize: 15, lineHeight: 1.65 };
+const safetyAlertTaskStyle = { color: C.ink, fontSize: 14, lineHeight: 1.55, fontWeight: 700 };
+const safetyAlertReasonStyle = { color: C.inkFaint, fontSize: 13, lineHeight: 1.5 };
 const memoryPanelStyle = { padding: '2px 0 22px', borderBottom: `1px solid ${C.mist}22`, display: 'grid', gap: 12 };
 const memoryToggleStyle = { height: 40, padding: '0 14px', borderRadius: 8, border: `1px solid ${C.mist}55`, background: 'rgba(255,250,242,.58)', color: C.inkMid, fontSize: 15, fontWeight: 600, whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'Noto Sans SC' };
 const memoryCountStyle = { marginLeft: 10, color: C.inkFaint, fontSize: 15, fontFamily: 'Noto Sans SC' };
