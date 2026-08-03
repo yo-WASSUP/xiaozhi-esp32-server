@@ -3,6 +3,7 @@ import { C } from '../theme';
 import RobotAvatar from '../components/RobotAvatar';
 import WaveBars from '../components/WaveBars';
 import voiceRoomBackground from '../assets/voice/voice-room.webp';
+import { getReplyDensity } from '../utils/replyText';
 
 const MIN_MEMORY_ITEMS_FOR_DOCUMENT = 6;
 
@@ -52,10 +53,11 @@ function DignityInterviewStage({
       ? '我在这里。我们可以慢慢聊，您想到什么就说什么。'
       : '访谈已暂停，准备好后可以继续。';
   const reply = msg || openingReply || fallbackReply;
+  const replyDensity = getReplyDensity(reply);
 
   return (
     <aside
-      className={`dignity-interview dignity-interview--${displayState}`}
+      className={`dignity-interview dignity-interview--${displayState} dignity-interview--reply-${replyDensity}`}
       style={{ '--dignity-room-background': `url(${voiceRoomBackground})` }}
       aria-label="尊严疗法实时语音访谈"
     >
@@ -83,7 +85,7 @@ function DignityInterviewStage({
         </div>
         <div className="dignity-interview__turn dignity-interview__turn--assistant">
           <span>小暖</span>
-          <p className={(msg || openingReply) ? '' : 'is-quiet'}>{reply}</p>
+          <p className={`dignity-interview__reply-text dignity-interview__reply-text--${replyDensity}${(msg || openingReply) ? '' : ' is-quiet'}`}>{reply}</p>
         </div>
       </div>
 

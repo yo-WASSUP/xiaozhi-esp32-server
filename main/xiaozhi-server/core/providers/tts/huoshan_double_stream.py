@@ -218,7 +218,13 @@ class TTSProvider(TTSProviderBase):
             with open(settings_path, "r", encoding="utf-8") as f:
                 all_settings = yaml.safe_load(f) or {}
             settings = all_settings.get(device_id) or {}
-            if not settings.get("active") or not settings.get("speaker_id"):
+            if (
+                not settings.get("active")
+                or settings.get("provider") != "doubao_voice_clone"
+                or not settings.get("speaker_id")
+            ):
+                self.voice = self.base_voice
+                self.resource_id = self.base_resource_id
                 return
             self.voice = settings["speaker_id"]
             self.resource_id = settings.get("resource_id") or self.base_resource_id

@@ -4,6 +4,10 @@ import uuid
 import random
 import asyncio
 from core.utils.dialogue import Message
+from core.utils.hospice_tts import (
+    is_aliyun_cloned_voice_active,
+    load_hospice_voice_settings,
+)
 from core.utils.util import audio_to_data
 from core.providers.tts.dto.dto import SentenceType
 from core.utils.wakeup_word import WakeupWordsConfig
@@ -45,11 +49,14 @@ async def handleHelloMessage(conn, msg_json):
     realtime_config = conn.config.get("realtime_voice", {}) or {}
     doubao_config = realtime_config.get("doubao_s2s", {}) or {}
     realtime_enabled = doubao_config.get("enabled", False) is True
+    voice_settings = load_hospice_voice_settings(conn.device_id)
+    clone_requires_cascade = is_aliyun_cloned_voice_active(voice_settings)
 
     if (
         requested_voice_mode == "doubao_s2s"
         and conn.client_name == "patient-app"
         and realtime_enabled
+        and not clone_requires_cascade
     ):
         from core.providers.realtime.doubao_s2s import DoubaoS2SClient
 
@@ -78,6 +85,18 @@ async def handleHelloMessage(conn, msg_json):
     conn.welcome_msg["voice_mode"] = conn.voice_mode
     conn.welcome_msg["voice_modes"] = ["doubao_s2s", "cascade"]
     await conn.websocket.send(json.dumps(conn.welcome_msg))
+    if requested_voice_mode == "doubao_s2s" and clone_requires_cascade:
+        await conn.websocket.send(
+            json.dumps(
+                {
+                    "type": "voice_mode",
+                    "mode": "cascade",
+                    "requested_mode": "doubao_s2s",
+                    "reason": "当前启用了阿里云克隆音色",
+                },
+                ensure_ascii=False,
+            )
+        )
 
 
 async def checkWakeupWords(conn, text):

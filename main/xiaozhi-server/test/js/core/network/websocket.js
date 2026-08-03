@@ -111,7 +111,12 @@ export class WebSocketHandler {
             // 移除文本中的表情后检查是否还有内容
             const textWithoutEmoji = message.text ? message.text.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '').trim() : '';
             if (textWithoutEmoji && this.onChatMessage) {
-                this.onChatMessage(message.text, false);
+                this.onChatMessage(message.text, false, {
+                    source: 'llm',
+                    final: message.state === 'complete',
+                    state: message.state || '',
+                    sentenceId: message.sentence_id || '',
+                });
             }
         } else if (message.type === 'voice_mode') {
             log(`语音模式: ${message.mode}${message.reason ? ` (${message.reason})` : ''}`, message.reason ? 'warning' : 'info');
@@ -180,7 +185,12 @@ export class WebSocketHandler {
             this.ttsSentenceCount = (this.ttsSentenceCount || 0) + 1;
 
             if (message.text && this.onChatMessage) {
-                this.onChatMessage(message.text, false);
+                this.onChatMessage(message.text, false, {
+                    source: 'tts',
+                    final: false,
+                    state: 'partial',
+                    sentenceId: message.sentence_id || '',
+                });
             }
 
             // 确保动画在句子开始时运行

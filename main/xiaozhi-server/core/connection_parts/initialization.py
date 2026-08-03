@@ -14,6 +14,11 @@ from core.utils.modules_initialize import (
     initialize_modules,
     initialize_tts,
 )
+from core.utils.hospice_tts import (
+    create_aliyun_cloned_tts,
+    is_aliyun_cloned_voice_active,
+    load_hospice_voice_settings,
+)
 from core.utils.util import (
     check_asr_update,
     check_vad_update,
@@ -104,7 +109,21 @@ class InitializationMixin:
         """初始化TTS"""
         tts = None
         if not self.need_bind:
-            tts = initialize_tts(self.config)
+            voice_settings = load_hospice_voice_settings(self.device_id)
+            if is_aliyun_cloned_voice_active(voice_settings):
+                try:
+                    tts = create_aliyun_cloned_tts(self.config, voice_settings)
+                    self._hospice_clone_tts = tts
+                    self.logger.bind(tag=TAG).info(
+                        f"设备已启用阿里云克隆音色: device={self.device_id}"
+                    )
+                except Exception as e:
+                    self.logger.bind(tag=TAG).error(
+                        f"初始化阿里云克隆音色失败，回退默认TTS: {e}"
+                    )
+            if tts is None:
+                tts = initialize_tts(self.config)
+                self._hospice_default_tts = tts
 
         if tts is None:
             tts = DefaultTTS(self.config, delete_audio_file=True)

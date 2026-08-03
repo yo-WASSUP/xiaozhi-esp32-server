@@ -13,18 +13,26 @@ from aiohttp import ClientSession, web
 from config.logger import setup_logging
 from core.connection import ConnectionHandler
 from core.handle.abortHandle import handleAbortMessage
+from core.utils.hospice_tts import (
+    create_aliyun_cloned_tts,
+    is_aliyun_cloned_voice_active,
+)
+from core.utils.modules_initialize import initialize_tts
 
 TAG = __name__
 logger = setup_logging()
 
 
 class HospiceVoiceMixin:
-    def _selected_tts_config(self):
-        selected = (self.config.get("selected_module") or {}).get("TTS")
-        return (self.config.get("TTS") or {}).get(selected, {}) if selected else {}
-
     def _voice_clone_config(self):
-        tts_config = self._selected_tts_config()
+        cosy_tts_config = next(
+            (
+                item
+                for item in (self.config.get("TTS") or {}).values()
+                if isinstance(item, dict) and item.get("type") == "alibl_stream"
+            ),
+            {},
+        )
         hospice_config = self.config.get("hospice", {}) or {}
         cosy_config = hospice_config.get("cosyvoice", {}) or {}
         oss_config = cosy_config.get("oss", {}) or {}
@@ -32,8 +40,8 @@ class HospiceVoiceMixin:
         prefix = re.sub(r"[^A-Za-z0-9]", "", str(cosy_config.get("prefix") or "hospice"))[:10]
         return {
             "provider": "aliyun_cosyvoice",
-            "api_key": cosy_config.get("api_key") or tts_config.get("api_key") or ali_llm_config.get("api_key"),
-            "model": cosy_config.get("model") or tts_config.get("model") or "cosyvoice-v3.5-flash",
+            "api_key": cosy_config.get("api_key") or cosy_tts_config.get("api_key") or ali_llm_config.get("api_key"),
+            "model": cosy_config.get("model") or cosy_tts_config.get("model") or "cosyvoice-v3.5-flash",
             "prefix": prefix or "hospice",
             "language": cosy_config.get("language") or "zh",
             "max_sample_mb": int(cosy_config.get("max_sample_mb", 10)),
@@ -350,54 +358,55 @@ class HospiceVoiceMixin:
         self._save_voice_settings(settings)
         return current
 
-    def _apply_active_voice_to_config(self, voice_settings):
-        voice_id = voice_settings.get("voice_id") or voice_settings.get("speaker_id")
-        selected = (self.config.get("selected_module") or {}).get("TTS")
-        if not selected:
-            return
-        tts_config = (self.config.get("TTS") or {}).get(selected)
-        if not isinstance(tts_config, dict):
-            return
-        if tts_config.get("type") == "alibl_stream":
-            tts_config.setdefault("_hospice_default_model", tts_config.get("model"))
-            tts_config.setdefault("_hospice_default_instruction", tts_config.get("instruction"))
-            if not voice_id:
-                tts_config.pop("private_voice", None)
-                default_model = tts_config.get("_hospice_default_model")
-                default_instruction = tts_config.get("_hospice_default_instruction")
-                if default_model:
-                    tts_config["model"] = default_model
-                if default_instruction:
-                    tts_config["instruction"] = default_instruction
-                else:
-                    tts_config.pop("instruction", None)
-                return
-            tts_config["private_voice"] = voice_id
-            if voice_settings.get("model"):
-                tts_config["model"] = voice_settings["model"]
-            if voice_settings.get("instruction"):
-                tts_config["instruction"] = voice_settings["instruction"]
-
     async def _apply_voice_settings_to_active_connection(self, device_id, voice_settings):
         conn = ConnectionHandler.get_active_connection(device_id)
         if conn is None or getattr(conn, "tts", None) is None:
             return False
-        conn.config = self.config
-        apply_settings = getattr(conn.tts, "_apply_hospice_voice_settings", None)
-        if callable(apply_settings):
-            apply_settings(conn)
-        close_ws = getattr(conn.tts, "close", None)
-        if callable(close_ws):
-            result = close_ws()
-            if asyncio.iscoroutine(result):
-                if conn.loop is asyncio.get_running_loop():
-                    await result
+
+        async def switch_tts():
+            current_tts = conn.tts
+            use_clone = is_aliyun_cloned_voice_active(voice_settings)
+            cache_name = "_hospice_clone_tts" if use_clone else "_hospice_default_tts"
+            target_tts = getattr(conn, cache_name, None)
+
+            if target_tts is None:
+                if use_clone:
+                    target_tts = create_aliyun_cloned_tts(conn.config, voice_settings)
                 else:
-                    await asyncio.wrap_future(
-                        asyncio.run_coroutine_threadsafe(result, conn.loop)
-                    )
+                    target_tts = initialize_tts(conn.config)
+                setattr(conn, cache_name, target_tts)
+
+            if use_clone:
+                apply_settings = getattr(target_tts, "_apply_hospice_voice_settings", None)
+                if callable(apply_settings):
+                    apply_settings(conn)
+
+            if target_tts is current_tts:
+                if use_clone:
+                    await target_tts.close()
+                return
+
+            current_cache_name = (
+                "_hospice_clone_tts"
+                if current_tts.__class__.__module__.endswith(".alibl_stream")
+                else "_hospice_default_tts"
+            )
+            if getattr(conn, current_cache_name, None) is None:
+                setattr(conn, current_cache_name, current_tts)
+
+            if getattr(target_tts, "conn", None) is None:
+                await target_tts.open_audio_channels(conn)
+            conn.tts = target_tts
+            await current_tts.close()
+
+        if conn.loop is asyncio.get_running_loop():
+            await switch_tts()
+        else:
+            await asyncio.wrap_future(
+                asyncio.run_coroutine_threadsafe(switch_tts(), conn.loop)
+            )
         logger.bind(tag=TAG).info(
-            f"已同步在线 TTS 音色: device={device_id}, active={bool(voice_settings.get('active'))}"
+            f"已切换在线 TTS: device={device_id}, provider={'aliyun_cosyvoice' if is_aliyun_cloned_voice_active(voice_settings) else 'default'}"
         )
         return True
 
@@ -776,10 +785,8 @@ class HospiceVoiceMixin:
             })
             removed, settings, fallback = self._remove_device_voice_record(device_id, voice_id)
             if fallback and settings.get("active") and settings.get("voice_id"):
-                self._apply_active_voice_to_config(settings)
                 await self._apply_voice_settings_to_active_connection(device_id, settings)
             elif not fallback:
-                self._apply_active_voice_to_config({})
                 await self._apply_voice_settings_to_active_connection(device_id, {})
             return web.json_response(
                 {
@@ -797,7 +804,7 @@ class HospiceVoiceMixin:
             return web.json_response({"success": False, "error": str(e)}, status=500, headers=self._cors_headers())
 
     async def handle_voice_clone_activate(self, request):
-        """POST /api/hospice/voice-clone/activate body: {device_id, speaker_id, resource_id, alias?}"""
+        """POST /api/hospice/voice-clone/activate body: {device_id, voice_id, model?, alias?}"""
         try:
             data = await request.json()
             device_id = data.get("device_id") or "default"
@@ -812,20 +819,8 @@ class HospiceVoiceMixin:
                 "instruction": data.get("instruction") or clone_config.get("instruction"),
                 "active": True,
             })
-            self._apply_active_voice_to_config(settings)
             applied_online = await self._apply_voice_settings_to_active_connection(device_id, settings)
             return web.json_response({"success": True, "settings": settings, "applied_online": applied_online}, headers=self._cors_headers())
-            speaker_id = self._safe_speaker_id(data.get("speaker_id"))
-            clone_config = self._voice_clone_config()
-            resource_id = data.get("resource_id") or clone_config.get("default_resource_id") or "seed-icl-2.0"
-            settings = self._update_device_voice_settings(device_id, {
-                "speaker_id": speaker_id,
-                "alias": data.get("alias") or "家属音色",
-                "resource_id": resource_id,
-                "active": True,
-            })
-            self._apply_active_voice_to_config(settings)
-            return web.json_response({"success": True, "settings": settings}, headers=self._cors_headers())
         except Exception as e:
             return web.json_response({"success": False, "error": str(e)}, status=400, headers=self._cors_headers())
 
@@ -835,7 +830,6 @@ class HospiceVoiceMixin:
             data = await request.json()
             device_id = data.get("device_id") or "default"
             settings = self._clear_active_voice_settings(device_id)
-            self._apply_active_voice_to_config({})
             applied_online = await self._apply_voice_settings_to_active_connection(device_id, settings)
             return web.json_response(
                 {"success": True, "settings": settings, "applied_online": applied_online},

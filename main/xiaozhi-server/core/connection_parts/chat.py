@@ -4,6 +4,7 @@ import time
 import uuid
 
 from core.providers.tts.dto.dto import ContentType, TTSMessageDTO, SentenceType
+from core.handle.sendAudioHandle import send_llm_message
 from core.utils import textUtils
 from core.utils.dialogue import Message
 from core.utils.util import extract_json_from_string, get_system_error_response
@@ -94,6 +95,7 @@ class ChatMixin:
         ):
             functions = self.func_handler.get_functions()
         response_message = []
+        final_display_text = ""
 
         try:
             # LLM 调用性能日志（普通聊天）
@@ -298,6 +300,7 @@ class ChatMixin:
 
                 clean_text, emotion_data = parse_emotion(text_buff)
                 self.tts_MessageText = clean_text
+                final_display_text = clean_text
                 # 存入对话历史时去掉情感标签，避免标签累积
                 self.dialogue.put(Message(role="assistant", content=clean_text))
 
@@ -327,9 +330,22 @@ class ChatMixin:
             except Exception as e:
                 self.logger.bind(tag=TAG).debug(f"情感解析/会话日志记录跳过: {e}")
                 self.tts_MessageText = text_buff
+                final_display_text = text_buff
                 self.dialogue.put(Message(role="assistant", content=text_buff))
 
         # LLM 调用总耗时日志
+        if final_display_text:
+            try:
+                future = asyncio.run_coroutine_threadsafe(
+                    send_llm_message(self, final_display_text),
+                    self.loop,
+                )
+                future.result(timeout=2)
+            except Exception as e:
+                self.logger.bind(tag=TAG).warning(
+                    f"完整 LLM 文本发送失败: {e}"
+                )
+
         llm_total_ms = (time.time() - llm_total_start) * 1000
         try:
             preview = (query or "")[:20]

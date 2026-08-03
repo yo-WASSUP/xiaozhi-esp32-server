@@ -133,6 +133,18 @@ export default function SettingsPanel({ open, onClose, voiceMode = 'doubao_s2s',
     setModel(nextSettings.model || model);
   };
 
+  const ensureCloneVoiceMode = (nextSettings = {}) => {
+    if (
+      nextSettings.active
+      && nextSettings.provider === 'aliyun_cosyvoice'
+      && voiceMode !== 'cascade'
+    ) {
+      onVoiceModeChange?.('cascade');
+      return true;
+    }
+    return false;
+  };
+
   const loadMicrophones = async () => {
     try {
       const [devices, selectedDeviceId] = await Promise.all([
@@ -172,6 +184,7 @@ export default function SettingsPanel({ open, onClose, voiceMode = 'doubao_s2s',
       setMaxSampleMb(j.max_sample_mb || 10);
       setModel(j.model || j.settings?.model || 'cosyvoice-v3.5-flash');
       applySettings(j.settings || {});
+      ensureCloneVoiceMode(j.settings || {});
     } catch (e) {
       setTip(`加载失败：${e?.message || '未知错误'}`);
     }
@@ -511,7 +524,11 @@ export default function SettingsPanel({ open, onClose, voiceMode = 'doubao_s2s',
       if (!j.success) throw new Error(j.error || '启用失败');
       applySettings(j.settings || {});
       setVoiceId(id);
-      setTip(j.applied_online ? '已启用，当前在线设备已生效。' : '已启用。');
+      const switchedMode = ensureCloneVoiceMode(j.settings || {});
+      const successTip = switchedMode
+        ? '已启用，正在切换到支持克隆音色的标准模式。'
+        : (j.applied_online ? '已启用，当前在线设备已生效。' : '已启用。');
+      setTip(successTip);
     } catch (e) {
       setTip(`启用失败：${e?.message || '未知错误'}`);
     } finally {
@@ -633,12 +650,18 @@ export default function SettingsPanel({ open, onClose, voiceMode = 'doubao_s2s',
                 { id: 'cascade', label: '标准模式', note: '功能完整' },
               ].map((option) => {
                 const selected = voiceMode === option.id;
+                const disabled = (
+                  option.id === 'doubao_s2s'
+                  && settings.active
+                  && settings.provider === 'aliyun_cosyvoice'
+                );
                 return (
                   <button
                     key={option.id}
                     type="button"
+                    disabled={disabled}
                     onClick={() => onVoiceModeChange?.(option.id)}
-                    title={option.id === 'doubao_s2s' ? '端到端语音理解与生成' : 'ASR、LLM、TTS 标准管线'}
+                    title={disabled ? '阿里云克隆音色需要使用标准模式' : option.id === 'doubao_s2s' ? '端到端语音理解与生成' : 'ASR、LLM、TTS 标准管线'}
                     style={{
                       minHeight: 56,
                       padding: '9px 10px',
@@ -646,7 +669,8 @@ export default function SettingsPanel({ open, onClose, voiceMode = 'doubao_s2s',
                       border: `1px solid ${selected ? C.sage : `${C.mist}33`}`,
                       background: selected ? `${C.sage}12` : 'rgba(255,255,255,.5)',
                       color: selected ? C.ink : C.inkMid,
-                      cursor: 'pointer',
+                      cursor: disabled ? 'not-allowed' : 'pointer',
+                      opacity: disabled ? 0.55 : 1,
                       fontFamily: 'Noto Sans SC',
                       textAlign: 'left',
                     }}

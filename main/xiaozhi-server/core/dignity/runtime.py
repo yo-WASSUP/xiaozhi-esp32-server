@@ -35,7 +35,6 @@ from core.dignity.interview_audio import (
 )
 from core.dignity.engine.rules import strategy_to_eye_expression, strategy_to_robot_action
 from core.handle.sendAudioHandle import send_stt_message
-from core.utils.dialogue import Message
 from core.utils.util import extract_json_from_string
 
 TAG = __name__
@@ -120,6 +119,8 @@ def _ensure_dignity_runtime(conn) -> None:
         conn.dignity_patient_id = None
     if not hasattr(conn, "dignity_decision_model"):
         conn.dignity_decision_model = None
+    if not hasattr(conn, "dignity_dialogue_start_index"):
+        conn.dignity_dialogue_start_index = None
 
 
 def _get_decision_model(conn):
@@ -319,6 +320,8 @@ def _apply_persisted_memory(conn, state: DignityState) -> DignityState:
 async def start_dignity_mode(conn, msg_json: Optional[Dict[str, Any]] = None) -> None:
     _ensure_dignity_runtime(conn)
     msg_json = msg_json or {}
+    if not conn.dignity_active:
+        conn.dignity_dialogue_start_index = len(conn.dialogue.dialogue)
     conn.dignity_active = True
     conn.dignity_patient_id = msg_json.get("patient_id") or conn.dignity_patient_id
 
@@ -343,6 +346,10 @@ async def stop_dignity_mode(conn, msg_json: Optional[Dict[str, Any]] = None) -> 
     _ensure_dignity_runtime(conn)
     msg_json = msg_json or {}
     conn.dignity_active = False
+    start_index = conn.dignity_dialogue_start_index
+    if isinstance(start_index, int) and 0 <= start_index <= len(conn.dialogue.dialogue):
+        del conn.dialogue.dialogue[start_index:]
+    conn.dignity_dialogue_start_index = None
     conn.logger.bind(tag=TAG).info("尊严访谈模式已关闭")
     payload = _state_payload(conn.dignity_state)
     payload["robot_action"] = "idle"
@@ -812,5 +819,4 @@ def _speak_dignity_reply(conn, reply: str) -> None:
     from core.handle.intentHandler import speak_txt
 
     conn.sentence_id = str(uuid.uuid4().hex)
-    conn.dialogue.put(Message(role="user", content=conn.dignity_state.get("patient_text", "")))
-    speak_txt(conn, reply)
+    speak_txt(conn, reply, record_dialogue=False)

@@ -93,6 +93,17 @@ class LifecycleMixin:
         """保存记忆并关闭连接"""
         try:
             if self.memory:
+                dialogue_snapshot = list(self.dialogue.dialogue)
+                dignity_start_index = getattr(
+                    self, "dignity_dialogue_start_index", None
+                )
+                if (
+                    getattr(self, "dignity_active", False)
+                    and isinstance(dignity_start_index, int)
+                    and 0 <= dignity_start_index <= len(dialogue_snapshot)
+                ):
+                    dialogue_snapshot = dialogue_snapshot[:dignity_start_index]
+
                 # 使用线程池异步保存记忆
                 def save_memory_task():
                     try:
@@ -101,7 +112,7 @@ class LifecycleMixin:
                         asyncio.set_event_loop(loop)
                         loop.run_until_complete(
                             self.memory.save_memory(
-                                self.dialogue.dialogue, self.session_id
+                                dialogue_snapshot, self.session_id
                             )
                         )
                     except Exception as e:
@@ -229,6 +240,12 @@ class LifecycleMixin:
 
             if self.tts:
                 await self.tts.close()
+            closed_tts_ids = {id(self.tts)} if self.tts else set()
+            for cache_name in ("_hospice_default_tts", "_hospice_clone_tts"):
+                cached_tts = getattr(self, cache_name, None)
+                if cached_tts and id(cached_tts) not in closed_tts_ids:
+                    await cached_tts.close()
+                    closed_tts_ids.add(id(cached_tts))
             if self.asr:
                 await self.asr.close()
             if self.realtime_voice:

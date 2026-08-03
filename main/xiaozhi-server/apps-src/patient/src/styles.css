@@ -417,6 +417,43 @@ a:focus-visible {
   -webkit-line-clamp: 4;
 }
 
+.dignity-interview__reply-text--medium {
+  font-size: 19px !important;
+  -webkit-line-clamp: 8 !important;
+}
+
+.dignity-interview__reply-text--long {
+  font-size: 17px !important;
+  line-height: 1.55 !important;
+  -webkit-line-clamp: 12 !important;
+}
+
+.dignity-interview__reply-text--very-long {
+  display: block !important;
+  max-height: min(42vh, 390px);
+  padding-right: 8px;
+  overflow-y: auto !important;
+  font-size: 16px !important;
+  line-height: 1.5 !important;
+}
+
+.dignity-interview--reply-medium {
+  grid-template-rows: auto minmax(160px, .8fr) auto auto;
+}
+
+.dignity-interview--reply-long {
+  grid-template-rows: auto minmax(110px, .55fr) auto auto;
+}
+
+.dignity-interview--reply-very-long {
+  grid-template-rows: auto minmax(80px, .4fr) minmax(0, auto) auto;
+}
+
+.dignity-interview--reply-long .robot-avatar,
+.dignity-interview--reply-very-long .robot-avatar {
+  transform: scale(.68);
+}
+
 .dignity-interview__turn p.is-quiet {
   color: #87928d;
   font-weight: 500;
@@ -537,6 +574,43 @@ a:focus-visible {
   font-weight: 600;
   letter-spacing: 0;
   -webkit-line-clamp: 5;
+}
+
+.voice-screen__reply-text--medium {
+  font-size: 28px !important;
+  line-height: 1.58 !important;
+  -webkit-line-clamp: 8 !important;
+}
+
+.voice-screen__reply-text--long {
+  font-size: 24px !important;
+  line-height: 1.52 !important;
+  -webkit-line-clamp: 12 !important;
+}
+
+.voice-screen__reply-text--very-long {
+  display: block !important;
+  max-height: min(62vh, 560px);
+  padding-right: 12px;
+  overflow-y: auto !important;
+  font-size: 21px !important;
+  line-height: 1.5 !important;
+}
+
+.voice-screen--reply-medium .voice-screen__conversation,
+.voice-screen--reply-long .voice-screen__conversation,
+.voice-screen--reply-very-long .voice-screen__conversation {
+  max-width: 760px;
+}
+
+.voice-screen--reply-long .voice-screen__main,
+.voice-screen--reply-very-long .voice-screen__main {
+  grid-template-columns: minmax(250px, .62fr) minmax(560px, 1.38fr);
+  gap: 48px;
+}
+
+.voice-screen--reply-very-long .voice-screen__avatar .robot-avatar {
+  transform: scale(.74);
 }
 
 .voice-screen__reply p.voice-screen__reply--quiet {

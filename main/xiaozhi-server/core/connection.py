@@ -135,6 +135,7 @@ class ConnectionHandler(
         self.dignity_debug_state = None
         self.dignity_patient_id = None
         self.dignity_decision_model = None
+        self.dignity_dialogue_start_index = None
 
         # tts相关变量
         self.sentence_id = None

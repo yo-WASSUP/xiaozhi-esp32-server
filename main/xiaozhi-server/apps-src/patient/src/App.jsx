@@ -143,11 +143,28 @@ function mergeInterviewSegments(current, incoming) {
   return Array.from(byId.values());
 }
 
+function mergeAssistantDisplayText(current, incoming) {
+  const previous = String(current || '').trim();
+  const next = String(incoming || '').trim();
+  if (!previous) return next;
+  if (!next || previous.includes(next)) return previous;
+  if (next.startsWith(previous)) return next;
+  const maxOverlap = Math.min(previous.length, next.length);
+  for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
+    if (previous.slice(-overlap) === next.slice(0, overlap)) {
+      return previous + next.slice(overlap);
+    }
+  }
+  return previous + next;
+}
+
 export default function App() {
   const [activeApp, setActiveApp] = useState('home');
   const [aiState, setAiState]     = useState('idle');
-  const [msg, setMsg]             = useState(null);
-  const [lastHeard, setLastHeard] = useState('');
+  const [ordinaryMsg, setOrdinaryMsg] = useState(null);
+  const [ordinaryLastHeard, setOrdinaryLastHeard] = useState('');
+  const [dignityMsg, setDignityMsg] = useState(null);
+  const [dignityLastHeard, setDignityLastHeard] = useState('');
   const [audioLevels, setAudioLevels] = useState({ input: 0, output: 0 });
   const [incoming, setIncoming]   = useState(null);   // {caller, callType}
   const [inCall, setInCall]       = useState(null);
@@ -214,6 +231,8 @@ export default function App() {
   const patientWakeupRef = useRef({ enabled: false, mode: 'sherpa_onnx_kws' });
   const ttsPlaybackAbortRef = useRef(false);
   const speakingFallbackTimerRef = useRef(null);
+  const dignityOpeningSpokenRef = useRef(false);
+  const assistantReplyRef = useRef({ sentenceId: '', text: '', final: false });
 
   useEffect(() => { connectedRef.current = connected; }, [connected]);
   useEffect(() => { userSpeakingRef.current = userSpeaking; }, [userSpeaking]);
@@ -325,6 +344,38 @@ export default function App() {
       return false;
     }
   }, []);
+
+  const speakViaTtsAndWait = useCallback(async (text) => {
+    const content = (text || '').trim();
+    if (!content) return false;
+
+    let accepted = false;
+    let sawSpeaking = false;
+    let finish = () => {};
+    const completion = new Promise(resolve => {
+      const timeoutMs = Math.min(20000, Math.max(5000, content.length * 280 + 2500));
+      const onState = event => {
+        const state = event.detail?.state;
+        if (state === 'speaking') sawSpeaking = true;
+        if (state === 'idle' && (accepted || sawSpeaking)) finish();
+      };
+      const timer = window.setTimeout(() => finish(), timeoutMs);
+      finish = () => {
+        window.clearTimeout(timer);
+        window.removeEventListener('xz:state', onState);
+        resolve();
+      };
+      window.addEventListener('xz:state', onState);
+    });
+
+    accepted = await speakViaTts(content);
+    if (!accepted) {
+      finish();
+      return false;
+    }
+    await completion;
+    return true;
+  }, [speakViaTts]);
 
   const pauseAssistantListening = useCallback(async () => {
     setAssistantHold(true);
@@ -726,9 +777,25 @@ export default function App() {
       setConnectStatus('请先连接并允许麦克风权限，再开始语音访谈');
       return;
     }
+    await pauseAssistantListening();
+    if (!dignityOpeningSpokenRef.current) {
+      const openingReply = (
+        dignityOpeningReply
+        || dignityStatus?.reply
+        || '您好，我是小暖。今天我来陪您聊聊天。您现在感觉还好吗？'
+      ).trim();
+      if (openingReply) {
+        assistantReplyRef.current = { sentenceId: '', text: openingReply, final: true };
+        setDignityMsg(openingReply);
+        setAiState('speaking');
+        const spoken = await speakViaTtsAndWait(openingReply);
+        dignityOpeningSpokenRef.current = spoken;
+        if (!spoken) setConnectStatus('开场白播放失败，您可以直接开始说话');
+      }
+    }
     setDignityVoiceMode(true);
     await resumeAssistantAndStart();
-  }, [dignityMode, dignityVoiceMode, pauseAssistantListening, resumeAssistantAndStart]);
+  }, [dignityMode, dignityOpeningReply, dignityStatus?.reply, dignityVoiceMode, pauseAssistantListening, resumeAssistantAndStart, speakViaTtsAndWait]);
 
   const isHangupCommand = (text) => {
     const value = normalizeCommandText(text);
@@ -959,7 +1026,24 @@ export default function App() {
         stopTtsPlayback();
         return;
       }
-      setMsg(e.detail.text);
+      const detail = e.detail || {};
+      const text = String(detail.text || '').trim();
+      if (!text) return;
+      const sentenceId = detail.sentenceId || '';
+      const current = assistantReplyRef.current;
+      if (sentenceId && current.sentenceId && sentenceId !== current.sentenceId) {
+        assistantReplyRef.current = { sentenceId, text: '', final: false };
+      }
+      if (detail.final) {
+        assistantReplyRef.current = { sentenceId, text, final: true };
+      } else {
+        if (assistantReplyRef.current.final) return;
+        const merged = mergeAssistantDisplayText(assistantReplyRef.current.text, text);
+        assistantReplyRef.current = { sentenceId, text: merged, final: false };
+      }
+      const displayText = assistantReplyRef.current.text;
+      if (dignityModeRef.current) setDignityMsg(displayText);
+      else setOrdinaryMsg(displayText);
     };
     const attachClientLatency = (payload, startedAtRef) => {
       const startedAt = startedAtRef.current;
@@ -971,7 +1055,12 @@ export default function App() {
       };
     };
     const onStt = e => {
-      setLastHeard(e.detail?.text || '');
+      assistantReplyRef.current = { sentenceId: '', text: '', final: false };
+      if (dignityModeRef.current) {
+        setDignityLastHeard(e.detail?.text || '');
+      } else {
+        setOrdinaryLastHeard(e.detail?.text || '');
+      }
       setUserSpeaking(false);
       userSpeakingRef.current = false;
       setAiState('speaking');
@@ -997,7 +1086,7 @@ export default function App() {
       setOrdinaryVoiceAwake(true);
       ordinaryVoiceAwakeRef.current = true;
       setConnectStatus('');
-      setMsg('我在呢，您说。');
+      setOrdinaryMsg('我在呢，您说。');
       await speakViaTts('我在呢，您说。');
       await stopWakeWordListening();
       await startListening();
@@ -1047,11 +1136,13 @@ export default function App() {
       const data = detail.data || {};
       if (event === 'mode_started') {
         const autoVoiceMode = data.auto_voice_mode === true || data.source === 'voice_command';
+        dignityOpeningSpokenRef.current = false;
+        dignityModeRef.current = true;
         activeAppRef.current = 'dignity';
         setActiveApp('dignity');
         setDignityMode(true);
         setDignityVoiceMode(autoVoiceMode);
-        setLastHeard('');
+        setDignityLastHeard('');
         setUserSpeaking(false);
         userSpeakingRef.current = false;
         setDignityStatus(data);
@@ -1059,7 +1150,10 @@ export default function App() {
         setDignityDocument(data.document || '');
         setDignityDocumentUrl(data.document_url || '');
         setDignityDocumentConfirmBusy(false);
-        if (data.reply) setMsg(data.reply);
+        if (data.reply) {
+          assistantReplyRef.current = { sentenceId: '', text: data.reply, final: true };
+          setDignityMsg(data.reply);
+        }
         void loadDignityArtifacts();
         if (autoVoiceMode) {
           resumeAssistantListening();
@@ -1067,6 +1161,9 @@ export default function App() {
           void pauseAssistantListening();
         }
       } else if (event === 'mode_stopped') {
+        dignityOpeningSpokenRef.current = false;
+        dignityModeRef.current = false;
+        assistantReplyRef.current = { sentenceId: '', text: '', final: false };
         setDignityMode(false);
         setDignityVoiceMode(false);
         setDignityReadingKind('');
@@ -1088,7 +1185,10 @@ export default function App() {
         const nextData = attachClientLatency(data, dignityLiveTurnStartedAtRef);
         setDignityStatus(nextData);
         setDignityTurns(items => [...items, nextData]);
-        if (nextData.reply) setMsg(nextData.reply);
+        if (nextData.reply) {
+          assistantReplyRef.current = { sentenceId: '', text: nextData.reply, final: true };
+          setDignityMsg(nextData.reply);
+        }
       } else if (event === 'state_updated') {
         setDignityStatus(prev => ({
           ...data,
@@ -1121,7 +1221,10 @@ export default function App() {
         setDignityTurns([]);
         setDignityStatus(data);
         setDignityOpeningReply(data.reply || '');
-        if (data.reply) setMsg(data.reply);
+        if (data.reply) {
+          assistantReplyRef.current = { sentenceId: '', text: data.reply, final: true };
+          setDignityMsg(data.reply);
+        }
       } else if (event === 'document_started') {
         setDignityDocumentBusy(true);
         setDignityDocumentConfirmBusy(false);
@@ -1412,7 +1515,7 @@ export default function App() {
         setConnectStatus('');
         if (detail.source === 'kws') return;
         if (detail.reply) {
-          setMsg(detail.reply);
+          setOrdinaryMsg(detail.reply);
           await speakViaTts(detail.reply);
         }
       } else if (action === 'patient_voice_sleep') {
@@ -1420,8 +1523,8 @@ export default function App() {
         setOrdinaryVoiceAwake(false);
         ordinaryVoiceAwakeRef.current = false;
         setAiState('idle');
-        setMsg(null);
-        setLastHeard('');
+        setOrdinaryMsg(null);
+        setOrdinaryLastHeard('');
         setUserSpeaking(false);
         userSpeakingRef.current = false;
         await stopTtsPlayback();
@@ -1456,8 +1559,8 @@ export default function App() {
           <section className="patient-app-page patient-app-page--voice">
           <ChatScreen
             aiState={aiState}
-            msg={msg}
-            lastHeard={lastHeard}
+            msg={ordinaryMsg}
+            lastHeard={ordinaryLastHeard}
             connected={connected}
             recording={recording}
             userSpeaking={userSpeaking}
@@ -1517,8 +1620,8 @@ export default function App() {
               <DignityTherapyPanel
                 status={dignityStatus}
                 aiState={aiState}
-                msg={msg}
-                lastHeard={lastHeard}
+                msg={dignityMsg}
+                lastHeard={dignityLastHeard}
                 connected={connected}
                 userSpeaking={userSpeaking}
                 inputLevel={audioLevels.input}

@@ -258,11 +258,34 @@ async def _do_send_audio(conn, opus_packet, flow_control):
     flow_control["sequence"] = sequence + 1
 
 
+async def send_llm_message(conn, text, state="complete"):
+    """发送可供客户端定稿展示的完整助手回复。"""
+    if not text:
+        return
+    await conn.websocket.send(
+        json.dumps(
+            {
+                "type": "llm",
+                "state": state,
+                "text": text,
+                "session_id": conn.session_id,
+                "sentence_id": getattr(conn, "sentence_id", ""),
+            },
+            ensure_ascii=False,
+        )
+    )
+
+
 async def send_tts_message(conn, state, text=None):
     """发送 TTS 状态消息"""
     if text is None and state == "sentence_start":
         return
-    message = {"type": "tts", "state": state, "session_id": conn.session_id}
+    message = {
+        "type": "tts",
+        "state": state,
+        "session_id": conn.session_id,
+        "sentence_id": getattr(conn, "sentence_id", ""),
+    }
     if text is not None:
         message["text"] = textUtils.check_emoji(text)
 

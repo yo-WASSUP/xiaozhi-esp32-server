@@ -100,7 +100,7 @@ const [
   playerMod,
   opusMod,
 ] = await Promise.all([
-  import(`${TEST}/core/network/websocket.js?v=0133`),
+  import(`${TEST}/core/network/websocket.js?v=0134`),
   import(`${TEST}/core/audio/recorder.js?v=0129`),
   import(`${TEST}/core/audio/player.js?v=0127`),
   import(`${TEST}/core/audio/opus-codec.js?v=0127`),
@@ -234,7 +234,7 @@ wsHandler.onSessionStateChange = (speaking) => {
   }));
 };
 
-wsHandler.onChatMessage = (text, isUser) => {
+wsHandler.onChatMessage = (text, isUser, meta = {}) => {
   if (!isUser && typeof text === 'string' && text.includes('"type": "vad"')) {
     return;
   }
@@ -246,7 +246,9 @@ wsHandler.onChatMessage = (text, isUser) => {
     window.dispatchEvent(new CustomEvent('xz:state', { detail: { state: 'thinking' } }));
   } else {
     // AI 回复文本（可能在 TTS 开始前后）
-    window.dispatchEvent(new CustomEvent('xz:llm', { detail: { text: cleanText } }));
+    window.dispatchEvent(new CustomEvent('xz:llm', {
+      detail: { text: cleanText, ...meta }
+    }));
   }
 };
 

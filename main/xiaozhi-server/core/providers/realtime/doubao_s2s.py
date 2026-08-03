@@ -13,7 +13,7 @@ from pathlib import Path
 import opuslib_next
 import websockets
 
-from core.handle.sendAudioHandle import sendAudio, send_tts_message
+from core.handle.sendAudioHandle import sendAudio, send_llm_message, send_tts_message
 from core.utils.opus_encoder_utils import OpusEncoderUtils
 
 
@@ -314,8 +314,10 @@ class DoubaoS2SClient:
         self.responding = False
         self.interrupt_sent = False
         self.user_text = ""
-        self.assistant_text = ""
+        self.assistant_chat_text = ""
+        self.assistant_tts_text = ""
         self.assistant_finalized = False
+        self.assistant_sent_text = ""
 
     def start(self):
         if self.run_task is None or self.run_task.done():
@@ -518,8 +520,10 @@ class DoubaoS2SClient:
                 self.interrupt_sent = False
             elif event == EVENT_TTS_STARTED:
                 self.responding = True
-                self.assistant_text = ""
+                self.assistant_chat_text = ""
+                self.assistant_tts_text = ""
                 self.assistant_finalized = False
+                self.assistant_sent_text = ""
                 self.conn.client_abort = False
                 self.conn.sentence_id = uuid.uuid4().hex
                 self.opus_encoder.reset_state()
@@ -530,13 +534,19 @@ class DoubaoS2SClient:
                     audio = base64.b64decode(payload["audio"])
                 await self._send_pcm(audio, end_of_stream=False)
             elif event == EVENT_CHAT_RESPONSE and text:
-                self.assistant_text = self._merge_text(self.assistant_text, text)
+                self.assistant_chat_text = self._merge_text(
+                    self.assistant_chat_text,
+                    text,
+                )
             elif event == EVENT_TTS_SEGMENT_END and text:
-                self.assistant_text = self._merge_text(self.assistant_text, text)
+                self.assistant_tts_text = self._merge_text(
+                    self.assistant_tts_text,
+                    text,
+                )
             elif event == EVENT_CHAT_ENDED:
                 if text:
-                    self.assistant_text = self._merge_text(
-                        self.assistant_text,
+                    self.assistant_chat_text = self._merge_text(
+                        self.assistant_chat_text,
                         text,
                     )
                 await self._finalize_assistant_text()
@@ -564,12 +574,17 @@ class DoubaoS2SClient:
             await sendAudio(self.conn, opus_packets, frame_duration=60)
 
     async def _finalize_assistant_text(self):
+        clean_text = self._select_display_text(
+            getattr(self, "assistant_chat_text", ""),
+            getattr(self, "assistant_tts_text", ""),
+        )
         if (
-            self.assistant_text
-            and not self.assistant_finalized
+            clean_text
+            and clean_text != getattr(self, "assistant_sent_text", "")
             and not self.conn.client_abort
         ):
-            await self._send_text("llm", self.assistant_text)
+            await send_llm_message(self.conn, clean_text)
+            self.assistant_sent_text = clean_text
             self.assistant_finalized = True
 
     async def _send_text(self, message_type: str, text: str):
@@ -659,6 +674,8 @@ class DoubaoS2SClient:
             return incoming
         if incoming.startswith(current):
             return incoming
+        if current in incoming:
+            return incoming
         if incoming in current:
             return current
         max_overlap = min(len(current), len(incoming))
@@ -666,6 +683,20 @@ class DoubaoS2SClient:
             if current[-overlap:] == incoming[:overlap]:
                 return current + incoming[overlap:]
         return current + incoming
+
+    @staticmethod
+    def _select_display_text(chat_text: str, tts_text: str) -> str:
+        chat = clean_realtime_text(chat_text)
+        tts = clean_realtime_text(tts_text)
+        if not chat:
+            return tts
+        if not tts:
+            return chat
+        if chat in tts:
+            return tts
+        if tts in chat:
+            return chat
+        return chat if len(chat) >= len(tts) else tts
 
     async def close(self):
         if self.closed:

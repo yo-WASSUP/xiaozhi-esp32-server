@@ -1,4 +1,6 @@
+import json
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from core.providers.realtime.doubao_s2s import (
@@ -48,6 +50,14 @@ class DoubaoS2SProtocolTests(unittest.TestCase):
             merge("第一句话。", "第二句话。"),
             "第一句话。第二句话。",
         )
+        full = "要得嘛。你今天想不想摆哈龙门阵嘛？比如聊聊以前爱吃的四川小吃。"
+        self.assertEqual(merge("爱吃的四川小吃。", full), full)
+
+    def test_chat_and_tts_streams_are_selected_without_cross_stream_splicing(self):
+        chat = "要得嘛。你今天想不想摆哈龙门阵嘛？比如聊聊以前爱吃的四川小吃。"
+        tts_tail = "爱吃的四川小吃。"
+
+        self.assertEqual(DoubaoS2SClient._select_display_text(chat, tts_tail), chat)
 
     def test_asr_hypotheses_replace_earlier_revisions(self):
         latest = DoubaoS2SClient._latest_hypothesis
@@ -91,6 +101,54 @@ class DoubaoS2SInterruptTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("回答自然简洁", role)
         self.assertIn("名字是“小暖”", role)
         self.assertIn("不要自称豆包", role)
+
+
+class DoubaoS2SDisplayTextTests(unittest.IsolatedAsyncioTestCase):
+    async def test_tts_tail_cannot_be_spliced_before_complete_chat_text(self):
+        websocket = AsyncMock()
+        client = DoubaoS2SClient.__new__(DoubaoS2SClient)
+        client.conn = SimpleNamespace(
+            client_abort=False,
+            websocket=websocket,
+            session_id="session-1",
+            sentence_id="sentence-1",
+        )
+        full = "要得嘛。你今天想不想摆哈龙门阵嘛？比如聊聊以前爱吃的四川小吃。"
+        client.assistant_chat_text = full
+        client.assistant_tts_text = "爱吃的四川小吃。"
+        client.assistant_sent_text = ""
+        client.assistant_finalized = False
+
+        await client._finalize_assistant_text()
+
+        message = json.loads(websocket.send.await_args.args[0])
+        self.assertEqual(message["text"], full)
+
+    async def test_updated_final_text_is_sent_again_after_late_segment(self):
+        websocket = AsyncMock()
+        client = DoubaoS2SClient.__new__(DoubaoS2SClient)
+        client.conn = SimpleNamespace(
+            client_abort=False,
+            websocket=websocket,
+            session_id="session-1",
+            sentence_id="sentence-1",
+        )
+        client.assistant_chat_text = "第一段"
+        client.assistant_tts_text = ""
+        client.assistant_sent_text = ""
+        client.assistant_finalized = False
+
+        await client._finalize_assistant_text()
+        client.assistant_chat_text = "第一段，后续完整内容"
+        await client._finalize_assistant_text()
+        await client._finalize_assistant_text()
+
+        self.assertEqual(websocket.send.await_count, 2)
+        first = json.loads(websocket.send.await_args_list[0].args[0])
+        final = json.loads(websocket.send.await_args_list[1].args[0])
+        self.assertEqual(first["state"], "complete")
+        self.assertEqual(final["text"], "第一段，后续完整内容")
+        self.assertEqual(final["sentence_id"], "sentence-1")
 
 
 if __name__ == "__main__":

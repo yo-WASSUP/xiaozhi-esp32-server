@@ -356,7 +356,7 @@ async def process_intent_result(conn, intent_result, original_text):
         return False
 
 
-def speak_txt(conn, text):
+def speak_txt(conn, text, record_dialogue=True):
     # 记录文本
     conn.tts_MessageText = text
 
@@ -375,4 +375,5 @@ def speak_txt(conn, text):
             content_type=ContentType.ACTION,
         )
     )
-    conn.dialogue.put(Message(role="assistant", content=text))
+    if record_dialogue:
+        conn.dialogue.put(Message(role="assistant", content=text))

@@ -3,6 +3,7 @@ import { SlidersHorizontal } from 'lucide-react';
 import RobotAvatar from '../components/RobotAvatar';
 import WaveBars from '../components/WaveBars';
 import voiceRoomBackground from '../assets/voice/voice-room.webp';
+import { getReplyDensity } from '../utils/replyText';
 
 const FALLBACK_COPY = {
   offline: '语音服务正在连接，请稍等一会儿。',
@@ -36,6 +37,8 @@ export default function ChatScreen({
       : FALLBACK_COPY.ready;
   const activitySource = userSpeaking || aiState !== 'speaking' ? 'input' : 'output';
   const activityLevel = activitySource === 'input' ? inputLevel : outputLevel;
+  const replyText = msg || fallback;
+  const replyDensity = getReplyDensity(replyText);
 
   const clearPressTimer = () => {
     if (!pressTimerRef.current) return;
@@ -64,7 +67,7 @@ export default function ChatScreen({
 
   return (
     <div
-      className={`voice-screen voice-screen--${displayState}`}
+      className={`voice-screen voice-screen--${displayState} voice-screen--reply-${replyDensity}`}
       style={{ '--voice-room-background': `url(${voiceRoomBackground})` }}
     >
       <button
@@ -96,8 +99,8 @@ export default function ChatScreen({
 
           <div className="voice-screen__reply">
             <span>小暖</span>
-            <p className={msg ? '' : 'voice-screen__reply--quiet'}>
-              {msg || fallback}
+            <p className={`voice-screen__reply-text voice-screen__reply-text--${replyDensity}${msg ? '' : ' voice-screen__reply--quiet'}`}>
+              {replyText}
             </p>
           </div>
         </div>
