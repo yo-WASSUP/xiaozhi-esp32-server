@@ -86,7 +86,7 @@ export default function ChatScreen({
 
       <div className="voice-screen__main">
         <div className="voice-screen__avatar" aria-hidden="true">
-          <RobotAvatar state={displayState} />
+          <RobotAvatar state={displayState} outputLevel={outputLevel} />
         </div>
 
         <div className="voice-screen__conversation" aria-live="polite">

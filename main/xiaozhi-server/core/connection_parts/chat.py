@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 import time
 import uuid
 
@@ -15,6 +16,92 @@ TAG = __name__
 
 EMOTION_TAG_PREFIX = "<!--emotion:"
 EMOTION_TAG_END = "-->"
+
+_STAGE_DIRECTION_CUE = re.compile(
+    r"微笑|笑着|笑了笑|轻笑|苦笑|点头|摇头|叹气|轻声|柔声|"
+    r"温和地|温柔地|关切地|缓缓地|慢慢地|轻轻地|沉默|停顿|"
+    r"想了想|看着|望着|握住|拍拍|抚摸|语气|声音|神情|眼神"
+)
+
+
+def _is_stage_direction(text):
+    """Return whether a leading parenthetical is a non-spoken stage direction."""
+    value = (text or "").strip()
+    return bool(value and len(value) <= 50 and _STAGE_DIRECTION_CUE.search(value))
+
+
+def _strip_leading_stage_directions(text):
+    """Remove complete stage directions at the start while preserving real content."""
+    if not text:
+        return text
+
+    remaining = text
+    while True:
+        match = re.match(r"^(\s*)([（(])", remaining)
+        if not match:
+            return remaining
+
+        closing = "）" if match.group(2) == "（" else ")"
+        closing_index = remaining.find(closing, match.end())
+        if closing_index == -1:
+            return remaining
+
+        inner = remaining[match.end() : closing_index]
+        if not _is_stage_direction(inner):
+            return remaining
+
+        remaining = remaining[closing_index + 1 :].lstrip()
+
+
+class _StreamingStageDirectionFilter:
+    """Buffer only the reply prefix so split stage directions never reach TTS."""
+
+    def __init__(self):
+        self._checking_prefix = True
+        self._buffer = ""
+
+    def feed(self, content):
+        if not content:
+            return ""
+        if not self._checking_prefix:
+            return content
+
+        self._buffer += content
+        while True:
+            stripped = self._buffer.lstrip()
+            if not stripped:
+                return ""
+
+            opening = stripped[0]
+            if opening not in "（(":
+                return self._release_buffer()
+
+            closing = "）" if opening == "（" else ")"
+            closing_index = stripped.find(closing, 1)
+            if closing_index == -1:
+                # Stage directions are short. Avoid delaying an unusually long
+                # legitimate parenthetical until the whole response finishes.
+                if len(stripped) > 80:
+                    return self._release_buffer()
+                return ""
+
+            if not _is_stage_direction(stripped[1:closing_index]):
+                return self._release_buffer()
+
+            self._buffer = stripped[closing_index + 1 :].lstrip()
+            if not self._buffer:
+                return ""
+
+    def flush(self):
+        if not self._checking_prefix:
+            return ""
+        return self._release_buffer()
+
+    def _release_buffer(self):
+        output = self._buffer
+        self._buffer = ""
+        self._checking_prefix = False
+        return output
 
 
 def _filter_stream_emotion_tag(content, pending=""):
@@ -153,6 +240,7 @@ class ChatMixin:
         tool_calls_list = []  # 格式: [{"id": "", "name": "", "arguments": ""}]
         content_arguments = ""
         emotion_tag_pending = ""
+        stage_direction_filter = _StreamingStageDirectionFilter()
         self.client_abort = False
         emotion_flag = True
         first_token_ms = None
@@ -194,6 +282,7 @@ class ChatMixin:
                         tts_content, emotion_tag_pending = _filter_stream_emotion_tag(
                             content, emotion_tag_pending
                         )
+                        tts_content = stage_direction_filter.feed(tts_content)
                         response_message.append(content)
                         if tts_content:
                             self.tts.tts_text_queue.put(
@@ -223,6 +312,18 @@ class ChatMixin:
                     )
                 )
             return
+
+        if not tool_call_flag:
+            tts_content = stage_direction_filter.flush()
+            if tts_content:
+                self.tts.tts_text_queue.put(
+                    TTSMessageDTO(
+                        sentence_id=self.sentence_id,
+                        sentence_type=SentenceType.MIDDLE,
+                        content_type=ContentType.TEXT,
+                        content_detail=tts_content,
+                    )
+                )
         # 处理function call
         if tool_call_flag:
             bHasError = False
@@ -299,6 +400,7 @@ class ChatMixin:
                 from core.providers.emotion import parse_emotion
 
                 clean_text, emotion_data = parse_emotion(text_buff)
+                clean_text = _strip_leading_stage_directions(clean_text)
                 self.tts_MessageText = clean_text
                 final_display_text = clean_text
                 # 存入对话历史时去掉情感标签，避免标签累积
@@ -329,9 +431,10 @@ class ChatMixin:
                     )
             except Exception as e:
                 self.logger.bind(tag=TAG).debug(f"情感解析/会话日志记录跳过: {e}")
-                self.tts_MessageText = text_buff
-                final_display_text = text_buff
-                self.dialogue.put(Message(role="assistant", content=text_buff))
+                clean_text = _strip_leading_stage_directions(text_buff)
+                self.tts_MessageText = clean_text
+                final_display_text = clean_text
+                self.dialogue.put(Message(role="assistant", content=clean_text))
 
         # LLM 调用总耗时日志
         if final_display_text:

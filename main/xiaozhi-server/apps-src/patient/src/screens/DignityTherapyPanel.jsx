@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { BookOpenText, Pause, Play, ShieldAlert, X } from 'lucide-react';
 import { C } from '../theme';
 import RobotAvatar from '../components/RobotAvatar';
 import WaveBars from '../components/WaveBars';
@@ -34,6 +35,13 @@ function DignityInterviewStage({
   outputLevel,
   voiceMode,
   paused,
+  archiveOpen,
+  memoryItemCount,
+  safetyLocked,
+  onOpenArchive,
+  onToggleVoiceMode,
+  onOpenSafetyTools,
+  archiveButtonRef,
 }) {
   const passiveState = aiState === 'speaking' || aiState === 'thinking' ? aiState : 'idle';
   const displayState = voiceMode && aiState === 'idle' && connected && recording && userSpeaking
@@ -61,47 +69,76 @@ function DignityInterviewStage({
   const replyDensity = getReplyDensity(reply);
 
   return (
-    <aside
+    <section
       className={`dignity-interview dignity-interview--${displayState} dignity-interview--reply-${replyDensity}${paused ? ' dignity-interview--paused' : ''}`}
       style={{ '--dignity-room-background': `url(${voiceRoomBackground})` }}
       aria-label="尊严疗法实时语音访谈"
     >
-      <div className="dignity-interview__header">
-        <div>
-          <span className="dignity-interview__eyebrow">实时语音访谈</span>
-          <h2>和小暖慢慢聊</h2>
+      <header className="dignity-interview__header">
+        <div className="dignity-interview__header-actions">
+          <span className={`dignity-interview__status ${voiceMode && !paused ? 'is-active' : ''}`}>
+            <i aria-hidden="true" />
+            {statusText}
+          </span>
+          <button
+            ref={archiveButtonRef}
+            className="dignity-interview__archive-button"
+            type="button"
+            onClick={onOpenArchive}
+            aria-controls="dignity-story-drawer"
+            aria-expanded={archiveOpen}
+          >
+            <BookOpenText size={21} strokeWidth={1.8} aria-hidden="true" />
+            <span>查看生命故事</span>
+            <strong>{memoryItemCount}</strong>
+          </button>
         </div>
-        <span className={`dignity-interview__status ${voiceMode && !paused ? 'is-active' : ''}`}>
-          <i aria-hidden="true" />
-          {statusText}
-        </span>
+      </header>
+
+      <div className="dignity-interview__main">
+        <div className="dignity-interview__avatar" aria-hidden="true">
+          <RobotAvatar state={displayState} outputLevel={outputLevel} />
+        </div>
+
+        <div className="dignity-interview__conversation" aria-live="polite">
+          {lastHeard && (
+            <div className="dignity-interview__turn dignity-interview__turn--user">
+              <span>您说</span>
+              <p>{lastHeard}</p>
+            </div>
+          )}
+          <div className="dignity-interview__turn dignity-interview__turn--assistant">
+            <span>小暖</span>
+            <p className={`dignity-interview__reply-text dignity-interview__reply-text--${replyDensity}${(msg || openingReply) ? '' : ' is-quiet'}`}>{reply}</p>
+          </div>
+        </div>
       </div>
 
-      <div className="dignity-interview__avatar" aria-hidden="true">
-        <RobotAvatar state={displayState} />
-      </div>
-
-      <div className="dignity-interview__conversation" aria-live="polite">
-        <div className="dignity-interview__turn dignity-interview__turn--user">
-          <span>您说</span>
-          <p className={lastHeard ? '' : 'is-quiet'}>
-            {lastHeard || '您说的话会显示在这里'}
-          </p>
+      <div className="dignity-interview__footer">
+        <div className="dignity-interview__activity" aria-hidden="true">
+          <WaveBars
+            source={activitySource}
+            level={activityLevel}
+            active={!paused && connected && ((voiceMode && recording) || aiState === 'speaking')}
+          />
         </div>
-        <div className="dignity-interview__turn dignity-interview__turn--assistant">
-          <span>小暖</span>
-          <p className={`dignity-interview__reply-text dignity-interview__reply-text--${replyDensity}${(msg || openingReply) ? '' : ' is-quiet'}`}>{reply}</p>
-        </div>
+        <button
+          type="button"
+          className={`dignity-interview__voice-button ${voiceMode && !paused ? 'is-active' : ''}`}
+          onClick={onToggleVoiceMode}
+          disabled={safetyLocked}
+        >
+          {voiceMode && !paused
+            ? <Pause size={20} fill="currentColor" aria-hidden="true" />
+            : <Play size={20} fill="currentColor" aria-hidden="true" />}
+          {safetyLocked ? '等待医护确认' : paused ? '继续访谈' : voiceMode ? '暂停访谈' : '开始访谈'}
+        </button>
+        <button type="button" className="dignity-interview__safety-button" onClick={onOpenSafetyTools}>
+          <ShieldAlert size={19} strokeWidth={1.8} aria-hidden="true" />
+          安全处置
+        </button>
       </div>
-
-      <div className="dignity-interview__activity" aria-hidden="true">
-        <WaveBars
-          source={activitySource}
-          level={activityLevel}
-          active={!paused && connected && ((voiceMode && recording) || aiState === 'speaking')}
-        />
-      </div>
-    </aside>
+    </section>
   );
 }
 
@@ -665,13 +702,34 @@ export default function DignityTherapyPanel({
   onReadFamilyLetter,
   onStopReading,
 }) {
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const archiveButtonRef = useRef(null);
+  const archiveCloseButtonRef = useRef(null);
   const memorySections = collectMemorySections(status?.dignity_memory);
   const memoryItemCount = memorySections.reduce((sum, section) => sum + section.items.length, 0);
   const documentReady = memoryItemCount >= MIN_MEMORY_ITEMS_FOR_DOCUMENT;
+  const remainingMemoryItems = Math.max(0, MIN_MEMORY_ITEMS_FOR_DOCUMENT - memoryItemCount);
   const safetyLocked = safetyAlert?.level === 'L3';
 
+  useEffect(() => {
+    if (!archiveOpen) return undefined;
+    archiveCloseButtonRef.current?.focus();
+    const closeOnEscape = (event) => {
+      if (event.key !== 'Escape') return;
+      setArchiveOpen(false);
+      requestAnimationFrame(() => archiveButtonRef.current?.focus());
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [archiveOpen]);
+
+  const closeArchive = () => {
+    setArchiveOpen(false);
+    requestAnimationFrame(() => archiveButtonRef.current?.focus());
+  };
+
   return (
-    <div className="dignity-therapy">
+    <div className={`dignity-therapy${archiveOpen ? ' dignity-therapy--archive-open' : ''}`}>
       <DignityInterviewStage
         aiState={aiState}
         msg={msg}
@@ -684,26 +742,63 @@ export default function DignityTherapyPanel({
         outputLevel={outputLevel}
         voiceMode={voiceMode}
         paused={paused}
+        archiveOpen={archiveOpen}
+        memoryItemCount={memoryItemCount}
+        safetyLocked={safetyLocked}
+        onOpenArchive={() => setArchiveOpen(true)}
+        onToggleVoiceMode={onToggleVoiceMode}
+        onOpenSafetyTools={onOpenSafetyTools}
+        archiveButtonRef={archiveButtonRef}
       />
 
-      <main className="dignity-therapy__workspace">
-        <section style={controlPanelStyle}>
-          <div style={kickerStyle}>尊严疗法</div>
-          <div style={actionsStyle}>
-            <button
-              onClick={onToggleVoiceMode}
-              disabled={safetyLocked}
-              style={primaryButtonStyle(voiceMode && !paused, safetyLocked)}
-            >
-              {safetyLocked ? '等待医护确认' : paused ? '继续访谈' : voiceMode ? '暂停访谈' : '开始访谈'}
-            </button>
-            <button type="button" onClick={onOpenSafetyTools} style={safetyToolsButtonStyle}>
-              安全预警处置
-            </button>
-          </div>
-        </section>
+      {safetyAlert && (
+        <div className="dignity-therapy__safety-alert">
+          <SafetyAlertBanner alert={safetyAlert} />
+        </div>
+      )}
 
-        <SafetyAlertBanner alert={safetyAlert} />
+      <button
+        className="dignity-therapy__drawer-scrim"
+        type="button"
+        onClick={closeArchive}
+        aria-label="关闭生命故事"
+        tabIndex={archiveOpen ? 0 : -1}
+      />
+
+      <aside
+        id="dignity-story-drawer"
+        className="dignity-story-drawer"
+        aria-label="生命故事"
+        aria-hidden={!archiveOpen}
+        {...(!archiveOpen ? { inert: '' } : {})}
+      >
+        <header className="dignity-story-drawer__header">
+          <div className="dignity-story-drawer__title">
+            <span className="dignity-story-drawer__mark" aria-hidden="true">
+              <BookOpenText size={23} strokeWidth={1.7} />
+            </span>
+            <div>
+              <span>尊严疗法档案</span>
+              <h2>生命故事</h2>
+            </div>
+          </div>
+          <button
+            ref={archiveCloseButtonRef}
+            className="dignity-story-drawer__close"
+            type="button"
+            onClick={closeArchive}
+            aria-label="关闭生命故事"
+          >
+            <X size={24} strokeWidth={1.8} aria-hidden="true" />
+          </button>
+        </header>
+
+        <div className="dignity-story-drawer__summary">
+          <strong>已记录 {memoryItemCount} 条生命记忆</strong>
+          <span>{documentReady ? '已经可以整理人生故事和传承内容' : `再记录 ${remainingMemoryItems} 条，就可以开始整理人生故事`}</span>
+        </div>
+
+        <main className="dignity-therapy__workspace">
 
         <MemoryPanel
           memory={status?.dignity_memory || {}}
@@ -761,17 +856,13 @@ export default function DignityTherapyPanel({
           onChange={onFamilyLetterChange}
           onSave={onSaveFamilyLetter}
         />
-      </main>
+        </main>
+      </aside>
     </div>
   );
 }
 
-const controlPanelStyle = { display: 'grid', gap: 16, padding: '2px 0 18px', borderBottom: `1px solid ${C.mist}22` };
-const kickerStyle = { color: C.ink, fontSize: 32, lineHeight: 1.15, fontFamily: 'Noto Serif SC, serif', fontWeight: 600 };
 const subTextStyle = { color: C.inkFaint, fontSize: 15, lineHeight: 1.6 };
-const actionsStyle = { display: 'flex', flexWrap: 'wrap', gap: 10 };
-const primaryButtonStyle = (active, disabled = false) => ({ height: 50, minWidth: 154, padding: '0 24px', borderRadius: 8, border: `1px solid ${active ? C.sage : C.amber}`, background: active ? `linear-gradient(135deg, ${C.sage}, #9fb196)` : `linear-gradient(135deg, ${C.amber}, #d9a85e)`, color: '#fffaf2', fontSize: 16, fontWeight: 700, fontFamily: 'Noto Sans SC', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? .68 : 1, boxShadow: `0 10px 22px ${active ? 'rgba(122,148,128,.24)' : 'rgba(184,130,54,.25)'}` });
-const safetyToolsButtonStyle = { height: 50, padding: '0 18px', borderRadius: 8, border: '1px solid rgba(166,80,45,.48)', background: 'rgba(220,126,74,.12)', color: '#82482F', fontSize: 15, fontWeight: 700, fontFamily: 'Noto Sans SC', cursor: 'pointer' };
 const safetyAlertStyle = (content) => ({ display: 'grid', gap: 8, padding: '15px 17px', borderRadius: 8, border: `1px solid ${content.color}66`, background: content.background, boxShadow: `0 10px 24px ${content.color}18` });
 const safetyAlertHeadStyle = { display: 'flex', alignItems: 'center', gap: 9 };
 const safetyLevelStyle = (content) => ({ minWidth: 38, height: 25, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 999, color: '#fffaf2', background: content.color, fontSize: 13, fontWeight: 800, letterSpacing: '.03em' });
