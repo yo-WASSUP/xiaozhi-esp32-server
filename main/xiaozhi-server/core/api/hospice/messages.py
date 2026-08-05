@@ -149,11 +149,15 @@ class HospiceMessagesMixin:
             wakeup.get("sherpa_onnx", {}) or {},
         ) or {}
         max_mb = int(hospice.get("upload_max_mb", 50))
+        robot_avatar_mode = str(hospice.get("robot_avatar_mode", "sprite")).lower()
+        if robot_avatar_mode not in {"video", "sprite"}:
+            robot_avatar_mode = "sprite"
         return web.json_response(
             {
                 "upload_max_mb": max_mb,
                 "enable_patient_wakeup": wakeup["enabled"],
                 "patient_wakeup": wakeup,
+                "robot_avatar_mode": robot_avatar_mode,
             },
             headers=self._cors_headers(),
         )

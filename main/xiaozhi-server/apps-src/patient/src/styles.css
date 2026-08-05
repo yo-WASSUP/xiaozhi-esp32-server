@@ -1424,6 +1424,20 @@ a:focus-visible {
   filter: drop-shadow(0 20px 28px rgba(67, 53, 33, .13));
 }
 
+.robot-avatar__figure--video {
+  inset: 0;
+}
+
+.robot-avatar__video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  pointer-events: none;
+  user-select: none;
+}
+
 .robot-avatar__halo {
   position: absolute;
   inset: 14px -16px 4px;
@@ -1968,8 +1982,8 @@ a:focus-visible {
   transform-origin: 50% 94%;
 }
 
-.robot-avatar--sprite:not([class*="robot-avatar--gesture-"]) .robot-avatar__head,
-.robot-avatar--sprite:not([class*="robot-avatar--gesture-"]) .robot-avatar__arm {
+.robot-avatar--sprite .robot-avatar__head,
+.robot-avatar--sprite .robot-avatar__arm {
   animation: none;
 }
 
@@ -2094,16 +2108,16 @@ a:focus-visible {
 }
 
 .robot-avatar--sprite .robot-avatar__arm--left {
-  left: 0;
+  left: 10px;
   right: auto;
-  transform: rotate(2deg);
+  transform: rotate(0deg);
   transform-origin: 69% 5%;
 }
 
 .robot-avatar--sprite .robot-avatar__arm--right {
-  right: 0;
+  right: 10px;
   left: auto;
-  transform: rotate(-2deg);
+  transform: rotate(0deg);
   transform-origin: 31% 5%;
 }
 
@@ -2158,8 +2172,16 @@ a:focus-visible {
   animation: robotGestureWaveLeft 1.5s cubic-bezier(.35, 0, .2, 1) 1;
 }
 
+.robot-avatar--gesture-wave-left .robot-avatar__head {
+  animation: robotGestureWaveHeadLeft 1.5s cubic-bezier(.3, 0, .2, 1) 1;
+}
+
 .robot-avatar--gesture-wave-right .robot-avatar__arm--right {
   animation: robotGestureWaveRight 1.5s cubic-bezier(.35, 0, .2, 1) 1;
+}
+
+.robot-avatar--gesture-wave-right .robot-avatar__head {
+  animation: robotGestureWaveHeadRight 1.5s cubic-bezier(.3, 0, .2, 1) 1;
 }
 
 .robot-avatar--gesture-open-arms .robot-avatar__arm--left {
@@ -2198,8 +2220,8 @@ a:focus-visible {
 }
 
 @keyframes robotGestureGreetLeftArm {
-  0%, 100% { transform: rotate(2deg); }
-  35%, 65% { transform: rotate(12deg); }
+  0%, 100% { transform: rotate(0deg); }
+  35%, 65% { transform: rotate(6deg); }
 }
 
 @keyframes robotGestureTiltLeft {
@@ -2217,13 +2239,13 @@ a:focus-visible {
 }
 
 @keyframes robotGestureTiltArmLeft {
-  0%, 100% { transform: rotate(2deg); }
-  38%, 64% { transform: rotate(19deg); }
+  0%, 100% { transform: rotate(0deg); }
+  38%, 64% { transform: rotate(9deg); }
 }
 
 @keyframes robotGestureTiltArmRight {
-  0%, 100% { transform: rotate(-2deg); }
-  38%, 64% { transform: rotate(-19deg); }
+  0%, 100% { transform: rotate(0deg); }
+  38%, 64% { transform: rotate(-9deg); }
 }
 
 @keyframes robotGestureNod {
@@ -2240,36 +2262,48 @@ a:focus-visible {
 
 @keyframes robotGestureArmBounce {
   0%, 100% { transform: rotate(0); }
-  42% { transform: rotate(10deg); }
-  68% { transform: rotate(-4deg); }
+  42% { transform: rotate(5deg); }
+  68% { transform: rotate(-2deg); }
 }
 
 @keyframes robotGestureWaveLeft {
-  0%, 100% { transform: rotate(2deg); }
-  20% { transform: rotate(58deg); }
-  38% { transform: rotate(31deg); }
-  55% { transform: rotate(64deg); }
-  72% { transform: rotate(30deg); }
-  86% { transform: rotate(54deg); }
+  0%, 100% { transform: rotate(0deg); }
+  20% { transform: rotate(28deg); }
+  38% { transform: rotate(17deg); }
+  55% { transform: rotate(32deg); }
+  72% { transform: rotate(16deg); }
+  86% { transform: rotate(26deg); }
 }
 
 @keyframes robotGestureWaveRight {
-  0%, 100% { transform: rotate(-2deg); }
-  20% { transform: rotate(-58deg); }
-  38% { transform: rotate(-31deg); }
-  55% { transform: rotate(-64deg); }
-  72% { transform: rotate(-30deg); }
-  86% { transform: rotate(-54deg); }
+  0%, 100% { transform: rotate(0deg); }
+  20% { transform: rotate(-28deg); }
+  38% { transform: rotate(-17deg); }
+  55% { transform: rotate(-32deg); }
+  72% { transform: rotate(-16deg); }
+  86% { transform: rotate(-26deg); }
+}
+
+@keyframes robotGestureWaveHeadLeft {
+  0%, 88%, 100% { transform: translateX(-50%) translateY(0) rotate(0deg); }
+  28%, 56% { transform: translateX(-50%) translate(-1px, 1px) rotate(-2.4deg); }
+  72% { transform: translateX(-50%) translateY(.5px) rotate(-1deg); }
+}
+
+@keyframes robotGestureWaveHeadRight {
+  0%, 88%, 100% { transform: translateX(-50%) translateY(0) rotate(0deg); }
+  28%, 56% { transform: translateX(-50%) translate(1px, 1px) rotate(2.4deg); }
+  72% { transform: translateX(-50%) translateY(.5px) rotate(1deg); }
 }
 
 @keyframes robotGestureOpenLeft {
-  0%, 100% { transform: rotate(2deg); }
-  38%, 68% { transform: rotate(28deg); }
+  0%, 100% { transform: rotate(0deg); }
+  38%, 68% { transform: rotate(12deg); }
 }
 
 @keyframes robotGestureOpenRight {
-  0%, 100% { transform: rotate(-2deg); }
-  38%, 68% { transform: rotate(-28deg); }
+  0%, 100% { transform: rotate(0deg); }
+  38%, 68% { transform: rotate(-12deg); }
 }
 
 @keyframes robotGestureLeanIn {
@@ -2288,13 +2322,13 @@ a:focus-visible {
 }
 
 @keyframes robotGestureTalkArmLeft {
-  0%, 100% { transform: rotate(2deg); }
-  42%, 68% { transform: rotate(21deg); }
+  0%, 100% { transform: rotate(0deg); }
+  42%, 68% { transform: rotate(10deg); }
 }
 
 @keyframes robotGestureTalkArmRight {
-  0%, 100% { transform: rotate(-2deg); }
-  42%, 68% { transform: rotate(-21deg); }
+  0%, 100% { transform: rotate(0deg); }
+  42%, 68% { transform: rotate(-10deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {
