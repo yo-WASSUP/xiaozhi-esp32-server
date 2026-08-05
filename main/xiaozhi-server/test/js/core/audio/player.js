@@ -18,6 +18,10 @@ export class AudioPlayer {
         this.streamingContext = null;
         this.queue = new BlockingQueue();
         this.isPlaying = false;
+        this.pcmSources = new Set();
+        this.nextPcmPlayAt = 0;
+        this.pcmAnalyser = null;
+        this.pcmAudioContext = null;
     }
 
     // 获取或创建AudioContext
@@ -30,6 +34,18 @@ export class AudioPlayer {
             log('创建音频上下文，采样率: ' + this.SAMPLE_RATE + 'Hz', 'debug');
         }
         return this.audioContext;
+    }
+
+    getPcmAudioContext() {
+        if (!this.pcmAudioContext) {
+            this.pcmAudioContext = new (window.AudioContext || window.webkitAudioContext)({
+                latencyHint: 'interactive'
+            });
+        }
+        if (this.pcmAudioContext.state === 'suspended') {
+            this.pcmAudioContext.resume().catch(() => {});
+        }
+        return this.pcmAudioContext;
     }
 
     // 初始化Opus解码器
@@ -232,6 +248,58 @@ export class AudioPlayer {
         }
     }
 
+    enqueuePcmData(pcmData, sampleRate = 24000) {
+        if (!pcmData?.byteLength) return;
+        const audioContext = this.getPcmAudioContext();
+        const frameCount = Math.floor(pcmData.byteLength / 2);
+        if (!frameCount) return;
+
+        const view = new DataView(
+            pcmData.buffer,
+            pcmData.byteOffset,
+            pcmData.byteLength
+        );
+        const audioBuffer = audioContext.createBuffer(1, frameCount, sampleRate);
+        const channel = audioBuffer.getChannelData(0);
+        for (let index = 0; index < frameCount; index += 1) {
+            channel[index] = view.getInt16(index * 2, true) / 32768;
+        }
+
+        const source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        if (!this.pcmAnalyser) {
+            this.pcmAnalyser = audioContext.createAnalyser();
+            this.pcmAnalyser.fftSize = 2048;
+            this.pcmAnalyser.connect(audioContext.destination);
+        }
+        source.connect(this.pcmAnalyser);
+        const startAt = Math.max(
+            audioContext.currentTime + 0.012,
+            this.nextPcmPlayAt
+        );
+        source.start(startAt);
+        this.nextPcmPlayAt = startAt + audioBuffer.duration;
+        this.pcmSources.add(source);
+        source.onended = () => this.pcmSources.delete(source);
+    }
+
+    getPcmQueuedMs() {
+        if (!this.pcmAudioContext) return 0;
+        return Math.max(0, (this.nextPcmPlayAt - this.pcmAudioContext.currentTime) * 1000);
+    }
+
+    getAnalyser() {
+        return this.pcmAnalyser || this.streamingContext?.getAnalyser?.() || null;
+    }
+
+    clearPcmAudio() {
+        for (const source of this.pcmSources) {
+            try { source.stop(); } catch (_) { /* already ended */ }
+        }
+        this.pcmSources.clear();
+        this.nextPcmPlayAt = this.pcmAudioContext?.currentTime || 0;
+    }
+
     // 预加载解码器
     async preload() {
         log('预加载Opus解码器...', 'info');
@@ -281,6 +349,7 @@ export class AudioPlayer {
         if (this.streamingContext) {
             this.streamingContext.clearAllBuffers();
         }
+        this.clearPcmAudio();
 
         log('AudioPlayer: 音频已清空', 'success');
     }

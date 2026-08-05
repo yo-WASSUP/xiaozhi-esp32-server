@@ -21,6 +21,7 @@ export class WebSocketHandler {
         this.onVoiceModeChange = null; // 语音管线切换或服务端降级
         this.currentSessionId = null;
         this.isRemoteSpeaking = false;
+        this.ttsStopTimer = null;
     }
 
     // 发送hello握手消息
@@ -37,6 +38,12 @@ export class WebSocketHandler {
                 device_mac: config.deviceMac,
                 token: config.token,
                 voice_mode: config.voiceMode,
+                audio_params: {
+                    format: config.voiceMode === 'doubao_s2s' ? 'pcm' : 'opus',
+                    sample_rate: 16000,
+                    channels: 1,
+                    frame_duration: config.voiceMode === 'doubao_s2s' ? 20 : 60,
+                },
                 features: {
                     mcp: true
                 }
@@ -171,6 +178,10 @@ export class WebSocketHandler {
     // 处理TTS消息
     handleTTSMessage(message) {
         if (message.state === 'start') {
+            if (this.ttsStopTimer) {
+                clearTimeout(this.ttsStopTimer);
+                this.ttsStopTimer = null;
+            }
             log('服务器开始发送语音', 'info');
             this.currentSessionId = message.session_id;
             this.isRemoteSpeaking = true;
@@ -203,25 +214,28 @@ export class WebSocketHandler {
 
             // 句子结束时不清除动画，等待下一个句子或最终停止
         } else if (message.state === 'stop') {
-            log('服务器语音传输结束，清空所有音频缓冲', 'info');
-
-            // 清空所有音频缓冲并停止播放
             const audioPlayer = getAudioPlayer();
-            audioPlayer.clearAllAudio();
-
-            this.isRemoteSpeaking = false;
-            if (this.onRecordButtonStateChange) {
-                this.onRecordButtonStateChange(false);
+            if (!message.drain) {
+                audioPlayer.clearAllAudio();
             }
-            if (this.onSessionStateChange) {
-                this.onSessionStateChange(false);
-            }
-
-            // 延迟停止Live2D说话动画，确保所有句子都播放完毕
-            setTimeout(() => {
+            const finish = () => {
+                this.ttsStopTimer = null;
+                this.isRemoteSpeaking = false;
+                if (this.onRecordButtonStateChange) {
+                    this.onRecordButtonStateChange(false);
+                }
+                if (this.onSessionStateChange) {
+                    this.onSessionStateChange(false);
+                }
                 this.stopLive2DTalking();
-                this.ttsSentenceCount = 0; // 重置计数器
-            }, 1000); // 1秒延迟，确保所有句子都完成
+                this.ttsSentenceCount = 0;
+            };
+            const drainMs = message.drain ? audioPlayer.getPcmQueuedMs() : 0;
+            if (drainMs > 20) {
+                this.ttsStopTimer = setTimeout(finish, drainMs + 20);
+            } else {
+                finish();
+            }
         }
     }
 
@@ -364,7 +378,12 @@ export class WebSocketHandler {
 
             const opusData = new Uint8Array(arrayBuffer);
             const audioPlayer = getAudioPlayer();
-            audioPlayer.enqueueAudioData(opusData);
+            const voiceMode = document.getElementById('voiceMode')?.value || 'cascade';
+            if (voiceMode === 'doubao_s2s') {
+                audioPlayer.enqueuePcmData(opusData, 24000);
+            } else {
+                audioPlayer.enqueueAudioData(opusData);
+            }
         } catch (error) {
             log(`处理二进制消息出错: ${error.message}`, 'error');
         }
@@ -392,6 +411,9 @@ export class WebSocketHandler {
 
             // 设置录音器的WebSocket
             const audioRecorder = getAudioRecorder();
+            audioRecorder.setAudioFormat(
+                config.voiceMode === 'doubao_s2s' ? 'pcm' : 'opus'
+            );
             audioRecorder.setWebSocket(this.websocket);
 
             this.setupEventHandlers();

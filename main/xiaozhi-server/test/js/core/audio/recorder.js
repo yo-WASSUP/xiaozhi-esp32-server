@@ -21,6 +21,7 @@ export class AudioRecorder {
         this.recordingTimer = null;
         this.websocket = null;
         this.selectedDeviceId = null; // 选中的麦克风设备ID
+        this.audioFormat = 'opus';
         // Callback functions
         this.onRecordingStart = null;
         this.onRecordingStop = null;
@@ -77,6 +78,14 @@ export class AudioRecorder {
         this.websocket = ws;
     }
 
+    setAudioFormat(format) {
+        this.audioFormat = format === 'pcm' ? 'pcm' : 'opus';
+    }
+
+    getFrameSize() {
+        return this.audioFormat === 'pcm' ? 320 : 960;
+    }
+
     // Get AudioContext instance
     getAudioContext() {
         return getAudioPlayer().getAudioContext();
@@ -92,12 +101,13 @@ export class AudioRecorder {
 
     // PCM processor code
     getAudioProcessorCode() {
+        const frameSize = this.getFrameSize();
         return `
             class AudioRecorderProcessor extends AudioWorkletProcessor {
                 constructor() {
                     super();
                     this.buffers = [];
-                    this.frameSize = 960;
+                    this.frameSize = ${frameSize};
                     this.buffer = new Int16Array(this.frameSize);
                     this.bufferIndex = 0;
                     this.isRecording = false;
@@ -198,12 +208,22 @@ export class AudioRecorder {
         newBuffer.set(this.pcmDataBuffer);
         newBuffer.set(buffer, this.pcmDataBuffer.length);
         this.pcmDataBuffer = newBuffer;
-        const samplesPerFrame = 960;
+        const samplesPerFrame = this.getFrameSize();
         while (this.pcmDataBuffer.length >= samplesPerFrame) {
             const frameData = this.pcmDataBuffer.slice(0, samplesPerFrame);
             this.pcmDataBuffer = this.pcmDataBuffer.slice(samplesPerFrame);
-            this.encodeAndSendOpus(frameData);
+            if (this.audioFormat === 'pcm') {
+                this.sendPcmFrame(frameData);
+            } else {
+                this.encodeAndSendOpus(frameData);
+            }
         }
+    }
+
+    sendPcmFrame(pcmData) {
+        if (!this.websocket || this.websocket.readyState !== WebSocket.OPEN) return;
+        const frame = pcmData.slice();
+        this.websocket.send(frame.buffer);
     }
 
     // Encode and send Opus data
@@ -261,7 +281,7 @@ export class AudioRecorder {
                     log('已发送中止消息', 'info');
                 }
             }
-            if (!this.initEncoder()) {
+            if (this.audioFormat !== 'pcm' && !this.initEncoder()) {
                 log('无法开始录音: Opus编码器初始化失败', 'error');
                 return false;
             }
@@ -367,7 +387,9 @@ export class AudioRecorder {
                 this.recordingTimer = null;
             }
             // Encode and send remaining data
-            this.encodeAndSendOpus();
+            if (this.audioFormat !== 'pcm') {
+                this.encodeAndSendOpus();
+            }
             // Send end signal
             if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
                 const emptyOpusFrame = new Uint8Array(0);

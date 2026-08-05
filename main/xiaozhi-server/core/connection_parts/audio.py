@@ -97,10 +97,10 @@ class AudioRoutingMixin:
                 and not self.dignity_active
                 and not self.conn_from_mqtt_gateway
             ):
-                from core.handle.receiveAudioHandle import handle_realtime_barge_in
-
-                await handle_realtime_barge_in(self, message)
-                await self.realtime_voice.send_opus(message)
+                if self.audio_format == "pcm":
+                    await self.realtime_voice.send_pcm(message)
+                else:
+                    await self.realtime_voice.send_opus(message)
                 return
 
             if self.vad is None or self.asr is None:

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import unittest
 from types import SimpleNamespace
@@ -16,7 +17,6 @@ from core.providers.realtime.doubao_s2s import (
     build_event_frame,
     build_system_role,
     clean_realtime_text,
-    has_recognized_speech,
     parse_server_frame,
     split_pcm_frames,
 )
@@ -103,6 +103,50 @@ class DoubaoS2SProtocolTests(unittest.TestCase):
         self.assertEqual(clean_realtime_text(text), "好呀，我会认真听您说的。")
 
 
+class DoubaoS2SPcmBridgeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_browser_pcm_is_queued_without_opus_decode(self):
+        client = DoubaoS2SClient.__new__(DoubaoS2SClient)
+        client.closed = False
+        client.conn = SimpleNamespace(
+            voice_mode="doubao_s2s",
+            last_activity_time=0,
+            logger=SimpleNamespace(
+                bind=lambda **_: SimpleNamespace(warning=lambda *_: None)
+            ),
+        )
+        client.audio_queue = asyncio.Queue(maxsize=4)
+        pcm = bytes(640)
+
+        await client.send_pcm(pcm)
+
+        self.assertIs(await client.audio_queue.get(), pcm)
+
+    async def test_doubao_pcm_is_forwarded_directly_to_browser(self):
+        websocket = AsyncMock()
+        client = DoubaoS2SClient.__new__(DoubaoS2SClient)
+        client.conn = SimpleNamespace(client_abort=False, websocket=websocket)
+        pcm = b"\x01\x02" * 320
+
+        await client._send_pcm(pcm, end_of_stream=False)
+
+        websocket.send.assert_awaited_once_with(pcm)
+
+    async def test_finished_response_tells_browser_to_drain_pcm(self):
+        websocket = AsyncMock()
+        client = DoubaoS2SClient.__new__(DoubaoS2SClient)
+        client.conn = SimpleNamespace(
+            websocket=websocket,
+            session_id="session-1",
+            clearSpeakStatus=lambda: None,
+        )
+
+        await client._finish_client_playback()
+
+        message = json.loads(websocket.send.await_args.args[0])
+        self.assertEqual(message["state"], "stop")
+        self.assertTrue(message["drain"])
+
+
 class DoubaoS2SInterruptTests(unittest.IsolatedAsyncioTestCase):
     async def test_interrupt_is_idempotent_and_stops_client_playback(self):
         client = DoubaoS2SClient.__new__(DoubaoS2SClient)
@@ -119,12 +163,7 @@ class DoubaoS2SInterruptTests(unittest.IsolatedAsyncioTestCase):
         client._stop_client_playback.assert_awaited_once()
         self.assertTrue(client.interrupt_sent)
 
-    def test_recognized_speech_requires_meaningful_characters(self):
-        self.assertFalse(has_recognized_speech(""))
-        self.assertFalse(has_recognized_speech("……，。"))
-        self.assertTrue(has_recognized_speech("嗯"))
-
-    async def test_asr_info_stops_client_playback_without_client_interrupt(self):
+    async def test_asr_info_interrupts_active_response(self):
         frame = build_event_frame(
             MESSAGE_FULL_CLIENT,
             EVENT_ASR_INFO,
@@ -136,7 +175,6 @@ class DoubaoS2SInterruptTests(unittest.IsolatedAsyncioTestCase):
         client.upstream = AsyncFrames(frame)
         client.responding = True
         client.interrupt_sent = False
-        client.asr_active = False
         client.conn = SimpleNamespace(
             client_abort=False,
             logger=SimpleNamespace(
@@ -144,16 +182,14 @@ class DoubaoS2SInterruptTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         client._send_vad = AsyncMock()
-        client._stop_client_playback = AsyncMock()
         client.interrupt = AsyncMock()
 
         await client._receive_loop()
 
         client._send_vad.assert_awaited_once_with(True)
-        client._stop_client_playback.assert_awaited_once()
-        client.interrupt.assert_not_awaited()
+        client.interrupt.assert_awaited_once()
 
-    async def test_asr_info_stops_stale_playback_even_after_upstream_tts_finished(self):
+    async def test_asr_info_clears_buffered_playback_without_interrupt_when_idle(self):
         start_frame = build_event_frame(
             MESSAGE_FULL_CLIENT,
             EVENT_ASR_INFO,
@@ -165,7 +201,6 @@ class DoubaoS2SInterruptTests(unittest.IsolatedAsyncioTestCase):
         client.upstream = AsyncFrames(start_frame)
         client.responding = False
         client.interrupt_sent = False
-        client.asr_active = False
         client.conn = SimpleNamespace(
             client_abort=False,
             logger=SimpleNamespace(
@@ -178,10 +213,11 @@ class DoubaoS2SInterruptTests(unittest.IsolatedAsyncioTestCase):
 
         await client._receive_loop()
 
+        client._send_vad.assert_awaited_once_with(True)
         client._stop_client_playback.assert_awaited_once()
         client.interrupt.assert_not_awaited()
 
-    async def test_nonempty_asr_response_interrupts(self):
+    async def test_asr_response_does_not_duplicate_interrupt(self):
         frame = build_event_frame(
             MESSAGE_FULL_CLIENT,
             EVENT_ASR_RESPONSE,
@@ -201,13 +237,11 @@ class DoubaoS2SInterruptTests(unittest.IsolatedAsyncioTestCase):
             ),
         )
         client._send_vad = AsyncMock()
-        client._stop_client_playback = AsyncMock()
         client.interrupt = AsyncMock()
 
         await client._receive_loop()
 
         client._send_vad.assert_awaited_once_with(True)
-        client._stop_client_playback.assert_awaited_once()
         client.interrupt.assert_not_awaited()
 
     def test_system_role_inherits_patient_prompt_and_locks_identity(self):

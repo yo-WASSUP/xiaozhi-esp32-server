@@ -174,7 +174,7 @@ function startAudioLevelMonitor() {
     if (time - lastAudioLevelUpdate < 66) return;
     lastAudioLevelUpdate = time;
     inputLevel = smoothLevel(inputLevel, readAudioLevel(recorder.getAnalyser?.()));
-    outputLevel = smoothLevel(outputLevel, readAudioLevel(player.streamingContext?.getAnalyser?.()));
+    outputLevel = smoothLevel(outputLevel, readAudioLevel(player.getAnalyser?.()));
     window.dispatchEvent(new CustomEvent('xz:audio-level', {
       detail: { input: inputLevel, output: outputLevel }
     }));
@@ -285,6 +285,7 @@ const realClient = {
     const nextMode = mode === 'cascade' ? 'cascade' : 'doubao_s2s';
     ensureHiddenInput('voiceMode', nextMode);
     localStorage.setItem('xiaonuan_voice_mode', nextMode);
+    recorder.setAudioFormat(nextMode === 'doubao_s2s' ? 'pcm' : 'opus');
     return nextMode;
   },
 

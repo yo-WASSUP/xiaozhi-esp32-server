@@ -13,8 +13,7 @@ from pathlib import Path
 import opuslib_next
 import websockets
 
-from core.handle.sendAudioHandle import sendAudio, send_llm_message, send_tts_message
-from core.utils.opus_encoder_utils import OpusEncoderUtils
+from core.handle.sendAudioHandle import send_llm_message, send_tts_message
 
 
 TAG = __name__
@@ -33,10 +32,6 @@ EMOTION_CONTROL_PATTERN = re.compile(
 
 def clean_realtime_text(text: str) -> str:
     return EMOTION_CONTROL_PATTERN.sub("", str(text or "")).strip()
-
-
-def has_recognized_speech(text: str) -> bool:
-    return bool(re.search(r"[\u3400-\u9fffA-Za-z0-9]", clean_realtime_text(text)))
 
 
 def split_pcm_frames(pcm: bytes, sample_rate: int = 16000, frame_ms: int = 20):
@@ -320,12 +315,10 @@ class DoubaoS2SClient:
         self.audio_queue = asyncio.Queue(maxsize=64)
         self.send_lock = asyncio.Lock()
         self.opus_decoder = opuslib_next.Decoder(self.input_rate, 1)
-        self.opus_encoder = OpusEncoderUtils(self.output_rate, 1, 60)
         self.active = False
         self.closed = False
         self.responding = False
         self.interrupt_sent = False
-        self.asr_active = False
         self.user_text = ""
         self.assistant_chat_text = ""
         self.assistant_tts_text = ""
@@ -381,7 +374,8 @@ class DoubaoS2SClient:
                         "channel": 1,
                     },
                     "extra": {
-                        "enable_custom_vad": False,
+                        "end_smooth_window_ms": self.end_smooth_window_ms,
+                        "enable_custom_vad": True,
                         "enable_asr_twopass": False,
                     },
                 },
@@ -469,6 +463,21 @@ class DoubaoS2SClient:
             self.conn.logger.bind(tag=TAG).warning(f"患者端 Opus 解码失败: {exc}")
             return
         self.conn.last_activity_time = time.time() * 1000
+        for frame in split_pcm_frames(pcm, self.input_rate, 20):
+            self._queue_input_pcm(frame)
+
+    async def send_pcm(self, pcm: bytes):
+        if self.closed or self.conn.voice_mode != "doubao_s2s" or not pcm:
+            return
+        if len(pcm) % 2:
+            self.conn.logger.bind(tag=TAG).warning(
+                f"患者端 PCM16 字节数无效: {len(pcm)}"
+            )
+            return
+        self.conn.last_activity_time = time.time() * 1000
+        self._queue_input_pcm(pcm)
+
+    def _queue_input_pcm(self, pcm: bytes):
         try:
             self.audio_queue.put_nowait(pcm)
         except asyncio.QueueFull:
@@ -488,30 +497,17 @@ class DoubaoS2SClient:
         await self._stop_client_playback()
 
     async def _send_audio_loop(self):
-        next_send_at = time.monotonic()
         while not self.closed:
             audio = await self.audio_queue.get()
-            for frame in split_pcm_frames(audio, self.input_rate, 20):
-                next_send_at = max(next_send_at, time.monotonic())
-                delay = next_send_at - time.monotonic()
-                if delay > 0:
-                    await asyncio.sleep(delay)
-                await self._send_frame(
-                    build_event_frame(
-                        MESSAGE_AUDIO_CLIENT,
-                        EVENT_TASK_AUDIO,
-                        self.session_id,
-                        frame,
-                        SERIALIZATION_NONE,
-                    )
+            await self._send_frame(
+                build_event_frame(
+                    MESSAGE_AUDIO_CLIENT,
+                    EVENT_TASK_AUDIO,
+                    self.session_id,
+                    audio,
+                    SERIALIZATION_NONE,
                 )
-                next_send_at += 0.02
-
-    async def _handle_server_barge_in(self, source: str):
-        if getattr(self.conn, "client_abort", False):
-            return
-        self.conn.logger.bind(tag=TAG).info(f"豆包{source}确认用户开口，停止客户端播报")
-        await self._stop_client_playback()
+            )
 
     async def _receive_loop(self):
         async for raw_message in self.upstream:
@@ -526,19 +522,19 @@ class DoubaoS2SClient:
             event = frame.event
 
             if event == EVENT_ASR_INFO:
-                self.asr_active = True
                 await self._send_vad(True)
-                await self._handle_server_barge_in("ASRInfo")
+                if self.responding and not self.interrupt_sent:
+                    self.conn.logger.bind(tag=TAG).info(
+                        "豆包ASRInfo确认用户开口，立即打断当前回答"
+                    )
+                    await self.interrupt()
+                elif not self.responding:
+                    await self._stop_client_playback()
             elif event == EVENT_ASR_RESPONSE:
                 self.user_text = self._latest_hypothesis(self.user_text, text)
                 await self._send_vad(True)
-                if has_recognized_speech(text):
-                    await self._handle_server_barge_in("ASRResponse")
             elif event == EVENT_ASR_ENDED:
                 self.user_text = self._latest_hypothesis(self.user_text, text)
-                if has_recognized_speech(text):
-                    await self._handle_server_barge_in("ASREnded")
-                self.asr_active = False
                 await self._send_vad(False)
                 if self.user_text:
                     await self._send_text("stt", self.user_text)
@@ -552,8 +548,8 @@ class DoubaoS2SClient:
                 self.assistant_finalized = False
                 self.assistant_sent_text = ""
                 self.conn.client_abort = False
+                self.conn.client_is_speaking = True
                 self.conn.sentence_id = uuid.uuid4().hex
-                self.opus_encoder.reset_state()
                 await send_tts_message(self.conn, "start")
             elif event == EVENT_TTS_AUDIO:
                 audio = frame.payload
@@ -578,27 +574,34 @@ class DoubaoS2SClient:
                     )
                 await self._finalize_assistant_text()
             elif event == EVENT_TTS_FINISHED:
-                if self.conn.client_abort:
-                    self.opus_encoder.reset_state()
-                else:
-                    await self._send_pcm(b"", end_of_stream=True)
                 await self._finalize_assistant_text()
                 self.responding = False
-                await send_tts_message(self.conn, "stop")
+                if self.conn.client_abort:
+                    self.conn.clearSpeakStatus()
+                else:
+                    await self._finish_client_playback()
             elif event == EVENT_SESSION_FAILED:
                 raise frame_error(frame)
 
     async def _send_pcm(self, pcm: bytes, end_of_stream: bool):
-        if self.conn.client_abort and not end_of_stream:
+        del end_of_stream
+        if self.conn.client_abort:
             return
-        opus_packets = []
-        self.opus_encoder.encode_pcm_to_opus_stream(
-            pcm,
-            end_of_stream=end_of_stream,
-            callback=opus_packets.append,
+        if pcm:
+            await self.conn.websocket.send(pcm)
+
+    async def _finish_client_playback(self):
+        await self.conn.websocket.send(
+            json.dumps(
+                {
+                    "type": "tts",
+                    "state": "stop",
+                    "drain": True,
+                    "session_id": self.conn.session_id,
+                }
+            )
         )
-        if opus_packets:
-            await sendAudio(self.conn, opus_packets, frame_duration=60)
+        self.conn.clearSpeakStatus()
 
     async def _finalize_assistant_text(self):
         clean_text = self._select_display_text(
@@ -756,4 +759,3 @@ class DoubaoS2SClient:
             except Exception:
                 pass
             self.upstream = None
-        self.opus_encoder.close()

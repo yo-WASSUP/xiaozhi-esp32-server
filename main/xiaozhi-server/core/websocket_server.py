@@ -89,6 +89,7 @@ class WebSocketServer:
             port,
             process_request=self._http_response,
             ssl=ssl_context,
+            compression=None,
         ):
             await asyncio.Future()
 
