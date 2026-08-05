@@ -8,6 +8,29 @@ from core.utils.output_counter import check_device_output_limit
 from core.handle.sendAudioHandle import send_stt_message, SentenceType
 
 TAG = __name__
+BARGE_IN_CONFIRM_SECONDS = 0.5
+
+
+def is_barge_in_confirmed(conn, have_voice, now=None):
+    if not conn.client_is_speaking or conn.client_listen_mode == "manual":
+        conn.barge_in_voice_started_at = None
+        return False
+
+    if not have_voice:
+        conn.barge_in_voice_started_at = None
+        return False
+
+    current_time = time.monotonic() if now is None else now
+    started_at = getattr(conn, "barge_in_voice_started_at", None)
+    if started_at is None:
+        conn.barge_in_voice_started_at = current_time
+        return False
+
+    if current_time - started_at < BARGE_IN_CONFIRM_SECONDS:
+        return False
+
+    conn.barge_in_voice_started_at = None
+    return True
 
 
 async def handleAudioMessage(conn, audio):
@@ -21,14 +44,29 @@ async def handleAudioMessage(conn, audio):
             conn.vad_resume_task = asyncio.create_task(resume_vad_detection(conn))
         return
     await send_vad_state_if_changed(conn, have_voice)
-    # manual 模式下不打断正在播放的内容
-    if have_voice:
-        if conn.client_is_speaking and conn.client_listen_mode != "manual":
-            await handleAbortMessage(conn)
+    if is_barge_in_confirmed(conn, have_voice):
+        await handleAbortMessage(conn)
     # 设备长时间空闲检测，用于say goodbye
     await no_voice_close_connect(conn, have_voice)
     # 接收音频
     await conn.asr.receive_audio(conn, audio, have_voice)
+
+
+async def handle_realtime_barge_in(conn, audio):
+    """Use the configured server VAD to interrupt realtime playback."""
+    if conn.vad is None:
+        return False
+
+    have_voice = bool(conn.vad.is_vad(conn, audio))
+    await send_vad_state_if_changed(conn, have_voice)
+    if not is_barge_in_confirmed(conn, have_voice):
+        return False
+
+    conn.logger.bind(tag=TAG).info(
+        f"本地VAD持续{BARGE_IN_CONFIRM_SECONDS:.1f}秒，触发端到端打断"
+    )
+    await handleAbortMessage(conn)
+    return True
 
 
 async def send_vad_state_if_changed(conn, have_voice):

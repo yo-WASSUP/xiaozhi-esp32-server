@@ -4,18 +4,46 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from core.providers.realtime.doubao_s2s import (
+    EVENT_ASR_INFO,
+    EVENT_ASR_ENDED,
+    EVENT_ASR_RESPONSE,
     EVENT_TTS_AUDIO,
     MESSAGE_AUDIO_SERVER,
+    MESSAGE_FULL_CLIENT,
+    SERIALIZATION_JSON,
     SERIALIZATION_NONE,
     DoubaoS2SClient,
     build_event_frame,
     build_system_role,
     clean_realtime_text,
+    has_recognized_speech,
     parse_server_frame,
+    split_pcm_frames,
 )
 
 
+class AsyncFrames:
+    def __init__(self, *frames):
+        self.frames = iter(frames)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        try:
+            return next(self.frames)
+        except StopIteration as exc:
+            raise StopAsyncIteration from exc
+
+
 class DoubaoS2SProtocolTests(unittest.TestCase):
+    def test_pcm_is_split_into_official_20ms_packets(self):
+        pcm = bytes(16000 * 2 * 60 // 1000)
+
+        frames = split_pcm_frames(pcm)
+
+        self.assertEqual([len(frame) for frame in frames], [640, 640, 640])
+
     def test_audio_event_round_trip(self):
         payload = b"\x01\x02\x03\x04"
         frame = build_event_frame(
@@ -90,6 +118,97 @@ class DoubaoS2SInterruptTests(unittest.IsolatedAsyncioTestCase):
         client._send_frame.assert_awaited_once()
         client._stop_client_playback.assert_awaited_once()
         self.assertTrue(client.interrupt_sent)
+
+    def test_recognized_speech_requires_meaningful_characters(self):
+        self.assertFalse(has_recognized_speech(""))
+        self.assertFalse(has_recognized_speech("……，。"))
+        self.assertTrue(has_recognized_speech("嗯"))
+
+    async def test_asr_info_stops_client_playback_without_client_interrupt(self):
+        frame = build_event_frame(
+            MESSAGE_FULL_CLIENT,
+            EVENT_ASR_INFO,
+            "session-1",
+            b"{}",
+            SERIALIZATION_JSON,
+        )
+        client = DoubaoS2SClient.__new__(DoubaoS2SClient)
+        client.upstream = AsyncFrames(frame)
+        client.responding = True
+        client.interrupt_sent = False
+        client.asr_active = False
+        client.conn = SimpleNamespace(
+            client_abort=False,
+            logger=SimpleNamespace(
+                bind=lambda **_: SimpleNamespace(info=lambda *_: None)
+            )
+        )
+        client._send_vad = AsyncMock()
+        client._stop_client_playback = AsyncMock()
+        client.interrupt = AsyncMock()
+
+        await client._receive_loop()
+
+        client._send_vad.assert_awaited_once_with(True)
+        client._stop_client_playback.assert_awaited_once()
+        client.interrupt.assert_not_awaited()
+
+    async def test_asr_info_stops_stale_playback_even_after_upstream_tts_finished(self):
+        start_frame = build_event_frame(
+            MESSAGE_FULL_CLIENT,
+            EVENT_ASR_INFO,
+            "session-1",
+            b"{}",
+            SERIALIZATION_JSON,
+        )
+        client = DoubaoS2SClient.__new__(DoubaoS2SClient)
+        client.upstream = AsyncFrames(start_frame)
+        client.responding = False
+        client.interrupt_sent = False
+        client.asr_active = False
+        client.conn = SimpleNamespace(
+            client_abort=False,
+            logger=SimpleNamespace(
+                bind=lambda **_: SimpleNamespace(info=lambda *_: None)
+            ),
+        )
+        client._send_vad = AsyncMock()
+        client._stop_client_playback = AsyncMock()
+        client.interrupt = AsyncMock()
+
+        await client._receive_loop()
+
+        client._stop_client_playback.assert_awaited_once()
+        client.interrupt.assert_not_awaited()
+
+    async def test_nonempty_asr_response_interrupts(self):
+        frame = build_event_frame(
+            MESSAGE_FULL_CLIENT,
+            EVENT_ASR_RESPONSE,
+            "session-1",
+            json.dumps({"text": "请停一下"}).encode("utf-8"),
+            SERIALIZATION_JSON,
+        )
+        client = DoubaoS2SClient.__new__(DoubaoS2SClient)
+        client.upstream = AsyncFrames(frame)
+        client.responding = True
+        client.interrupt_sent = False
+        client.user_text = ""
+        client.conn = SimpleNamespace(
+            client_abort=False,
+            logger=SimpleNamespace(
+                bind=lambda **_: SimpleNamespace(info=lambda *_: None)
+            ),
+        )
+        client._send_vad = AsyncMock()
+        client._stop_client_playback = AsyncMock()
+        client.interrupt = AsyncMock()
+
+        await client._receive_loop()
+
+        client._send_vad.assert_awaited_once_with(True)
+        client._stop_client_playback.assert_awaited_once()
+        client.interrupt.assert_not_awaited()
 
     def test_system_role_inherits_patient_prompt_and_locks_identity(self):
         role = build_system_role(

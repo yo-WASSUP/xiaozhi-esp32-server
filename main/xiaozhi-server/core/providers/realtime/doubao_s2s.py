@@ -35,6 +35,18 @@ def clean_realtime_text(text: str) -> str:
     return EMOTION_CONTROL_PATTERN.sub("", str(text or "")).strip()
 
 
+def has_recognized_speech(text: str) -> bool:
+    return bool(re.search(r"[\u3400-\u9fffA-Za-z0-9]", clean_realtime_text(text)))
+
+
+def split_pcm_frames(pcm: bytes, sample_rate: int = 16000, frame_ms: int = 20):
+    frame_bytes = sample_rate * frame_ms // 1000 * 2
+    return [
+        pcm[offset : offset + frame_bytes]
+        for offset in range(0, len(pcm), frame_bytes)
+    ]
+
+
 def build_system_role(connection_prompt: str, configured_role: str) -> str:
     parts = [
         str(connection_prompt or "").strip(),
@@ -313,6 +325,7 @@ class DoubaoS2SClient:
         self.closed = False
         self.responding = False
         self.interrupt_sent = False
+        self.asr_active = False
         self.user_text = ""
         self.assistant_chat_text = ""
         self.assistant_tts_text = ""
@@ -368,8 +381,7 @@ class DoubaoS2SClient:
                         "channel": 1,
                     },
                     "extra": {
-                        "end_smooth_window_ms": self.end_smooth_window_ms,
-                        "enable_custom_vad": True,
+                        "enable_custom_vad": False,
                         "enable_asr_twopass": False,
                     },
                 },
@@ -476,17 +488,30 @@ class DoubaoS2SClient:
         await self._stop_client_playback()
 
     async def _send_audio_loop(self):
+        next_send_at = time.monotonic()
         while not self.closed:
             audio = await self.audio_queue.get()
-            await self._send_frame(
-                build_event_frame(
-                    MESSAGE_AUDIO_CLIENT,
-                    EVENT_TASK_AUDIO,
-                    self.session_id,
-                    audio,
-                    SERIALIZATION_NONE,
+            for frame in split_pcm_frames(audio, self.input_rate, 20):
+                next_send_at = max(next_send_at, time.monotonic())
+                delay = next_send_at - time.monotonic()
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                await self._send_frame(
+                    build_event_frame(
+                        MESSAGE_AUDIO_CLIENT,
+                        EVENT_TASK_AUDIO,
+                        self.session_id,
+                        frame,
+                        SERIALIZATION_NONE,
+                    )
                 )
-            )
+                next_send_at += 0.02
+
+    async def _handle_server_barge_in(self, source: str):
+        if getattr(self.conn, "client_abort", False):
+            return
+        self.conn.logger.bind(tag=TAG).info(f"豆包{source}确认用户开口，停止客户端播报")
+        await self._stop_client_playback()
 
     async def _receive_loop(self):
         async for raw_message in self.upstream:
@@ -501,18 +526,19 @@ class DoubaoS2SClient:
             event = frame.event
 
             if event == EVENT_ASR_INFO:
+                self.asr_active = True
                 await self._send_vad(True)
-                if self.responding and not self.interrupt_sent:
-                    await self.interrupt()
+                await self._handle_server_barge_in("ASRInfo")
             elif event == EVENT_ASR_RESPONSE:
                 self.user_text = self._latest_hypothesis(self.user_text, text)
                 await self._send_vad(True)
-                if text and self.responding and not self.interrupt_sent:
-                    await self.interrupt()
+                if has_recognized_speech(text):
+                    await self._handle_server_barge_in("ASRResponse")
             elif event == EVENT_ASR_ENDED:
                 self.user_text = self._latest_hypothesis(self.user_text, text)
-                if text and self.responding and not self.interrupt_sent:
-                    await self.interrupt()
+                if has_recognized_speech(text):
+                    await self._handle_server_barge_in("ASREnded")
+                self.asr_active = False
                 await self._send_vad(False)
                 if self.user_text:
                     await self._send_text("stt", self.user_text)
@@ -520,6 +546,7 @@ class DoubaoS2SClient:
                 self.interrupt_sent = False
             elif event == EVENT_TTS_STARTED:
                 self.responding = True
+                self.interrupt_sent = False
                 self.assistant_chat_text = ""
                 self.assistant_tts_text = ""
                 self.assistant_finalized = False

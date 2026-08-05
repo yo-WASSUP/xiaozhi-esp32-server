@@ -97,6 +97,9 @@ class AudioRoutingMixin:
                 and not self.dignity_active
                 and not self.conn_from_mqtt_gateway
             ):
+                from core.handle.receiveAudioHandle import handle_realtime_barge_in
+
+                await handle_realtime_barge_in(self, message)
                 await self.realtime_voice.send_opus(message)
                 return
 
@@ -178,6 +181,7 @@ class AudioRoutingMixin:
 
     def clearSpeakStatus(self):
         self.client_is_speaking = False
+        self.barge_in_voice_started_at = None
         self.logger.bind(tag=TAG).debug(f"清除服务端讲话状态")
 
     def reset_audio_states(self):
@@ -190,6 +194,7 @@ class AudioRoutingMixin:
         self.client_voice_stop = False
         self.client_voice_window.clear()
         self.last_is_voice = False
+        self.barge_in_voice_started_at = None
 
         # Clear ASR buffers
         self.asr_audio.clear()

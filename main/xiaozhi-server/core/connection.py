@@ -112,6 +112,7 @@ class ConnectionHandler(
         self.client_audio_buffer = bytearray()
         self.client_have_voice = False
         self.client_voice_window = deque(maxlen=5)
+        self.barge_in_voice_started_at = None
         self.first_activity_time = 0.0  # 记录首次活动的时间（毫秒）
         self.last_activity_time = 0.0  # 统一的活动时间戳（毫秒）
         self.client_voice_stop = False

@@ -118,7 +118,6 @@ let audioLevelFrame = null;
 let lastAudioLevelUpdate = 0;
 let inputLevel = 0;
 let outputLevel = 0;
-let bargeInFrames = 0;
 let lastInterruptAt = 0;
 const analyserBuffers = new WeakMap();
 const MICROPHONE_STORAGE_KEY = 'xiaonuan_microphone_device_id';
@@ -148,7 +147,6 @@ function smoothLevel(previous, next) {
 function interruptRemoteSpeech(reason = 'user_speech', force = false) {
   const now = Date.now();
   player.clearAllAudio();
-  bargeInFrames = 0;
   if ((!isRemoteSpeaking && !force) || now - lastInterruptAt < 800) return false;
   const websocket = wsHandler.getWebSocket?.();
   if (!websocket || websocket.readyState !== WebSocket.OPEN) return false;
@@ -177,19 +175,6 @@ function startAudioLevelMonitor() {
     lastAudioLevelUpdate = time;
     inputLevel = smoothLevel(inputLevel, readAudioLevel(recorder.getAnalyser?.()));
     outputLevel = smoothLevel(outputLevel, readAudioLevel(player.streamingContext?.getAnalyser?.()));
-    const speechThreshold = Math.max(0.18, outputLevel * 0.3);
-    if (
-      isRemoteSpeaking
-      && recorder.isRecording
-      && inputLevel >= speechThreshold
-    ) {
-      bargeInFrames += 1;
-      if (bargeInFrames >= 3) {
-        interruptRemoteSpeech('local_voice_activity');
-      }
-    } else {
-      bargeInFrames = 0;
-    }
     window.dispatchEvent(new CustomEvent('xz:audio-level', {
       detail: { input: inputLevel, output: outputLevel }
     }));
@@ -228,7 +213,6 @@ wsHandler.onConnectionStateChange = (connected) => {
 
 wsHandler.onSessionStateChange = (speaking) => {
   isRemoteSpeaking = speaking;
-  if (!speaking) bargeInFrames = 0;
   window.dispatchEvent(new CustomEvent('xz:state', {
     detail: { state: speaking ? 'speaking' : 'idle' }
   }));
