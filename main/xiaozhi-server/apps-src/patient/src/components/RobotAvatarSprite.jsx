@@ -166,7 +166,7 @@ export default function RobotAvatarSprite({ state = 'idle', outputLevel = 0 }) {
         '--mouth-border-alpha': mouthOpen * 0.9,
       }}
       role="img"
-      aria-label="熊猫陪伴机器人小暖"
+      aria-label="熊猫陪伴机器人安安"
     >
       <div className="robot-avatar__halo" />
       <div className="robot-avatar__orbit robot-avatar__orbit--outer" />

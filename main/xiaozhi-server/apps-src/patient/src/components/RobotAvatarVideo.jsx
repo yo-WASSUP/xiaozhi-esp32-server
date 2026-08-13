@@ -1,8 +1,8 @@
 import { C } from '../theme';
-import pandaIdleVideo from '../../panda-video/panda-9267-idle.webm';
-import pandaWaveVideo from '../../panda-video/panda-9267-wave.webm';
-import pandaSpeakingVideo from '../../panda-video/panda-9267-speaking.webm';
-import pandaPoster from '../../panda-video/panda-9267-poster.png';
+import pandaIdleVideo from '../../panda-video/panda-7793-idle.webm';
+import pandaListeningVideo from '../../panda-video/panda-7793-listening.webm';
+import pandaSpeakingVideo from '../../panda-video/panda-7793-speaking.webm';
+import pandaPoster from '../../panda-video/panda-7793-poster.png';
 
 const STATE_CONFIG = {
   idle: { className: 'robot-avatar--idle', glow: C.mist, accent: C.amber },
@@ -13,7 +13,7 @@ const STATE_CONFIG = {
 
 const VIDEO_BY_STATE = {
   idle: { src: pandaIdleVideo, action: 'idle' },
-  listening: { src: pandaWaveVideo, action: 'wave' },
+  listening: { src: pandaListeningVideo, action: 'listening' },
   thinking: { src: pandaIdleVideo, action: 'idle' },
   speaking: { src: pandaSpeakingVideo, action: 'speaking' },
 };
@@ -32,7 +32,7 @@ export default function RobotAvatarVideo({ state = 'idle' }) {
         '--robot-accent': config.accent,
       }}
       role="img"
-      aria-label="熊猫陪伴机器人小暖"
+      aria-label="熊猫陪伴机器人安安"
     >
       <div className="robot-avatar__halo" />
       <div className="robot-avatar__orbit robot-avatar__orbit--outer" />

@@ -78,7 +78,7 @@ if (!clientId) {
 ensureHiddenInput('deviceMac', deviceMac);
 ensureHiddenInput('deviceName', 'patient-app');
 ensureHiddenInput('clientId', clientId);
-const savedVoiceMode = localStorage.getItem('xiaonuan_voice_mode') || 'doubao_s2s';
+const savedVoiceMode = localStorage.getItem('anan_voice_mode') || 'doubao_s2s';
 ensureHiddenInput('voiceMode', savedVoiceMode);
 
 // ── 2. 垫片：stub uiController（原模块里硬引用） ────────
@@ -120,7 +120,7 @@ let inputLevel = 0;
 let outputLevel = 0;
 let lastInterruptAt = 0;
 const analyserBuffers = new WeakMap();
-const MICROPHONE_STORAGE_KEY = 'xiaonuan_microphone_device_id';
+const MICROPHONE_STORAGE_KEY = 'anan_microphone_device_id';
 
 function readAudioLevel(analyser) {
   if (!analyser) return 0;
@@ -218,6 +218,10 @@ wsHandler.onSessionStateChange = (speaking) => {
   }));
 };
 
+wsHandler.onAudioData = (detail = {}) => {
+  window.dispatchEvent(new CustomEvent('xz:audio-playback-start', { detail }));
+};
+
 wsHandler.onChatMessage = (text, isUser, meta = {}) => {
   if (!isUser && typeof text === 'string' && text.includes('"type": "vad"')) {
     return;
@@ -225,9 +229,8 @@ wsHandler.onChatMessage = (text, isUser, meta = {}) => {
   const cleanText = displayText(text);
   if (!cleanText) return;
   if (isUser) {
-    // 用户说话被识别出来：进入 thinking
+    // 保持聆听画面，收到真实 TTS start 后再进入 speaking。
     window.dispatchEvent(new CustomEvent('xz:stt', { detail: { text: cleanText } }));
-    window.dispatchEvent(new CustomEvent('xz:state', { detail: { state: 'thinking' } }));
   } else {
     // AI 回复文本（可能在 TTS 开始前后）
     window.dispatchEvent(new CustomEvent('xz:llm', {
@@ -284,7 +287,7 @@ const realClient = {
   setVoiceMode(mode) {
     const nextMode = mode === 'cascade' ? 'cascade' : 'doubao_s2s';
     ensureHiddenInput('voiceMode', nextMode);
-    localStorage.setItem('xiaonuan_voice_mode', nextMode);
+    localStorage.setItem('anan_voice_mode', nextMode);
     recorder.setAudioFormat(nextMode === 'doubao_s2s' ? 'pcm' : 'opus');
     return nextMode;
   },

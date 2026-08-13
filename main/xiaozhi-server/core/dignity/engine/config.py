@@ -48,7 +48,7 @@ STAGES: List[StageDefinition] = [
         stage_id="rapport",
         name="建立关系",
         goal="降低访谈压力，确认患者愿意继续交流。",
-        default_question="您好，我是小暖。今天我来陪您聊聊天。您现在感觉还好吗？",
+        default_question="您好，我是安安。今天我来陪您聊聊天。您现在感觉还好吗？",
     ),
     StageDefinition(
         stage_id="life_review",

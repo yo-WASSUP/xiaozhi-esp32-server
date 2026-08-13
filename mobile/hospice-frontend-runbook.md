@@ -199,7 +199,7 @@ PC 换 WiFi / 重启 / 出差 → 局域网 IP 可能变了
 - 手机 Chrome：`chrome://flags/#unsafely-treat-insecure-origin-as-secure` 把 `http://<PC>:8003` 加入白名单，重启 Chrome
 - Capacitor APK：无所谓 HTTPS，WebView 绕过此限制；但要确认 Android 权限已授予
   - 首次进入录音 / 通话页应该会弹权限框
-  - 如果误拒了：手机设置 → 应用 → 小暖 → 权限 → 开启麦克风 / 摄像头
+  - 如果误拒了：手机设置 → 应用 → 安安 → 权限 → 开启麦克风 / 摄像头
 
 ### "SSE / WebSocket 老断"
 
@@ -333,7 +333,7 @@ npx cap open android    # Android Studio 里 Build APK
 
 ### 9.6 防火墙 / 网络
 
-- 后端默认绑 `0.0.0.0:8003`（`http_port`）和 `0.0.0.0:8000`（小暖 WebSocket），两个端口都要在服务器防火墙放行
+- 后端默认绑 `0.0.0.0:8003`（`http_port`）和 `0.0.0.0:8000`（安安 WebSocket），两个端口都要在服务器防火墙放行
 - 公司内网如果有代理 / VPN，可能干扰局域网 IP 探测，测试时优先确认 `ipconfig` 看到的 IP 在同段网络
 
 ### 9.7 数据目录初始化
@@ -456,7 +456,7 @@ server:
 4. **手机上打开这个 crt 文件 → 系统弹出"安装证书"对话框**：
    - 设置 → 安全 → 加密与凭据 → 安装证书 → CA 证书
    - 选 "VPN 和应用"（不是 WLAN）
-   - 给证书随便起个名字（比如 "mkcert 小暖开发"）
+   - 给证书随便起个名字（比如 "mkcert 安安开发"）
    - 不同品牌路径略有差异，搜 "安装 CA 证书" + 你的手机型号
 
 5. **装好后** 打开手机 Chrome 访问 `https://192.168.1.7:8003/family/index.html`，**地址栏应该是小锁图标，没有红色警告**。

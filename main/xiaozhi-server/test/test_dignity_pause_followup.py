@@ -29,7 +29,7 @@ def build_connection():
 class DignitySessionCommandTests(unittest.TestCase):
     def test_detects_pause_and_resume_phrases(self):
         pause = detect_dignity_session_command(
-            "小暖，我有点累了，想休息一下。",
+            "安安，我有点累了，想休息一下。",
             paused=False,
         )
         resume = detect_dignity_session_command(
@@ -123,7 +123,7 @@ class DignityPauseAndFollowupTests(unittest.IsolatedAsyncioTestCase):
             send_stt.assert_not_awaited()
             resume.assert_not_awaited()
 
-            handled = await handle_dignity_turn_if_active(self.conn, "小暖，我们继续访谈")
+            handled = await handle_dignity_turn_if_active(self.conn, "安安，我们继续访谈")
             self.assertTrue(handled)
             send_stt.assert_awaited_once()
             resume.assert_awaited_once()

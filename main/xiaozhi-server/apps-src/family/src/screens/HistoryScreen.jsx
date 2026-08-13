@@ -42,7 +42,7 @@ export default function HistoryScreen({ onUnbind, unbindBusy = false }) {
           </>
         ) : (
           <div style={{ fontSize: 13, color: C.inkFaint, fontFamily: 'Noto Sans SC', fontWeight: 300, lineHeight: 1.8, textAlign: 'center', padding: '18px 0' }}>
-            今天还没有对话记录。家人和小暖完成陪伴后，这里会显示最近摘要。
+            今天还没有对话记录。家人和安安完成陪伴后，这里会显示最近摘要。
           </div>
         )}
       </Card>

@@ -189,7 +189,7 @@ export default function MessageScreen() {
       {/* 顶部标题 */}
       <div className="screen-header" style={{ borderBottom: `1px solid ${C.outline}`, background: 'rgba(244,247,245,.92)' }}>
         <div className="screen-title">和家人的对话</div>
-        <div className="screen-subtitle">消息会在小暖陪伴时播报给家人</div>
+        <div className="screen-subtitle">消息会在安安陪伴时播报给家人</div>
       </div>
 
       {/* 聊天流 */}

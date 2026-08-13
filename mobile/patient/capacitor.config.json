@@ -1,6 +1,6 @@
 {
   "appId": "com.hospice.patient",
-  "appName": "小暖陪伴",
+  "appName": "安安陪伴",
   "webDir": "www",
   "server": {
     "url": "https://192.168.1.7:8003/patient/index.html",

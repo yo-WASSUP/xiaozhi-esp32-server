@@ -840,7 +840,7 @@ export default function SettingsPanel({ open, onClose, voiceMode = 'doubao_s2s',
           </div>
 
           <div style={{ fontSize: 13, lineHeight: 1.8, color: C.inkFaint }}>
-            启用后，小暖会用这个声音说四川话。{settings.resource_link && <a href={settings.resource_link} target="_blank" rel="noreferrer" style={{ color: C.sage, marginLeft: 8 }}>试听样音</a>}
+            启用后，安安会用这个声音说四川话。{settings.resource_link && <a href={settings.resource_link} target="_blank" rel="noreferrer" style={{ color: C.sage, marginLeft: 8 }}>试听样音</a>}
             {tip && <div style={{ marginTop: 8, color: warn ? C.red : C.inkMid }}>{tip}</div>}
           </div>
         </div>

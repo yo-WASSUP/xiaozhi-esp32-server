@@ -8,7 +8,7 @@ from core.utils.output_counter import check_device_output_limit
 from core.handle.sendAudioHandle import send_stt_message, SentenceType
 
 TAG = __name__
-BARGE_IN_CONFIRM_SECONDS = 0.5
+BARGE_IN_CONFIRM_SECONDS = 0.3
 
 
 def is_barge_in_confirmed(conn, have_voice, now=None):
@@ -50,23 +50,6 @@ async def handleAudioMessage(conn, audio):
     await no_voice_close_connect(conn, have_voice)
     # 接收音频
     await conn.asr.receive_audio(conn, audio, have_voice)
-
-
-async def handle_realtime_barge_in(conn, audio):
-    """Use the configured server VAD to interrupt realtime playback."""
-    if conn.vad is None:
-        return False
-
-    have_voice = bool(conn.vad.is_vad(conn, audio))
-    await send_vad_state_if_changed(conn, have_voice)
-    if not is_barge_in_confirmed(conn, have_voice):
-        return False
-
-    conn.logger.bind(tag=TAG).info(
-        f"本地VAD持续{BARGE_IN_CONFIRM_SECONDS:.1f}秒，触发端到端打断"
-    )
-    await handleAbortMessage(conn)
-    return True
 
 
 async def send_vad_state_if_changed(conn, have_voice):

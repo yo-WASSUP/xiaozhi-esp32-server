@@ -2,12 +2,13 @@ import { useRef } from 'react';
 import { SlidersHorizontal } from 'lucide-react';
 import RobotAvatar from '../components/RobotAvatar';
 import WaveBars from '../components/WaveBars';
+import useListeningTurn from '../hooks/useListeningTurn';
 import voiceRoomBackground from '../assets/voice/voice-room.webp';
 import { getReplyDensity } from '../utils/replyText';
 
 const FALLBACK_COPY = {
   offline: '语音服务正在连接，请稍等一会儿。',
-  standby: '我在这里，想聊天时叫一声“小暖”。',
+  standby: '我在这里，想聊天时叫一声“安安”。',
   ready: '我一直在呢，您直接说话就好。',
 };
 
@@ -27,9 +28,16 @@ export default function ChatScreen({
   const pressTimerRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
   const standby = !ordinaryVoiceAwake;
+  const listening = useListeningTurn({
+    enabled: !standby,
+    aiState,
+    connected,
+    recording,
+    userSpeaking,
+  });
   const displayState = standby
     ? 'idle'
-    : (aiState === 'idle' && connected && recording && userSpeaking ? 'listening' : aiState);
+    : (listening ? 'listening' : aiState);
   const fallback = !connected
     ? FALLBACK_COPY.offline
     : standby
@@ -98,7 +106,7 @@ export default function ChatScreen({
           )}
 
           <div className="voice-screen__reply">
-            <span>小暖</span>
+            <span>安安</span>
             <p className={`voice-screen__reply-text voice-screen__reply-text--${replyDensity}${msg ? '' : ' voice-screen__reply--quiet'}`}>
               {replyText}
             </p>

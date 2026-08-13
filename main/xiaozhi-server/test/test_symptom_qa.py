@@ -28,7 +28,7 @@ class SymptomQaTests(unittest.TestCase):
         self.assertEqual(match.match_type, "exact")
 
     def test_common_spoken_variants_match(self):
-        definition = match_symptom_question("小暖，请问疼痛是什么意思呀？")
+        definition = match_symptom_question("安安，请问疼痛是什么意思呀？")
         action = match_symptom_question("疼痛咋办")
         emergency = match_symptom_question("咯血什么时候需要立即求助")
 

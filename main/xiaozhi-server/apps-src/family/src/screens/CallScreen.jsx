@@ -100,7 +100,7 @@ export default function CallScreen() {
   if (callState === 'idle') return (
     <div className="screen" style={{ padding: 'calc(24px + env(safe-area-inset-top)) 16px 24px' }}>
       <div className="screen-title">联系家人</div>
-      <div className="screen-subtitle" style={{ marginBottom: 24 }}>小暖会协助家人接听通话</div>
+      <div className="screen-subtitle" style={{ marginBottom: 24 }}>安安会协助家人接听通话</div>
 
       <Card style={{ padding: '18px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 14 }}>
         <div style={{ width: 56, height: 56, borderRadius: 16, background: C.primaryContainer, color: C.amber, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><User size={28} weight="duotone" /></div>

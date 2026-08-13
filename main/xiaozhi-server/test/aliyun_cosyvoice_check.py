@@ -428,7 +428,7 @@ def build_parser():
     design.add_argument("--prefix", default="warm")
     design.add_argument("--language", default="zh")
     design.add_argument("--voice-prompt", default="温柔亲切的中年女性声音，说话自然清晰，适合陪伴老人聊天。")
-    design.add_argument("--preview-text", default="您好，我是小暖，今天我会一直陪着您。")
+    design.add_argument("--preview-text", default="您好，我是安安，今天我会一直陪着您。")
     design.add_argument("--sample-rate", type=int, default=24000)
     design.add_argument("--response-format", default="wav", choices=("wav", "mp3", "pcm"))
     design.add_argument("--output", default="main/xiaozhi-server/test/output/cosyvoice_design_preview.wav")

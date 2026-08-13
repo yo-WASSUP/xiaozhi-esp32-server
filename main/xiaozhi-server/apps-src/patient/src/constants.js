@@ -12,7 +12,7 @@ const ensureDeviceId = () => {
   return id;
 };
 
-// 设备 ID：患者端、小暖 WebSocket、家属端必须一致
+// 设备 ID：患者端、安安 WebSocket、家属端必须一致
 export const DEVICE_ID = ensureDeviceId();
 // 患者名（回复署名用）
 export const PATIENT_NAME = localStorage.getItem('hospice_patient_name') || '我';

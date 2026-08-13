@@ -6,7 +6,7 @@ export const APP_ITEMS = [
   {
     id: 'voice',
     title: '语音沟通',
-    subtitle: '和小暖说说话',
+    subtitle: '和安安说说话',
   },
   {
     id: 'family',
@@ -58,7 +58,7 @@ export default function HomeScreen({ unread = 0, onOpenApp }) {
           </div>
         </div>
         <div className="patient-home__welcome">
-          <div className="patient-home__eyebrow">小暖陪伴空间</div>
+          <div className="patient-home__eyebrow">安安陪伴空间</div>
           <h1 id="home-title">{greeting()}，今天想先做什么？</h1>
         </div>
       </section>

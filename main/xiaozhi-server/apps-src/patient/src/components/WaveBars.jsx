@@ -9,7 +9,7 @@ export default function WaveBars({ source = 'input', level = 0, active = false }
   const normalizedLevel = active ? Math.max(0, Math.min(1, level)) : 0;
   const isOutput = source === 'output';
   const Icon = isOutput ? Volume2 : Mic;
-  const label = isOutput ? '小暖正在说话' : active ? '正在听您说话' : '语音未连接';
+  const label = isOutput ? '安安正在说话' : active ? '正在听您说话' : '语音未连接';
   const color = isOutput ? '112, 137, 176' : '82, 132, 108';
 
   return (

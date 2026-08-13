@@ -53,7 +53,7 @@ export default function TopBar({
           <div className="patient-brand">
             <span className="patient-brand__mark" aria-hidden="true">暖</span>
             <span>
-              <strong>小暖</strong>
+              <strong>安安</strong>
               <small>安宁疗护陪伴助手</small>
             </span>
           </div>

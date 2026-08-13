@@ -1,6 +1,6 @@
 {
-    "name": "小暖 · 陪伴助手",
-    "short_name": "小暖",
+    "name": "安安 · 陪伴助手",
+    "short_name": "安安",
     "description": "安宁疗护智能陪伴助手",
     "start_url": "/patient/index.html",
     "scope": "/patient/",

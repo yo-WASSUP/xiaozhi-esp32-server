@@ -1,9 +1,9 @@
-"""Quick local test for the sherpa-onnx "小暖" wake word model.
+"""Quick local test for the sherpa-onnx "安安" wake word model.
 
 Usage:
-  python scripts/test_sherpa_kws_xiaonuan.py --mic
-  python scripts/test_sherpa_kws_xiaonuan.py --wav path/to/test.wav
-  python scripts/test_sherpa_kws_xiaonuan.py --list-devices
+  python scripts/test_sherpa_kws_anan.py --mic
+  python scripts/test_sherpa_kws_anan.py --wav path/to/test.wav
+  python scripts/test_sherpa_kws_anan.py --list-devices
 """
 
 from __future__ import annotations
@@ -31,9 +31,9 @@ DEFAULT_MODEL_DIR = (
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Test sherpa-onnx KWS for 小暖.")
+    parser = argparse.ArgumentParser(description="Test sherpa-onnx KWS for 安安.")
     parser.add_argument("--model-dir", type=Path, default=DEFAULT_MODEL_DIR)
-    parser.add_argument("--keywords", default="keywords_xiaonuan.txt")
+    parser.add_argument("--keywords", default="keywords_anan.txt")
     parser.add_argument("--threshold", type=float, default=0.50)
     parser.add_argument("--sample-rate", type=int, default=16000)
     parser.add_argument("--chunk-ms", type=int, default=100)
@@ -171,7 +171,7 @@ def run_mic(args: argparse.Namespace) -> int:
         audio_queue.put(indata[:, 0].copy())
 
     stream = spotter.create_stream()
-    print("Listening for 小暖 / 你好小暖. Press Ctrl+C to stop.")
+    print("Listening for 安安 / 你好安安. Press Ctrl+C to stop.")
     print(f"sample_rate={sample_rate}, chunk_size={chunk_size}, threshold={args.threshold}")
 
     try:

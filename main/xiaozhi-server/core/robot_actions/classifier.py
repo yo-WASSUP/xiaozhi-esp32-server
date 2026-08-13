@@ -49,7 +49,7 @@ ACTION_TABLE = """
 
 CANDIDATE_HINTS = (
     "机器人",
-    "小暖",
+    "安安",
     "动作",
     "动一下",
     "动一动",

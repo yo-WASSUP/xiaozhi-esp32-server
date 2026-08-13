@@ -1,6 +1,6 @@
 {
-    "name": "小暖 · 家属端",
-    "short_name": "小暖家属",
+    "name": "安安 · 家属端",
+    "short_name": "安安家属",
     "description": "安宁疗护 - 给家人发消息、发起通话",
     "start_url": "/family/index.html",
     "scope": "/family/",

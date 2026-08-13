@@ -252,8 +252,12 @@ class DoubaoS2SInterruptTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("老年患者", role)
         self.assertIn("回答自然简洁", role)
-        self.assertIn("名字是“小暖”", role)
+        self.assertIn("名字是“安安”", role)
         self.assertIn("不要自称豆包", role)
+        self.assertIn("只能倾听、说话、安慰、陪聊", role)
+        self.assertIn("不能倒水", role)
+        self.assertIn("不能自行打电话", role)
+        self.assertIn("一律按“做不到、未执行”处理", role)
 
 
 class DoubaoS2SDisplayTextTests(unittest.IsolatedAsyncioTestCase):

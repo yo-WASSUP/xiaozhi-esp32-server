@@ -1,4 +1,0 @@
-x iǎo n uǎn #0.50 @小暖
-n ǐ h ǎo x iǎo n uǎn #0.50 @你好小暖
-x iǎo n uǎn x iǎo n uǎn #0.45 @小暖小暖
-x iǎo n uǎn n ǐ h ǎo #0.50 @小暖你好

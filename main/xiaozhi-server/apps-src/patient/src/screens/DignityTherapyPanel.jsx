@@ -3,6 +3,7 @@ import { BookOpenText, Pause, Play, ShieldAlert, X } from 'lucide-react';
 import { C } from '../theme';
 import RobotAvatar from '../components/RobotAvatar';
 import WaveBars from '../components/WaveBars';
+import useListeningTurn from '../hooks/useListeningTurn';
 import voiceRoomBackground from '../assets/voice/voice-room.webp';
 import { getReplyDensity } from '../utils/replyText';
 
@@ -44,11 +45,16 @@ function DignityInterviewStage({
   archiveButtonRef,
 }) {
   const passiveState = aiState === 'speaking' || aiState === 'thinking' ? aiState : 'idle';
-  const displayState = voiceMode && aiState === 'idle' && connected && recording && userSpeaking
-    ? 'listening'
-    : voiceMode
-      ? aiState
-      : passiveState;
+  const listening = useListeningTurn({
+    enabled: voiceMode && !paused,
+    aiState,
+    connected,
+    recording,
+    userSpeaking,
+  });
+  const displayState = voiceMode
+    ? (listening ? 'listening' : aiState)
+    : passiveState;
   const activitySource = userSpeaking || aiState !== 'speaking' ? 'input' : 'output';
   const activityLevel = activitySource === 'input' ? inputLevel : outputLevel;
   const statusText = !connected
@@ -56,7 +62,7 @@ function DignityInterviewStage({
     : paused
       ? '访谈已暂停'
     : voiceMode
-      ? (userSpeaking ? '正在听您说' : '访谈进行中')
+      ? (listening ? '正在听您说' : '访谈进行中')
       : '访谈已暂停';
   const fallbackReply = !connected
     ? '语音服务正在连接，请稍等一会儿。'
@@ -108,7 +114,7 @@ function DignityInterviewStage({
             </div>
           )}
           <div className="dignity-interview__turn dignity-interview__turn--assistant">
-            <span>小暖</span>
+            <span>安安</span>
             <p className={`dignity-interview__reply-text dignity-interview__reply-text--${replyDensity}${(msg || openingReply) ? '' : ' is-quiet'}`}>{reply}</p>
           </div>
         </div>

@@ -189,7 +189,7 @@ export default function App() {
   const [patientWakeup, setPatientWakeup] = useState({ enabled: false, mode: 'sherpa_onnx_kws' });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [voiceMode, setVoiceMode] = useState(
-    () => localStorage.getItem('xiaonuan_voice_mode') || 'doubao_s2s'
+    () => localStorage.getItem('anan_voice_mode') || 'doubao_s2s'
   );
   const [dignityMode, setDignityMode] = useState(false);
   const [dignityStatus, setDignityStatus] = useState(null);
@@ -546,7 +546,7 @@ export default function App() {
 
     if (appId === 'dignity') {
       if (!connectedRef.current) {
-        setConnectStatus('请先连接小暖，再开始尊严疗法');
+        setConnectStatus('请先连接安安，再开始尊严疗法');
         return;
       }
       if (!dignityModeRef.current) {
@@ -848,7 +848,7 @@ export default function App() {
       const openingReply = (
         dignityOpeningReply
         || dignityStatus?.reply
-        || '您好，我是小暖。今天我来陪您聊聊天。您现在感觉还好吗？'
+        || '您好，我是安安。今天我来陪您聊聊天。您现在感觉还好吗？'
       ).trim();
       if (openingReply) {
         assistantReplyRef.current = { sentenceId: '', text: openingReply, final: true };
@@ -947,7 +947,7 @@ export default function App() {
   const connectXiaozhi = useCallback(async () => {
     if (!window.XiaozhiClient || connectingRef.current || connectedRef.current) return;
     connectingRef.current = true;
-    setConnectStatus('正在连接小暖...');
+    setConnectStatus('正在连接安安...');
     try {
       const ok = await Promise.race([
         window.XiaozhiClient.connect(),
@@ -998,7 +998,7 @@ export default function App() {
   const handleVoiceModeChange = useCallback((nextMode) => {
     const normalized = nextMode === 'cascade' ? 'cascade' : 'doubao_s2s';
     setVoiceMode(normalized);
-    localStorage.setItem('xiaonuan_voice_mode', normalized);
+    localStorage.setItem('anan_voice_mode', normalized);
     window.XiaozhiClient?.setVoiceMode?.(normalized);
     setConnectStatus(normalized === 'doubao_s2s' ? '正在切换到端到端模式...' : '正在切换到标准模式...');
     if (connectedRef.current) {
@@ -1130,7 +1130,6 @@ export default function App() {
       }
       setUserSpeaking(false);
       userSpeakingRef.current = false;
-      setAiState('speaking');
       if (dignityModeRef.current) {
         dignityLiveTurnStartedAtRef.current = performance.now();
       }
@@ -1179,7 +1178,7 @@ export default function App() {
       const detail = e.detail || {};
       if (detail.mode === 'cascade' && detail.requested_mode === 'doubao_s2s' && detail.reason) {
         setVoiceMode('cascade');
-        localStorage.setItem('xiaonuan_voice_mode', 'cascade');
+        localStorage.setItem('anan_voice_mode', 'cascade');
         window.XiaozhiClient?.setVoiceMode?.('cascade');
         setConnectStatus(`端到端连接失败，已切换标准模式：${detail.reason}`);
       } else if (detail.mode === 'doubao_s2s') {

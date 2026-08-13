@@ -14,6 +14,7 @@ export class WebSocketHandler {
         this.onConnectionStateChange = null;
         this.onRecordButtonStateChange = null;
         this.onSessionStateChange = null;
+        this.onAudioData = null;
         this.onSessionEmotionChange = null;
         this.onChatMessage = null; // 新增：聊天消息回调
         this.onClientAction = null; // 患者端本地动作：接电话、读消息等
@@ -383,6 +384,9 @@ export class WebSocketHandler {
                 audioPlayer.enqueuePcmData(opusData, 24000);
             } else {
                 audioPlayer.enqueueAudioData(opusData);
+            }
+            if (this.onAudioData) {
+                this.onAudioData({ byteLength: opusData.byteLength, voiceMode });
             }
         } catch (error) {
             log(`处理二进制消息出错: ${error.message}`, 'error');

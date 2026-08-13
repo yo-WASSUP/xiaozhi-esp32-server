@@ -46,7 +46,7 @@ class HospiceWakeWordMixin:
             sherpa_cfg.get("model_dir")
             or "/wakeword/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"
         )
-        keywords = sherpa_cfg.get("keywords") or "keywords_xiaonuan.txt"
+        keywords = sherpa_cfg.get("keywords") or "keywords_anan.txt"
 
         def pick(name: str, default: str) -> str:
             return str(model_dir / (sherpa_cfg.get(name) or default))
