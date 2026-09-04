@@ -9,6 +9,11 @@ from core.handle.sendAudioHandle import send_llm_message
 from core.utils import textUtils
 from core.utils.dialogue import Message
 from core.utils.util import extract_json_from_string, get_system_error_response
+from core.providers.tools.query_policy import (
+    filter_weather_context_for_query,
+    filter_tool_calls_for_query,
+    filter_tools_for_query,
+)
 from plugins_func.register import Action
 
 
@@ -180,7 +185,10 @@ class ChatMixin:
             and hasattr(self, "func_handler")
             and not force_final_answer
         ):
-            functions = self.func_handler.get_functions()
+            functions = filter_tools_for_query(
+                self.func_handler.get_functions(),
+                query,
+            ) or None
         response_message = []
         final_display_text = ""
         # 天气工具轮次可能先流出过渡句；确认是否调用工具前暂不播报。
@@ -202,6 +210,7 @@ class ChatMixin:
                     self.memory.query_memory(query), self.loop
                 )
                 memory_str = future.result()
+                memory_str = filter_weather_context_for_query(memory_str, query)
 
             dialogue_data = self.dialogue.get_llm_dialogue_with_memory(
                 memory_str, self.config.get("voiceprint", {})
@@ -392,6 +401,22 @@ class ChatMixin:
                 if bHasError:
                     self.logger.bind(tag=TAG).error(
                         f"function call error: {content_arguments}"
+                    )
+
+            if not bHasError and len(tool_calls_list) > 0:
+                proposed_tool_calls = tool_calls_list
+                tool_calls_list = filter_tool_calls_for_query(
+                    proposed_tool_calls,
+                    query,
+                )
+                rejected_tool_names = [
+                    call.get("name", "")
+                    for call in proposed_tool_calls
+                    if call not in tool_calls_list
+                ]
+                if rejected_tool_names:
+                    self.logger.bind(tag=TAG).warning(
+                        f"工具调用与当前消息无关，已拒绝: {rejected_tool_names}"
                     )
 
             if not bHasError and len(tool_calls_list) > 0:
