@@ -1497,7 +1497,10 @@ a:focus-visible {
   inset: 0;
 }
 
+.robot-avatar__video-poster,
 .robot-avatar__video {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
@@ -1505,6 +1508,23 @@ a:focus-visible {
   object-position: center;
   pointer-events: none;
   user-select: none;
+}
+
+.robot-avatar__video-poster {
+  z-index: 0;
+}
+
+.robot-avatar__video {
+  z-index: 1;
+  opacity: 0;
+  backface-visibility: hidden;
+  transition: opacity 140ms linear;
+  will-change: opacity;
+}
+
+.robot-avatar__video.is-active {
+  z-index: 2;
+  opacity: 1;
 }
 
 .robot-avatar__halo {
