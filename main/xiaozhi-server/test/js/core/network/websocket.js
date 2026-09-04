@@ -195,7 +195,10 @@ export class WebSocketHandler {
             this.outputSampleRate = Number(message.sample_rate) || null;
             this.isRemoteSpeaking = true;
             if (this.onSessionStateChange) {
-                this.onSessionStateChange(true);
+                this.onSessionStateChange(true, {
+                    sentenceId: message.sentence_id || '',
+                    sessionId: message.session_id || '',
+                });
             }
 
             // 启动Live2D说话动画
@@ -203,6 +206,16 @@ export class WebSocketHandler {
         } else if (message.state === 'sentence_start') {
             log(`服务器发送语音段: ${message.text}`, 'info');
             this.ttsSentenceCount = (this.ttsSentenceCount || 0) + 1;
+
+            if (!this.isRemoteSpeaking) {
+                this.isRemoteSpeaking = true;
+                if (this.onSessionStateChange) {
+                    this.onSessionStateChange(true, {
+                        sentenceId: message.sentence_id || '',
+                        sessionId: message.session_id || '',
+                    });
+                }
+            }
 
             if (message.text && this.onChatMessage) {
                 this.onChatMessage(message.text, false, {
@@ -236,7 +249,10 @@ export class WebSocketHandler {
                     this.onRecordButtonStateChange(false);
                 }
                 if (this.onSessionStateChange) {
-                    this.onSessionStateChange(false);
+                    this.onSessionStateChange(false, {
+                        sentenceId: message.sentence_id || '',
+                        sessionId: message.session_id || '',
+                    });
                 }
                 this.stopLive2DTalking();
                 this.ttsSentenceCount = 0;

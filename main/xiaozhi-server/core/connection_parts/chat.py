@@ -183,6 +183,12 @@ class ChatMixin:
             functions = self.func_handler.get_functions()
         response_message = []
         final_display_text = ""
+        # 天气工具轮次可能先流出过渡句；确认是否调用工具前暂不播报。
+        defer_tool_preamble = any(
+            str((tool.get("function") or {}).get("name") or "") == "get_weather"
+            for tool in functions or []
+        )
+        deferred_tts_content = []
 
         try:
             # LLM 调用性能日志（普通聊天）
@@ -284,7 +290,12 @@ class ChatMixin:
                     content = response
 
                 # 在llm回复中获取情绪表情，一轮对话只在开头获取一次
-                if emotion_flag and content is not None and content.strip():
+                if (
+                    emotion_flag
+                    and not defer_tool_preamble
+                    and content is not None
+                    and content.strip()
+                ):
                     asyncio.run_coroutine_threadsafe(
                         textUtils.get_emotion(self, content),
                         self.loop,
@@ -299,14 +310,17 @@ class ChatMixin:
                         tts_content = stage_direction_filter.feed(tts_content)
                         response_message.append(content)
                         if tts_content:
-                            self.tts.tts_text_queue.put(
-                                TTSMessageDTO(
-                                    sentence_id=self.sentence_id,
-                                    sentence_type=SentenceType.MIDDLE,
-                                    content_type=ContentType.TEXT,
-                                    content_detail=tts_content,
+                            if defer_tool_preamble:
+                                deferred_tts_content.append(tts_content)
+                            else:
+                                self.tts.tts_text_queue.put(
+                                    TTSMessageDTO(
+                                        sentence_id=self.sentence_id,
+                                        sentence_type=SentenceType.MIDDLE,
+                                        content_type=ContentType.TEXT,
+                                        content_detail=tts_content,
+                                    )
                                 )
-                            )
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"LLM stream processing error: {e}")
             self.tts.tts_text_queue.put(
@@ -330,6 +344,18 @@ class ChatMixin:
         if not tool_call_flag:
             tts_content = stage_direction_filter.flush()
             if tts_content:
+                deferred_tts_content.append(tts_content)
+            if defer_tool_preamble:
+                for deferred_content in deferred_tts_content:
+                    self.tts.tts_text_queue.put(
+                        TTSMessageDTO(
+                            sentence_id=self.sentence_id,
+                            sentence_type=SentenceType.MIDDLE,
+                            content_type=ContentType.TEXT,
+                            content_detail=deferred_content,
+                        )
+                    )
+            elif tts_content:
                 self.tts.tts_text_queue.put(
                     TTSMessageDTO(
                         sentence_id=self.sentence_id,
@@ -370,7 +396,7 @@ class ChatMixin:
 
             if not bHasError and len(tool_calls_list) > 0:
                 # 如需要大模型先处理一轮，添加相关处理后的日志情况
-                if len(response_message) > 0:
+                if len(response_message) > 0 and not defer_tool_preamble:
                     text_buff = "".join(response_message)
                     self.tts_MessageText = text_buff
                     self.dialogue.put(Message(role="assistant", content=text_buff))
