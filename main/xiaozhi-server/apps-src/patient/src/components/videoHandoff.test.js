@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createVideoHandoff } from './videoHandoff.js';
+import { createVideoHandoff, getVideoLayers } from './videoHandoff.js';
 
 
 test('keeps the current video visible until the requested video has a first frame', async () => {
@@ -78,6 +78,38 @@ test('returning to the active state cancels a pending different state', async ()
   await handoff.request('idle', () => Promise.resolve());
   releaseFirstFrame();
   await listening;
+
+  assert.equal(handoff.activeState, 'idle');
+  assert.deepEqual(commits, []);
+});
+
+test('mounts only the current video before its first frame is ready', () => {
+  assert.deepEqual(
+    getVideoLayers('idle', 'idle', false),
+    [{ state: 'idle', role: 'preparing' }],
+  );
+});
+
+test('mounts only the current and requested videos during a handoff', () => {
+  assert.deepEqual(
+    getVideoLayers('idle', 'listening', true),
+    [
+      { state: 'idle', role: 'active' },
+      { state: 'listening', role: 'preparing' },
+    ],
+  );
+});
+
+test('keeps the current video active when the requested video cannot prepare', async () => {
+  const commits = [];
+  const handoff = createVideoHandoff('idle', (next, previous) => {
+    commits.push({ next, previous });
+  });
+
+  await assert.rejects(
+    handoff.request('speaking', () => Promise.reject(new Error('play rejected'))),
+    /play rejected/,
+  );
 
   assert.equal(handoff.activeState, 'idle');
   assert.deepEqual(commits, []);

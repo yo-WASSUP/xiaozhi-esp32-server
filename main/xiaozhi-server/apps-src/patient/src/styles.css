@@ -1517,14 +1517,21 @@ a:focus-visible {
 .robot-avatar__video {
   z-index: 1;
   opacity: 0;
+  visibility: hidden;
   backface-visibility: hidden;
   transition: opacity 140ms linear;
   will-change: opacity;
 }
 
+.robot-avatar__video.is-preparing {
+  display: block;
+  visibility: hidden;
+}
+
 .robot-avatar__video.is-active {
   z-index: 2;
   opacity: 1;
+  visibility: visible;
 }
 
 .robot-avatar__halo {

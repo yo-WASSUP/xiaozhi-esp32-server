@@ -4,7 +4,7 @@ import pandaIdleVideo from '../../panda-video/panda-7793-idle.webm';
 import pandaListeningVideo from '../../panda-video/panda-7793-listening.webm';
 import pandaSpeakingVideo from '../../panda-video/panda-7793-speaking.webm';
 import pandaPoster from '../../panda-video/panda-7793-poster.png';
-import { createVideoHandoff } from './videoHandoff';
+import { createVideoHandoff, getVideoLayers } from './videoHandoff';
 
 const STATE_CONFIG = {
   idle: { className: 'robot-avatar--idle', glow: C.mist, accent: C.amber },
@@ -20,14 +20,13 @@ const VIDEO_BY_STATE = {
   speaking: 'speaking',
 };
 
-const VIDEO_LAYERS = [
-  { action: 'idle', src: pandaIdleVideo },
-  { action: 'listening', src: pandaListeningVideo },
-  { action: 'speaking', src: pandaSpeakingVideo },
-];
+const VIDEO_SOURCE_BY_ACTION = {
+  idle: pandaIdleVideo,
+  listening: pandaListeningVideo,
+  speaking: pandaSpeakingVideo,
+};
 
 const FIRST_FRAME_TIMEOUT_MS = 1000;
-const VIDEO_FADE_MS = 140;
 
 function videoStateFor(state) {
   return VIDEO_BY_STATE[state] || 'idle';
@@ -35,17 +34,27 @@ function videoStateFor(state) {
 
 function waitForLoadedData(video) {
   if (video.readyState >= 2) return Promise.resolve();
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     let timer = null;
-    const finish = () => {
+    const cleanup = () => {
       if (timer) window.clearTimeout(timer);
-      video.removeEventListener('loadeddata', finish);
-      video.removeEventListener('error', finish);
+      video.removeEventListener('loadeddata', handleLoaded);
+      video.removeEventListener('error', handleError);
+    };
+    const handleLoaded = () => {
+      cleanup();
       resolve();
     };
-    video.addEventListener('loadeddata', finish);
-    video.addEventListener('error', finish);
-    timer = window.setTimeout(finish, FIRST_FRAME_TIMEOUT_MS);
+    const handleError = () => {
+      cleanup();
+      reject(video.error || new Error('video loading failed'));
+    };
+    video.addEventListener('loadeddata', handleLoaded);
+    video.addEventListener('error', handleError);
+    timer = window.setTimeout(() => {
+      cleanup();
+      reject(new Error('video loading timed out'));
+    }, FIRST_FRAME_TIMEOUT_MS);
   });
 }
 
@@ -55,29 +64,41 @@ function waitForPaintedFrame(video) {
       window.requestAnimationFrame(() => window.requestAnimationFrame(resolve));
     });
   }
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     let settled = false;
     let timer = null;
-    const finish = () => {
+    let callbackId = null;
+    const finish = (error = null) => {
       if (settled) return;
       settled = true;
       if (timer) window.clearTimeout(timer);
-      resolve();
+      if (error) reject(error);
+      else resolve();
     };
-    video.requestVideoFrameCallback(finish);
-    timer = window.setTimeout(finish, FIRST_FRAME_TIMEOUT_MS);
+    callbackId = video.requestVideoFrameCallback(() => finish());
+    timer = window.setTimeout(() => {
+      if (typeof video.cancelVideoFrameCallback === 'function' && callbackId !== null) {
+        video.cancelVideoFrameCallback(callbackId);
+      }
+      finish(new Error('video first frame timed out'));
+    }, FIRST_FRAME_TIMEOUT_MS);
   });
 }
 
 async function prepareVideo(video, reduceMotion) {
   await waitForLoadedData(video);
   if (reduceMotion) return;
-  try {
-    await video.play();
-  } catch (_) {
-    // Muted inline video normally autoplays; the poster remains visible if WebView refuses.
-  }
+  await video.play();
   await waitForPaintedFrame(video);
+}
+
+function reportPlaybackError(action, error) {
+  console.warn('[avatar-video] playback failed', {
+    action,
+    error: error?.message || String(error),
+    name: error?.name || 'Error',
+    userAgent: navigator.userAgent,
+  });
 }
 
 export default function RobotAvatarVideo({ state = 'idle' }) {
@@ -87,50 +108,59 @@ export default function RobotAvatarVideo({ state = 'idle' }) {
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const initialVideoStateRef = useRef(requestedVideoState);
   const videoRefs = useRef(new Map());
-  const pauseTimersRef = useRef(new Set());
   const activeVideoStateRef = useRef(initialVideoStateRef.current);
   const [activeVideoState, setActiveVideoState] = useState(initialVideoStateRef.current);
+  const [activeVideoReady, setActiveVideoReady] = useState(false);
   const handoffRef = useRef(null);
 
   if (!handoffRef.current) {
     handoffRef.current = createVideoHandoff(
       initialVideoStateRef.current,
       (nextState, previousState) => {
+        videoRefs.current.get(previousState)?.pause();
         activeVideoStateRef.current = nextState;
         setActiveVideoState(nextState);
-        const timer = window.setTimeout(() => {
-          pauseTimersRef.current.delete(timer);
-          if (activeVideoStateRef.current !== previousState) {
-            videoRefs.current.get(previousState)?.pause();
-          }
-        }, VIDEO_FADE_MS + 60);
-        pauseTimersRef.current.add(timer);
+        setActiveVideoReady(true);
       },
     );
   }
 
   useEffect(() => {
+    if (requestedVideoState === activeVideoStateRef.current) {
+      handoffRef.current.request(requestedVideoState, () => Promise.resolve());
+      return undefined;
+    }
     const target = videoRefs.current.get(requestedVideoState);
     if (!target) return undefined;
     handoffRef.current.request(
       requestedVideoState,
       () => prepareVideo(target, reduceMotion),
-    );
+    ).catch(error => reportPlaybackError(requestedVideoState, error));
     return undefined;
   }, [reduceMotion, requestedVideoState]);
 
   useEffect(() => {
+    let mounted = true;
     const initialVideo = videoRefs.current.get(initialVideoStateRef.current);
-    if (initialVideo && !reduceMotion) {
-      initialVideo.play().catch(() => {});
+    if (initialVideo) {
+      prepareVideo(initialVideo, reduceMotion)
+        .then(() => {
+          if (mounted) setActiveVideoReady(true);
+        })
+        .catch(error => reportPlaybackError(initialVideoStateRef.current, error));
     }
     return () => {
+      mounted = false;
       handoffRef.current?.cancel();
-      pauseTimersRef.current.forEach(timer => window.clearTimeout(timer));
-      pauseTimersRef.current.clear();
       videoRefs.current.forEach(video => video.pause());
     };
   }, [reduceMotion]);
+
+  const videoLayers = getVideoLayers(
+    activeVideoState,
+    requestedVideoState,
+    activeVideoReady,
+  );
 
   return (
     <div
@@ -152,17 +182,19 @@ export default function RobotAvatarVideo({ state = 'idle' }) {
           src={pandaPoster}
           alt=""
         />
-        {VIDEO_LAYERS.map(video => (
+        {videoLayers.map(video => (
           <video
-            key={video.action}
+            key={video.state}
             ref={node => {
-              if (node) videoRefs.current.set(video.action, node);
-              else videoRefs.current.delete(video.action);
+              if (node) videoRefs.current.set(video.state, node);
+              else videoRefs.current.delete(video.state);
             }}
-            className={`robot-avatar__video${activeVideoState === video.action ? ' is-active' : ''}`}
-            src={video.src}
-            data-action={video.action}
-            autoPlay={video.action === initialVideoStateRef.current && !reduceMotion}
+            className={`robot-avatar__video is-${video.role}`}
+            src={VIDEO_SOURCE_BY_ACTION[video.state]}
+            data-action={video.state}
+            controls={false}
+            disablePictureInPicture
+            disableRemotePlayback
             muted
             loop
             playsInline

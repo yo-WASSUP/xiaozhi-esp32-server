@@ -24,3 +24,16 @@ export function createVideoHandoff(initialState, onCommit) {
     },
   };
 }
+
+
+export function getVideoLayers(activeState, requestedState, activeReady = true) {
+  const activeLayer = {
+    state: activeState,
+    role: activeReady ? 'active' : 'preparing',
+  };
+  if (requestedState === activeState) return [activeLayer];
+  return [
+    activeLayer,
+    { state: requestedState, role: 'preparing' },
+  ];
+}
