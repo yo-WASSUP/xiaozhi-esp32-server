@@ -5,6 +5,7 @@ import time
 import uuid
 
 from core.providers.tts.dto.dto import ContentType, TTSMessageDTO, SentenceType
+from core.providers.emotion import filter_stream_emotion_tag, parse_emotion
 from core.handle.sendAudioHandle import send_llm_message
 from core.utils import textUtils
 from core.utils.dialogue import Message
@@ -18,9 +19,6 @@ from plugins_func.register import Action
 
 
 TAG = __name__
-
-EMOTION_TAG_PREFIX = "<!--emotion:"
-EMOTION_TAG_END = "-->"
 
 _STAGE_DIRECTION_CUE = re.compile(
     r"微笑|笑着|笑了笑|轻笑|苦笑|点头|摇头|叹气|轻声|柔声|"
@@ -107,40 +105,6 @@ class _StreamingStageDirectionFilter:
         self._buffer = ""
         self._checking_prefix = False
         return output
-
-
-def _filter_stream_emotion_tag(content, pending=""):
-    """Remove hospice emotion tags before streaming text to TTS."""
-    if not content:
-        return "", pending
-
-    combined = pending + content
-    output = []
-    index = 0
-
-    while index < len(combined):
-        tag_start = combined.find(EMOTION_TAG_PREFIX, index)
-        if tag_start == -1:
-            tail = combined[index:]
-            keep = 0
-            max_keep = min(len(tail), len(EMOTION_TAG_PREFIX) - 1)
-            for size in range(max_keep, 0, -1):
-                if tail.endswith(EMOTION_TAG_PREFIX[:size]):
-                    keep = size
-                    break
-            if keep:
-                output.append(tail[:-keep])
-                return "".join(output), tail[-keep:]
-            output.append(tail)
-            return "".join(output), ""
-
-        output.append(combined[index:tag_start])
-        tag_end = combined.find(EMOTION_TAG_END, tag_start + len(EMOTION_TAG_PREFIX))
-        if tag_end == -1:
-            return "".join(output), combined[tag_start:]
-        index = tag_end + len(EMOTION_TAG_END)
-
-    return "".join(output), ""
 
 
 class ChatMixin:
@@ -313,7 +277,7 @@ class ChatMixin:
 
                 if content is not None and len(content) > 0:
                     if not tool_call_flag:
-                        tts_content, emotion_tag_pending = _filter_stream_emotion_tag(
+                        tts_content, emotion_tag_pending = filter_stream_emotion_tag(
                             content, emotion_tag_pending
                         )
                         tts_content = stage_direction_filter.feed(tts_content)
@@ -351,7 +315,11 @@ class ChatMixin:
             return
 
         if not tool_call_flag:
-            tts_content = stage_direction_filter.flush()
+            tts_content, _ = filter_stream_emotion_tag("", emotion_tag_pending, final=True)
+            tts_content = (
+                stage_direction_filter.feed(tts_content)
+                + stage_direction_filter.flush()
+            )
             if tts_content:
                 deferred_tts_content.append(tts_content)
             if defer_tool_preamble:
@@ -461,16 +429,14 @@ class ChatMixin:
             text_buff = "".join(response_message)
 
             # ── 安宁疗护：情感解析 + 会话日志 ──
+            clean_text, emotion_data = parse_emotion(text_buff)
+            clean_text = _strip_leading_stage_directions(clean_text)
+            self.tts_MessageText = clean_text
+            final_display_text = clean_text
+            # 存入对话历史时去掉情感标签，避免标签累积。
+            # 日志写入失败也必须保留清理结果。
+            self.dialogue.put(Message(role="assistant", content=clean_text))
             try:
-                from core.providers.emotion import parse_emotion
-
-                clean_text, emotion_data = parse_emotion(text_buff)
-                clean_text = _strip_leading_stage_directions(clean_text)
-                self.tts_MessageText = clean_text
-                final_display_text = clean_text
-                # 存入对话历史时去掉情感标签，避免标签累积
-                self.dialogue.put(Message(role="assistant", content=clean_text))
-
                 # 记录到会话日志（如果启用了 hospice 模块）
                 hospice_config = self.config.get("hospice", {})
                 if hospice_config.get("enable_logging", False):
@@ -495,11 +461,7 @@ class ChatMixin:
                         emotion_intensity=intensity,
                     )
             except Exception as e:
-                self.logger.bind(tag=TAG).debug(f"情感解析/会话日志记录跳过: {e}")
-                clean_text = _strip_leading_stage_directions(text_buff)
-                self.tts_MessageText = clean_text
-                final_display_text = clean_text
-                self.dialogue.put(Message(role="assistant", content=clean_text))
+                self.logger.bind(tag=TAG).warning(f"会话日志记录失败: {e}")
 
         # LLM 调用总耗时日志
         if final_display_text:
