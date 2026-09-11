@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { DeviceMobile, LinkSimple, ShieldCheck } from '@phosphor-icons/react';
 import { C } from '../theme';
 
-export default function PairingScreen() {
+export default function PairingScreen({ onLogout }) {
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [relationship, setRelationship] = useState('');
@@ -33,9 +33,9 @@ export default function PairingScreen() {
       });
       const j = await r.json();
       if (!j.success) throw new Error(j.error || '绑定失败');
-      localStorage.setItem('hospice_device_id', j.binding.device_id);
-      localStorage.setItem('hospice_family_id', j.binding.family_id);
-      localStorage.setItem('hospice_sender_name', j.binding.family_name);
+      localStorage.setItem('family_hospice_device_id', j.binding.device_id);
+      localStorage.setItem('family_hospice_family_id', j.binding.family_id);
+      localStorage.setItem('family_hospice_sender_name', j.binding.family_name);
       window.location.reload();
     } catch (e) {
       setError(e.message || '绑定失败');
@@ -80,6 +80,7 @@ export default function PairingScreen() {
           {busy ? <LinkSimple size={20} /> : <ShieldCheck size={20} weight="fill" />}
           {busy ? '正在连接' : '安全连接'}
         </button>
+        {onLogout && <button className="auth-logout" type="button" onClick={onLogout}>退出登录</button>}
       </div>
     </div>
   );

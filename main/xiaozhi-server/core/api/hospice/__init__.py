@@ -2,14 +2,16 @@
 from aiohttp import web
 from config.logger import setup_logging
 
-from core.api.hospice.handler import HospiceFamilyHandler
-
 TAG = __name__
 logger = setup_logging()
 
 
-def register_hospice_routes(app: web.Application, config: dict):
+def register_hospice_routes(app: web.Application, config: dict, auth_store=None):
+    from core.api.hospice.handler import HospiceFamilyHandler
+    from core.api.hospice.safety_api import register_safety_routes
+
     handler = HospiceFamilyHandler(config)
+    handler.auth_store = auth_store
 
     routes = [
         web.get("/api/hospice/summary/today", handler.handle_summary_today),
@@ -57,4 +59,5 @@ def register_hospice_routes(app: web.Application, config: dict):
     ]
 
     app.add_routes(routes)
+    register_safety_routes(app, auth_store)
     logger.bind(tag=TAG).info(f"安宁疗护 API 路由已注册 ({len(routes)} 条)")

@@ -25,9 +25,22 @@ class TextMessageProcessor:
                 conn.logger.bind(tag=TAG).info(f"收到{message_type}消息：{message}")
 
                 if message_type == "hospice_client_state":
-                    conn.hospice_call_active = bool(msg_json.get("call_active"))
+                    from core.api.hospice.home_navigation import start_home_listening, stop_home_listening
+                    was_home = getattr(conn, "hospice_home_navigation", False)
+                    if was_home and (msg_json.get("home_navigation") is False or msg_json.get("home_listening") is False):
+                        await stop_home_listening(conn)
+                    if "home_navigation" in msg_json:
+                        conn.hospice_home_navigation = msg_json["home_navigation"] is True
+                    if getattr(conn, "hospice_home_navigation", False) and msg_json.get("home_listening") is True:
+                        start_home_listening(conn)
+                    if getattr(conn, "hospice_home_navigation", False):
+                        realtime_voice = getattr(conn, "realtime_voice", None)
+                        if realtime_voice and hasattr(realtime_voice, "pause"):
+                            await realtime_voice.pause()
+                    if "call_active" in msg_json:
+                        conn.hospice_call_active = bool(msg_json["call_active"])
                     conn.logger.bind(tag=TAG).info(
-                        f"安宁疗护患者端通话状态: {conn.hospice_call_active}"
+                        f"安宁疗护患者端通话状态: {getattr(conn, 'hospice_call_active', False)}"
                     )
                     return
 

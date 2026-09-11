@@ -91,9 +91,12 @@ class AudioRoutingMixin:
         if isinstance(message, str):
             await handleTextMessage(self, message)
         elif isinstance(message, bytes):
+            if getattr(self, "hospice_home_navigation", False) and not getattr(self, "hospice_home_listening", False):
+                return
             if (
                 self.voice_mode == "doubao_s2s"
                 and self.realtime_voice is not None
+                and not getattr(self, "hospice_home_navigation", False)
                 and not self.dignity_active
                 and not self.conn_from_mqtt_gateway
             ):

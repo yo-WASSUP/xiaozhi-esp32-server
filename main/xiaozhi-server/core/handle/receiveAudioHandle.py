@@ -34,6 +34,14 @@ def is_barge_in_confirmed(conn, have_voice, now=None):
 
 
 async def handleAudioMessage(conn, audio):
+    if getattr(conn, "hospice_home_navigation", False):
+        if not getattr(conn, "hospice_home_listening", False):
+            return
+        conn.hospice_home_audio_task = asyncio.current_task()
+    await _handle_audio_message(conn, audio)
+
+
+async def _handle_audio_message(conn, audio):
     # 当前片段是否有人说话
     have_voice = conn.vad.is_vad(conn, audio)
     # 如果设备刚刚被唤醒，短暂忽略VAD检测
@@ -113,6 +121,25 @@ async def startToChat(conn, text):
 
     if conn.need_bind:
         await check_bind_device(conn)
+        return
+
+    if getattr(conn, "hospice_home_navigation", False):
+        if not getattr(conn, "hospice_home_listening", False):
+            return
+        from core.api.hospice.patient_actions import detect_home_app
+        command_text = actual_text
+        try:
+            payload = json.loads(command_text)
+            if isinstance(payload, dict):
+                command_text = payload.get("content", command_text)
+        except (ValueError, TypeError):
+            pass
+        app_id = detect_home_app(command_text)
+        conn.hospice_home_rearm_asr = app_id is None
+        await conn.websocket.send(json.dumps({
+            "type": "client_action", "action": "home_navigation",
+            "app_id": app_id, "text": command_text,
+        }, ensure_ascii=False))
         return
 
     if getattr(conn, "hospice_call_active", False):

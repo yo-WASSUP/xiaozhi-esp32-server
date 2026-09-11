@@ -260,7 +260,7 @@ def _generate_scene_narration_audio(
         from core.utils import tts
 
         tts_config = copy.deepcopy(config)
-        selected = (tts_config.get("selected_module") or {}).get("TTS")
+        selected = _resolve_narration_tts_provider(tts_config)
         if not selected:
             return None
         module_config = (tts_config.get("TTS") or {}).get(selected)
@@ -281,6 +281,24 @@ def _generate_scene_narration_audio(
     except Exception:
         return None
     return None
+
+
+def _resolve_narration_tts_provider(config: Dict[str, Any]) -> str:
+    providers = config.get("TTS") or {}
+    hospice = config.get("hospice") or {}
+    configured = str(hospice.get("life_review_narration_tts") or "").strip()
+    if configured:
+        if configured not in providers:
+            raise ValueError(f"视频旁白 TTS 未配置: {configured}")
+        return configured
+
+    # The built-in narration voices are CosyVoice voices. Prefer its provider
+    # when ordinary chat uses a real-time provider such as Huoshan double-stream.
+    for name, provider_config in providers.items():
+        if isinstance(provider_config, dict) and provider_config.get("type") == "alibl_stream":
+            return name
+
+    return str((config.get("selected_module") or {}).get("TTS") or "").strip()
 
 
 def _resolve_narration_voice(config: Dict[str, Any], requested: str = "") -> str:

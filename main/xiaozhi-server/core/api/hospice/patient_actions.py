@@ -57,3 +57,25 @@ def detect_patient_action(text: str, call_active: bool = False) -> Optional[Dict
         return action
 
     return None
+
+
+HOME_APP_PHRASES = {
+    "voice": ("语音沟通", "聊聊天", "说说话"),
+    "family": ("家属消息", "看看留言", "看看家人的留言", "看看家人的消息"),
+    "dignity": ("尊严疗法", "人生故事", "讲讲我的故事", "记录人生故事"),
+    "digital": ("数字疗法",),
+    "aroma": ("芳香疗法",),
+    "smartbed": ("智能床", "智能床联动", "调节床铺"),
+}
+
+
+def detect_home_app(text: str) -> Optional[str]:
+    """首页固定口令：完整匹配，避免否定句或闲聊误触发。"""
+    value = _normalized(text)
+    value = re.sub(r"^(?:你好安安|安安你好|安安)", "", value)
+    value = re.sub(r"^(?:请帮我|帮我|我想|我要|请)?(?:打开|进入|去)?", "", value)
+    value = re.sub(r"(?:吧|一下)$", "", value)
+    for app_id, phrases in HOME_APP_PHRASES.items():
+        if value in phrases:
+            return app_id
+    return None

@@ -8,7 +8,7 @@ import LegacyVideoScreen from './screens/LegacyVideoScreen';
 import PairingScreen from './screens/PairingScreen';
 import { clearPairing, DEVICE_ID, FAMILY_ID, hasPairing } from './constants';
 
-export default function App() {
+export default function App({ onLogout }) {
   const [tab, setTab] = useState('message');
   const [paired, setPaired] = useState(hasPairing());
   const [unbindBusy, setUnbindBusy] = useState(false);
@@ -52,12 +52,12 @@ export default function App() {
     <div className="app-shell">
       <PaperBg>
         {!paired ? (
-          <PairingScreen />
+          <PairingScreen onLogout={onLogout} />
         ) : (
           <>
             {tab === 'message' && <MessageScreen />}
             {tab === 'call'    && <CallScreen />}
-            {tab === 'history' && <HistoryScreen onUnbind={unbind} unbindBusy={unbindBusy} />}
+            {tab === 'history' && <HistoryScreen onLogout={onLogout} onUnbind={unbind} unbindBusy={unbindBusy} />}
             {tab === 'video'   && <LegacyVideoScreen />}
             <TabBar tab={tab} setTab={setTab} />
           </>

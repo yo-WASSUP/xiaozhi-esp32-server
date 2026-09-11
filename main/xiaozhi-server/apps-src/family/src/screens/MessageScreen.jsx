@@ -76,7 +76,7 @@ export default function MessageScreen() {
   const uploadFile = async (blob, filename) => {
     const fd = new FormData();
     fd.append('file', blob, filename);
-    const r = await fetch('/api/hospice/upload', { method: 'POST', body: fd });
+    const r = await fetch(`/api/hospice/upload?device_id=${encodeURIComponent(DEVICE_ID)}`, { method: 'POST', body: fd });
     const j = await r.json();
     if (!j.success) throw new Error(j.error || '上传失败');
     return j;

@@ -60,6 +60,10 @@ def load_config(config_name=None):
     else:
         # 合并配置
         config = merge_configs(default_config, custom_config)
+    # 本机私密覆盖配置，用于账号密码等不应提交到仓库的内容。
+    local_config_path = get_project_dir() + ".private_config.yaml"
+    if os.path.exists(local_config_path):
+        config = merge_configs(config, read_config(local_config_path) or {})
     # 初始化目录
     ensure_directories(config)
 

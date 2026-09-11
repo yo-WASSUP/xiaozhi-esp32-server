@@ -8,6 +8,7 @@ import queue
 import asyncio
 import traceback
 import threading
+import concurrent.futures
 import shutil
 import opuslib_next
 
@@ -47,7 +48,7 @@ class ASRProviderBase(ABC):
                     conn.loop,
                 )
                 future.result()
-            except queue.Empty:
+            except (queue.Empty, concurrent.futures.CancelledError):
                 continue
             except Exception as e:
                 logger.bind(tag=TAG).error(

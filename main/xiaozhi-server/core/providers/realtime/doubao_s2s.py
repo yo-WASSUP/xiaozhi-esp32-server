@@ -346,6 +346,62 @@ class DoubaoS2SClient:
         if self.run_task is None or self.run_task.done():
             self.run_task = asyncio.create_task(self._run())
 
+    async def pause(self):
+        """暂停上游会话，保留对象供离开主页后按需重新连接。"""
+        task = self.run_task
+        if task and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        self.run_task = None
+        if self.upstream is not None:
+            try:
+                await self.upstream.close()
+            except Exception:
+                pass
+            self.upstream = None
+        while not self.audio_queue.empty():
+            try:
+                self.audio_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+        self.active = False
+        self.responding = False
+        self.interrupt_sent = False
+        self.user_text = ""
+
+    def build_session_payload(self):
+        return {
+            "asr": {
+                "language": "zh-CN",
+                "audio_info": {
+                    "format": "pcm",
+                    "sample_rate": self.input_rate,
+                    "channel": 1,
+                },
+                "extra": {
+                    "end_smooth_window_ms": self.end_smooth_window_ms,
+                    "enable_custom_vad": True,
+                    "enable_asr_twopass": False,
+                },
+            },
+            "tts": {
+                "speaker": self.speaker,
+                "audio_config": {
+                    "channel": 1,
+                    "format": self.output_format,
+                    "sample_rate": self.output_rate,
+                },
+            },
+            "dialog": {
+                "system_role": self.system_role,
+                "speaking_style": self.speaking_style,
+                "extra": {
+                    "model": self.model,
+                    "enable_loudness_norm": True,
+                },
+            },
+        }
+
     async def _run(self):
         if not self.api_key or self.api_key.startswith("你的"):
             await self._activate_fallback("未配置豆包端到端 API Key")
@@ -382,37 +438,7 @@ class DoubaoS2SClient:
             )
 
             requested_session_id = str(uuid.uuid4())
-            start_payload = {
-                "asr": {
-                    "language": "zh-CN",
-                    "audio_info": {
-                        "format": "pcm",
-                        "sample_rate": self.input_rate,
-                        "channel": 1,
-                    },
-                    "extra": {
-                        "end_smooth_window_ms": self.end_smooth_window_ms,
-                        "enable_custom_vad": True,
-                        "enable_asr_twopass": False,
-                    },
-                },
-                "tts": {
-                    "speaker": self.speaker,
-                    "audio_config": {
-                        "channel": 1,
-                        "format": self.output_format,
-                        "sample_rate": self.output_rate,
-                    },
-                },
-                "dialog": {
-                    "system_role": self.system_role,
-                    "speaking_style": self.speaking_style,
-                    "extra": {
-                        "model": self.model,
-                        "enable_loudness_norm": True,
-                    },
-                },
-            }
+            start_payload = self.build_session_payload()
             await self._send_frame(
                 build_event_frame(
                     MESSAGE_FULL_CLIENT,
@@ -441,8 +467,18 @@ class DoubaoS2SClient:
             raise
         except Exception as exc:
             if not self.closed:
-                self.conn.logger.bind(tag=TAG).error(f"豆包端到端会话失败: {exc}")
-                await self._activate_fallback(str(exc))
+                if "DialogAudioIdleTimeoutError" in str(exc):
+                    self.conn.logger.bind(tag=TAG).info(
+                        "豆包端到端空闲会话已关闭，将在下次说话时重新连接"
+                    )
+                    while not self.audio_queue.empty():
+                        try:
+                            self.audio_queue.get_nowait()
+                        except asyncio.QueueEmpty:
+                            break
+                else:
+                    self.conn.logger.bind(tag=TAG).error(f"豆包端到端会话失败: {exc}")
+                    await self._activate_fallback(str(exc))
         finally:
             self.active = False
             if self.upstream is not None:
@@ -482,6 +518,7 @@ class DoubaoS2SClient:
         self.conn.last_activity_time = time.time() * 1000
         for frame in split_pcm_frames(pcm, self.input_rate, 20):
             self._queue_input_pcm(frame)
+        self.start()
 
     async def send_pcm(self, pcm: bytes):
         if self.closed or self.conn.voice_mode != "doubao_s2s" or not pcm:
@@ -493,6 +530,7 @@ class DoubaoS2SClient:
             return
         self.conn.last_activity_time = time.time() * 1000
         self._queue_input_pcm(pcm)
+        self.start()
 
     def _queue_input_pcm(self, pcm: bytes):
         try:

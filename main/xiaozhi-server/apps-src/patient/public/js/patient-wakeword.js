@@ -10,6 +10,7 @@ let sourceNode = null;
 let processorNode = null;
 let listening = false;
 let ready = false;
+let lifecycleQueue = Promise.resolve();
 
 function dispatch(type, detail = {}) {
   window.dispatchEvent(new CustomEvent(type, { detail }));
@@ -18,6 +19,7 @@ function dispatch(type, detail = {}) {
 function normalizeConfig(config = {}) {
   const sherpaConfig = config.sherpa_onnx || config.sherpaOnnx || {};
   return {
+    deviceId: config.device_id || '',
     enabled: config.enabled !== false,
     mode: String(config.mode || 'sherpa_onnx_kws').toLowerCase(),
     threshold: Number(config.threshold || 0.50),
@@ -53,7 +55,10 @@ function connectWakeWordSocket(sampleRate) {
   dispatch('xz:wakeword-state', { state: 'loading', mode: 'sherpa_onnx_kws' });
 
   return new Promise((resolve, reject) => {
-    const socket = new WebSocket(wsUrl(activeConfig.endpoint));
+    const endpoint = new URL(wsUrl(activeConfig.endpoint));
+    endpoint.searchParams.set('role', 'patient');
+    endpoint.searchParams.set('device_id', activeConfig.deviceId);
+    const socket = new WebSocket(endpoint.href);
     ws = socket;
     socket.binaryType = 'arraybuffer';
 
@@ -133,35 +138,14 @@ export async function initPatientWakeWord(config) {
   return true;
 }
 
-export async function startPatientWakeWord() {
-  if (!activeConfig || listening) return false;
-
-  const requestedSampleRate = activeConfig.sampleRate || 16000;
-  audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: requestedSampleRate });
-  if (audioContext.state === 'suspended') await audioContext.resume();
-
-  mediaStream = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-      channelCount: 1,
-    },
-  });
-
-  sourceNode = audioContext.createMediaStreamSource(mediaStream);
-  processorNode = createProcessor(audioContext);
-  sourceNode.connect(processorNode);
-  processorNode.connect(audioContext.destination);
-
-  listening = true;
-  await connectWakeWordSocket(audioContext.sampleRate || requestedSampleRate);
-  dispatch('xz:wakeword-state', { state: 'listening', mode: 'sherpa_onnx_kws' });
-  return true;
+function runLifecycle(task) {
+  const operation = lifecycleQueue.then(task, task);
+  lifecycleQueue = operation.catch(() => {});
+  return operation;
 }
 
-export async function stopPatientWakeWord() {
-  if (!listening && !ws && !mediaStream) return false;
+async function stopPatientWakeWordNow() {
+  if (!listening && !ws && !mediaStream && !audioContext) return false;
   listening = false;
   try { sourceNode?.disconnect(); } catch (_) { }
   try { processorNode?.disconnect(); } catch (_) { }
@@ -174,6 +158,49 @@ export async function stopPatientWakeWord() {
   closeSocket();
   dispatch('xz:wakeword-state', { state: 'ready', mode: 'sherpa_onnx_kws' });
   return true;
+}
+
+async function startPatientWakeWordNow() {
+  if (!activeConfig) return false;
+  if (listening) return true;
+
+  const requestedSampleRate = activeConfig.sampleRate || 16000;
+  try {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: requestedSampleRate });
+    if (audioContext.state === 'suspended') await audioContext.resume();
+
+    const microphoneDeviceId = localStorage.getItem('anan_microphone_device_id') || '';
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        ...(microphoneDeviceId ? { deviceId: { exact: microphoneDeviceId } } : {}),
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
+      },
+    });
+
+    sourceNode = audioContext.createMediaStreamSource(mediaStream);
+    processorNode = createProcessor(audioContext);
+    sourceNode.connect(processorNode);
+    processorNode.connect(audioContext.destination);
+
+    listening = true;
+    await connectWakeWordSocket(audioContext.sampleRate || requestedSampleRate);
+  } catch (error) {
+    await stopPatientWakeWordNow();
+    throw error;
+  }
+  dispatch('xz:wakeword-state', { state: 'listening', mode: 'sherpa_onnx_kws' });
+  return true;
+}
+
+export function startPatientWakeWord() {
+  return runLifecycle(startPatientWakeWordNow);
+}
+
+export function stopPatientWakeWord() {
+  return runLifecycle(stopPatientWakeWordNow);
 }
 
 export async function releasePatientWakeWord() {

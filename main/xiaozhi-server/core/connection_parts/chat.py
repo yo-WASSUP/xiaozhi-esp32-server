@@ -197,11 +197,28 @@ class ChatMixin:
                 )
                 memory_str = future.result()
 
+            dialogue_data = self.dialogue.get_llm_dialogue_with_memory(
+                memory_str, self.config.get("voiceprint", {})
+            )
+            from core.dignity.symptom_retrieval import enabled, add_references
+
+            if enabled(self.config) and not getattr(self, "dignity_active", False):
+                retrieval_start = time.perf_counter()
+                # Derive the current user query also on tool-result continuation.
+                messages = self.dialogue.dialogue
+                user_index = next((i for i in range(len(messages)-1, -1, -1)
+                                   if messages[i].role == "user"), None)
+                if user_index is not None:
+                    dialogue_data, sources, reference_chars = add_references(
+                        dialogue_data, messages[user_index].content, messages[:user_index]
+                    )
+                    self.logger.bind(tag=TAG).info(
+                        f"【性能】症状检索 {(time.perf_counter()-retrieval_start)*1000:.1f}ms, "
+                        f"参考 {reference_chars}字, 来源 {sources}"
+                    )
+
             if self.intent_type == "function_call" and functions is not None:
                 # 使用支持functions的streaming接口
-                dialogue_data = self.dialogue.get_llm_dialogue_with_memory(
-                    memory_str, self.config.get("voiceprint", {})
-                )
                 # 计算输入文字长度
                 dialogue_chars = sum(
                     len(str(msg.get("content", ""))) for msg in dialogue_data
@@ -217,9 +234,6 @@ class ChatMixin:
                     functions=functions,
                 )
             else:
-                dialogue_data = self.dialogue.get_llm_dialogue_with_memory(
-                    memory_str, self.config.get("voiceprint", {})
-                )
                 dialogue_chars = sum(
                     len(str(msg.get("content", ""))) for msg in dialogue_data
                 )

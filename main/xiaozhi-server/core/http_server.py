@@ -7,6 +7,12 @@ from config.logger import setup_logging
 from core.api.ota_handler import OTAHandler
 from core.api.vision_handler import VisionHandler
 from core.api.hospice import register_hospice_routes
+from core.api.hospice.auth import (
+    HospiceAuthStore,
+    build_auth_middleware,
+    register_auth_routes,
+)
+from core.api.hospice.admin_api import register_admin_routes
 
 TAG = __name__
 
@@ -110,7 +116,19 @@ class SimpleHttpServer:
                 if ssl_context:
                     _disable_loop_sendfile(self.logger)
 
-                app = web.Application()
+                hospice_config = self.config.get("hospice", {}) or {}
+                hospice_auth_config = hospice_config.get("auth", {}) or {}
+                auth_db_path = hospice_auth_config.get("db_path", ".hospice_auth.db")
+                if not os.path.isabs(auth_db_path):
+                    auth_db_path = os.path.join(xiaozhi_root, auth_db_path)
+                auth_store = HospiceAuthStore(
+                    auth_db_path,
+                    str(hospice_auth_config.get("secret_key") or server_config.get("auth_key") or ""),
+                    hospice_auth_config,
+                )
+                app = web.Application(
+                    middlewares=[build_auth_middleware(auth_store, hospice_auth_config)]
+                )
 
                 if not read_config_from_api:
                     # 如果没有开启智控台，只是单模块运行，就需要再添加简单OTA接口，用于下发websocket接口
@@ -146,7 +164,9 @@ class SimpleHttpServer:
                 )
 
                 # 注册安宁疗护 API 路由
-                register_hospice_routes(app, self.config)
+                register_auth_routes(app, auth_store, hospice_auth_config)
+                register_admin_routes(app, auth_store)
+                register_hospice_routes(app, self.config, auth_store=auth_store)
 
                 # 静态文件服务：患者端和家属端 PWA
                 apps_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "apps")
@@ -158,6 +178,11 @@ class SimpleHttpServer:
                 if os.path.exists(os.path.join(apps_dir, "family")):
                     app.router.add_static("/family/", os.path.join(apps_dir, "family"), show_index=True)
                     self.logger.bind(tag=TAG).info(f"家属端面板:\t{scheme}://{local_ip}:{port}/family/index.html")
+                if os.path.exists(os.path.join(apps_dir, "clinician")):
+                    app.router.add_static("/clinician/", os.path.join(apps_dir, "clinician"), show_index=True)
+                    app.router.add_static("/admin/", os.path.join(apps_dir, "clinician"), show_index=True)
+                    self.logger.bind(tag=TAG).info(f"医护端面板:\t{scheme}://{local_ip}:{port}/clinician/index.html")
+                    self.logger.bind(tag=TAG).info(f"管理员面板:\t{scheme}://{local_ip}:{port}/admin/index.html")
                 if os.path.exists(os.path.join(apps_dir, "shared")):
                     app.router.add_static("/shared/", os.path.join(apps_dir, "shared"), show_index=False)
 

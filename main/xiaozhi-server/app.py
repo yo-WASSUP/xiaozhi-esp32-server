@@ -56,6 +56,12 @@ async def main():
     check_ffmpeg_installed()
     config = load_config(config_name=args.config)
 
+    from core.dignity.symptom_retrieval import enabled, warmup
+    if enabled(config):
+        logger.bind(tag=TAG).info("加载本地症状语义索引")
+        await asyncio.to_thread(warmup)
+        logger.bind(tag=TAG).info("本地症状语义索引已就绪")
+
     # auth_key优先级：配置文件server.auth_key > manager-api.secret > 自动生成
     # auth_key用于jwt认证，比如视觉分析接口的jwt认证、ota接口的token生成与websocket认证
     # 获取配置文件中的auth_key

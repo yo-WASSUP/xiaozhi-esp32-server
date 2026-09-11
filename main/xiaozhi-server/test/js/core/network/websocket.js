@@ -216,6 +216,7 @@ export class WebSocketHandler {
             // 句子结束时不清除动画，等待下一个句子或最终停止
         } else if (message.state === 'stop') {
             const audioPlayer = getAudioPlayer();
+            if (message.drain) audioPlayer.finishPcmAudio();
             if (!message.drain) {
                 audioPlayer.clearAllAudio();
             }

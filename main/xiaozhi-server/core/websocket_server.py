@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from http.cookies import SimpleCookie
 
 import websockets
 from config.logger import setup_logging
@@ -35,6 +36,7 @@ _setup_websockets_logger()
 from core.connection import ConnectionHandler
 from config.config_loader import get_config_from_api_async
 from core.auth import AuthManager, AuthenticationError
+from core.api.hospice.auth import AuthError as HospiceAuthError, HospiceAuthStore
 from core.utils.modules_initialize import initialize_modules
 from core.utils.util import check_vad_update, check_asr_update
 
@@ -69,6 +71,15 @@ class WebSocketServer:
         secret_key = self.config["server"]["auth_key"]
         expire_seconds = auth_config.get("expire_seconds", None)
         self.auth = AuthManager(secret_key=secret_key, expire_seconds=expire_seconds)
+        hospice_config = self.config.get("hospice", {}) or {}
+        hospice_auth_config = hospice_config.get("auth", {}) or {}
+        self.hospice_auth_store = None
+        if hospice_auth_config.get("enabled", False) is True:
+            self.hospice_auth_store = HospiceAuthStore(
+                hospice_auth_config.get("db_path", ".hospice_auth.db"),
+                str(hospice_auth_config.get("secret_key") or secret_key or ""),
+                hospice_auth_config,
+            )
 
     async def start(self):
         server_config = self.config["server"]
@@ -123,7 +134,7 @@ class WebSocketServer:
         """处理新连接，每次创建独立的ConnectionHandler"""
         # 先认证，后建立连接
         try:
-            await self._handle_auth(websocket)
+            hospice_auth_user = await self._handle_auth(websocket)
         except AuthenticationError:
             await websocket.send("认证失败")
             await websocket.close()
@@ -138,6 +149,7 @@ class WebSocketServer:
             self._intent,
             self,  # 传入server实例
         )
+        handler.hospice_auth_user = hospice_auth_user
         try:
             await handler.handle_connection(websocket)
         except Exception as e:
@@ -220,6 +232,26 @@ class WebSocketServer:
 
     async def _handle_auth(self, websocket):
         # 先认证，后建立连接
+        hospice_auth_user = None
+        if self.hospice_auth_store and websocket.request.headers.get("origin"):
+            headers = dict(websocket.request.headers)
+            cookies = SimpleCookie()
+            cookies.load(headers.get("cookie", ""))
+            token_cookie = cookies.get("hospice_access_patient") or cookies.get("hospice_access")
+            if not token_cookie:
+                raise AuthenticationError("Missing hospice login")
+            try:
+                user = self.hospice_auth_store.verify_access_token(token_cookie.value)
+            except HospiceAuthError as exc:
+                raise AuthenticationError("Invalid hospice login") from exc
+            device_id = headers.get("device-id", "")
+            if user.role != "patient" or not self.hospice_auth_store.can_access_patient(user, device_id):
+                raise AuthenticationError("Hospice account cannot access this patient")
+            hospice_auth_user = user
+        elif self.hospice_auth_store:
+            device_id = websocket.request.headers.get("device-id", "")
+            if device_id not in self.allowed_devices:
+                raise AuthenticationError("Device is not allowed for hospice access")
         if self.auth_enable:
             headers = dict(websocket.request.headers)
             device_id = headers.get("device-id", None)
@@ -240,3 +272,4 @@ class WebSocketServer:
                 )
                 if not auth_success:
                     raise AuthenticationError("Invalid token")
+        return hospice_auth_user

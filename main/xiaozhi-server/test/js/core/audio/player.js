@@ -18,7 +18,11 @@ export class AudioPlayer {
         this.streamingContext = null;
         this.queue = new BlockingQueue();
         this.isPlaying = false;
-        this.pcmSources = new Set();
+        this.pcmNode = null;
+        this.pcmReady = null;
+        this.pcmGeneration = 0;
+        this.pcmPendingByte = null;
+        this.pcmUnderruns = 0;
         this.nextPcmPlayAt = 0;
         this.pcmAnalyser = null;
         this.pcmAudioContext = null;
@@ -39,6 +43,7 @@ export class AudioPlayer {
     getPcmAudioContext() {
         if (!this.pcmAudioContext) {
             this.pcmAudioContext = new (window.AudioContext || window.webkitAudioContext)({
+                sampleRate: 24000,
                 latencyHint: 'interactive'
             });
         }
@@ -248,39 +253,58 @@ export class AudioPlayer {
         }
     }
 
+    async preparePcmStream() {
+        const context = this.getPcmAudioContext();
+        if (context.sampleRate !== 24000) throw new Error('PCM audio context must run at 24 kHz');
+        if (!this.pcmReady) {
+            this.pcmReady = context.audioWorklet.addModule('/test-assets/js/core/audio/pcm-worklet.js?v=0908').then(() => {
+                this.pcmNode = new AudioWorkletNode(context, 'pcm-stream', { numberOfInputs: 0, outputChannelCount: [1] });
+                this.pcmAnalyser = context.createAnalyser();
+                this.pcmAnalyser.fftSize = 2048;
+                this.pcmNode.connect(this.pcmAnalyser);
+                this.pcmAnalyser.connect(context.destination);
+                this.pcmNode.port.onmessage = ({ data }) => {
+                    if (data.underruns > this.pcmUnderruns) {
+                        log(`PCM播放缓冲不足: ${data.underruns}次`, 'debug');
+                        this.pcmUnderruns = data.underruns;
+                    }
+                };
+            });
+        }
+        await this.pcmReady;
+    }
+
     enqueuePcmData(pcmData, sampleRate = 24000) {
         if (!pcmData?.byteLength) return;
-        const audioContext = this.getPcmAudioContext();
-        const frameCount = Math.floor(pcmData.byteLength / 2);
-        if (!frameCount) return;
-
-        const view = new DataView(
-            pcmData.buffer,
-            pcmData.byteOffset,
-            pcmData.byteLength
-        );
-        const audioBuffer = audioContext.createBuffer(1, frameCount, sampleRate);
-        const channel = audioBuffer.getChannelData(0);
-        for (let index = 0; index < frameCount; index += 1) {
-            channel[index] = view.getInt16(index * 2, true) / 32768;
+        if (sampleRate !== 24000) throw new Error('PCM stream requires 24 kHz');
+        if (this.pcmPendingByte !== null) {
+            const joined = new Uint8Array(pcmData.byteLength + 1);
+            joined[0] = this.pcmPendingByte;
+            joined.set(pcmData, 1);
+            pcmData = joined;
+            this.pcmPendingByte = null;
         }
-
-        const source = audioContext.createBufferSource();
-        source.buffer = audioBuffer;
-        if (!this.pcmAnalyser) {
-            this.pcmAnalyser = audioContext.createAnalyser();
-            this.pcmAnalyser.fftSize = 2048;
-            this.pcmAnalyser.connect(audioContext.destination);
+        if (pcmData.byteLength % 2) {
+            this.pcmPendingByte = pcmData[pcmData.byteLength - 1];
+            pcmData = pcmData.subarray(0, -1);
         }
-        source.connect(this.pcmAnalyser);
-        const startAt = Math.max(
-            audioContext.currentTime + 0.012,
-            this.nextPcmPlayAt
-        );
-        source.start(startAt);
-        this.nextPcmPlayAt = startAt + audioBuffer.duration;
-        this.pcmSources.add(source);
-        source.onended = () => this.pcmSources.delete(source);
+        if (!pcmData.byteLength) return;
+        const view = new DataView(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength);
+        const samples = new Float32Array(pcmData.byteLength / 2);
+        for (let i = 0; i < samples.length; i++) samples[i] = view.getInt16(i * 2, true) / 32768;
+        const generation = this.pcmGeneration;
+        this.preparePcmStream().then(() => {
+            if (generation !== this.pcmGeneration) return;
+            this.nextPcmPlayAt = Math.max(this.pcmAudioContext.currentTime + 0.04, this.nextPcmPlayAt) + samples.length / 24000;
+            this.pcmNode.port.postMessage({ type: 'audio', samples }, [samples.buffer]);
+        }).catch(error => log(`PCM播放器初始化失败: ${error.message}`, 'error'));
+    }
+
+    finishPcmAudio() {
+        const generation = this.pcmGeneration;
+        this.preparePcmStream().then(() => {
+            if (generation === this.pcmGeneration) this.pcmNode.port.postMessage({ type: 'end' });
+        }).catch(error => log(`PCM播放器结束失败: ${error.message}`, 'error'));
     }
 
     getPcmQueuedMs() {
@@ -293,11 +317,10 @@ export class AudioPlayer {
     }
 
     clearPcmAudio() {
-        for (const source of this.pcmSources) {
-            try { source.stop(); } catch (_) { /* already ended */ }
-        }
-        this.pcmSources.clear();
-        this.nextPcmPlayAt = this.pcmAudioContext?.currentTime || 0;
+        this.pcmGeneration++;
+        this.pcmNode?.port.postMessage({ type: 'clear' });
+        this.pcmPendingByte = null;
+        this.nextPcmPlayAt = 0;
     }
 
     // 预加载解码器

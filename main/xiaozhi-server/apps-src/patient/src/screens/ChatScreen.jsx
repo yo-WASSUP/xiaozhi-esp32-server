@@ -8,7 +8,7 @@ import { getReplyDensity } from '../utils/replyText';
 
 const FALLBACK_COPY = {
   offline: '语音服务正在连接，请稍等一会儿。',
-  standby: '我在这里，想聊天时叫一声“安安”。',
+  standby: '我在这里，想聊天时说一声“你好，安安”。',
   ready: '我一直在呢，您直接说话就好。',
 };
 
@@ -35,9 +35,10 @@ export default function ChatScreen({
     recording,
     userSpeaking,
   });
+  const passiveState = aiState === 'speaking' || aiState === 'thinking' ? aiState : 'idle';
   const displayState = standby
     ? 'idle'
-    : (listening ? 'listening' : aiState);
+    : (listening ? 'listening' : passiveState);
   const fallback = !connected
     ? FALLBACK_COPY.offline
     : standby
@@ -98,7 +99,7 @@ export default function ChatScreen({
         </div>
 
         <div className="voice-screen__conversation" aria-live="polite">
-          {lastHeard && !standby && (
+          {lastHeard && (
             <div className="voice-screen__heard">
               <span>您说</span>
               <p>{lastHeard}</p>
@@ -118,7 +119,8 @@ export default function ChatScreen({
         <WaveBars
           source={activitySource}
           level={activityLevel}
-          active={connected && (recording || aiState === 'speaking')}
+          active={connected && (userSpeaking || aiState === 'speaking')}
+          connected={connected}
         />
       </div>
     </div>

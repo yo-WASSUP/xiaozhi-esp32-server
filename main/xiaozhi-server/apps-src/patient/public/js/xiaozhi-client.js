@@ -78,7 +78,7 @@ if (!clientId) {
 ensureHiddenInput('deviceMac', deviceMac);
 ensureHiddenInput('deviceName', 'patient-app');
 ensureHiddenInput('clientId', clientId);
-const savedVoiceMode = localStorage.getItem('anan_voice_mode') || 'doubao_s2s';
+const savedVoiceMode = localStorage.getItem('anan_voice_mode') || 'cascade';
 ensureHiddenInput('voiceMode', savedVoiceMode);
 
 // ── 2. 垫片：stub uiController（原模块里硬引用） ────────
@@ -311,7 +311,7 @@ const realClient = {
   },
 
   async initWakeWord(config) {
-    wakeWordMod = wakeWordMod || await import('./patient-wakeword.js?v=1');
+    wakeWordMod = wakeWordMod || await import('./patient-wakeword.js?v=2');
     return await wakeWordMod.initPatientWakeWord(config);
   },
 

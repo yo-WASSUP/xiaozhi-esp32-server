@@ -85,11 +85,14 @@ prompt: |
 # ========== 安宁疗护会话日志配置 ==========
 hospice:
   enable_logging: true
+  # 视频旁白使用独立的离线 TTS，避免复用普通聊天的双向流 TTS。
+  life_review_narration_tts: AliBLTTS
+  life_review_narration_voice: longlaoyi_v3
   # 普通聊天是否启用“先唤醒、再对话”的门控。
   enable_patient_wakeup: true
   # 患者端本地 sherpa-onnx KWS 唤醒词检测；不再提供 ASR 文本门控兜底。
   patient_wakeup_mode: sherpa_onnx_kws
-  patient_wakeup_threshold: 0.50
+  patient_wakeup_threshold: 0.30
   patient_wakeup_sherpa_onnx:
     runtime_path: "/wakeword/sherpa-onnx-kws.js"
     model_dir: "/wakeword/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"
@@ -153,6 +156,20 @@ VAD:
     min_silence_duration_ms: 200
 
 ASR:
+  # 使用时将 selected_module.ASR 改为 DoubaoStreamASR。
+  DoubaoStreamASR:
+    type: doubao_stream
+    appid: YOUR_VOLCENGINE_APP_ID
+    access_token: YOUR_VOLCENGINE_ACCESS_TOKEN
+    resource_id: volc.seedasr.sauc.duration
+    ws_url: wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async
+    result_type: full
+    enable_nonstream: true
+    boosting_table_name: ""
+    correct_table_name: ""
+    end_window_size: 800
+    force_to_speech_time: 1000
+    output_dir: tmp/
   AliyunBLStreamASR:
     type: aliyunbl_stream
     # 同一个阿里云 DashScope API Key（语音识别也用它）
@@ -165,6 +182,17 @@ ASR:
     punctuation_prediction_enabled: true
 
 TTS:
+  AliBLTTS:
+    type: alibl_stream
+    api_key: YOUR_ALIYUN_DASHSCOPE_API_KEY_HERE
+    model: cosyvoice-v3-flash
+    voice: longlaoyi_v3
+    output_dir: tmp/
+    format: pcm
+    volume: 50
+    rate: 0.95
+    pitch: 1.0
+
   HuoshanDoubleStreamTTS:
     type: huoshan_double_stream
     ws_url: wss://openspeech.bytedance.com/api/v3/tts/bidirection

@@ -6,7 +6,7 @@ import Card from '../components/Card';
 import SLabel from '../components/SLabel';
 import MoodIcon from '../components/MoodIcon';
 
-export default function HistoryScreen({ onUnbind, unbindBusy = false }) {
+export default function HistoryScreen({ onLogout, onUnbind, unbindBusy = false }) {
   const { trend, today, loading } = useEmotionData();
   const weekDays = padDays(trend, 7);
   const dataDays = weekDays.filter(d => d.count > 0);
@@ -74,6 +74,7 @@ export default function HistoryScreen({ onUnbind, unbindBusy = false }) {
         )}
       </Card>
 
+      {onLogout && <button className="auth-logout" type="button" onClick={onLogout}>退出登录</button>}
       {onUnbind && (
         <Card style={{ padding: '18px', marginTop: 16 }}>
           <SLabel>设备绑定</SLabel>

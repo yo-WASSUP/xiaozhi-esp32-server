@@ -968,7 +968,7 @@ a:focus-visible {
   display: grid;
   grid-template-rows: auto auto;
   align-content: start;
-  gap: 26px;
+  gap: 22px;
   padding: 46px 42px 40px;
   background: #f1f4f0;
 }
@@ -1016,6 +1016,53 @@ a:focus-visible {
   line-height: 1.25;
   font-weight: 700;
   letter-spacing: 0;
+}
+
+.patient-home__voice-guide {
+  width: min(560px, calc(100% - 32px));
+  min-height: 54px;
+  margin: 18px auto 0;
+  padding: 13px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #466657;
+  background: rgba(251, 252, 250, .82);
+  border: 1px solid rgba(77, 117, 100, .16);
+  border-radius: 16px;
+  box-shadow: 0 6px 20px rgba(40, 61, 51, .05);
+  text-align: center;
+}
+
+.patient-home__voice-guide strong {
+  font-size: 17px;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.patient-home__voice-dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #6c907f;
+  box-shadow: 0 0 0 5px rgba(108, 144, 127, .12);
+}
+
+.patient-home__voice-guide--active {
+  color: #315d49;
+  border-color: rgba(77, 117, 100, .28);
+  background: #fbfcfa;
+}
+
+.patient-home__voice-guide--active .patient-home__voice-dot {
+  animation: patient-voice-pulse 1.35s ease-out infinite;
+}
+
+@keyframes patient-voice-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(108, 144, 127, .34); }
+  70%, 100% { box-shadow: 0 0 0 9px rgba(108, 144, 127, 0); }
 }
 
 .patient-home__apps {
@@ -2338,3 +2385,53 @@ a:focus-visible {
     animation-iteration-count: 1 !important;
   }
 }
+.auth-page {
+  height: 100dvh;
+  overflow-y: auto;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  box-sizing: border-box;
+  background: linear-gradient(145deg, #edf5ef, #fbf7ee);
+  color: #26352d;
+}
+.auth-card {
+  width: min(400px, 100%);
+  box-sizing: border-box;
+  padding: 30px;
+  border: 1px solid #cbd8d0;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 20px 55px rgba(48, 82, 64, .13);
+}
+.auth-brand { color: #39745a; font-size: 15px; font-weight: 700; letter-spacing: .14em; }
+.auth-card h1 { margin: 10px 0 8px; font-size: 27px; }
+.auth-card p { margin: 0 0 24px; color: #66746c; font-size: 14px; }
+.auth-card label { display: block; margin: 15px 0 7px; font-size: 14px; font-weight: 650; }
+.auth-card input {
+  width: 100%; height: 48px; box-sizing: border-box; padding: 0 13px;
+  border: 1px solid #bdcbc3; border-radius: 12px; background: #fff; font-size: 16px;
+}
+.auth-card input:focus { outline: 2px solid #76a78e; outline-offset: 1px; }
+.auth-card button {
+  width: 100%; min-height: 49px; margin-top: 22px; border: 0; border-radius: 13px;
+  background: #39745a; color: #fff; font-size: 16px; font-weight: 700; cursor: pointer;
+}
+.auth-card button:disabled { opacity: .58; cursor: wait; }
+.auth-error { margin-top: 14px; padding: 10px 12px; border-radius: 10px; background: #fff0ef; color: #a23831; font-size: 13px; }
+.auth-logout {
+  display: block; width: 100%; min-height: 44px; margin-top: 20px;
+  padding: 10px 16px; border: 1px solid #c5d0ca; border-radius: 12px;
+  background: #fff; color: #52645a; font: inherit; cursor: pointer;
+}
+.dignity-interview__safety-button { display: none !important; }
+
+.password-field { position: relative; }
+.password-field input { padding-right: 76px; }
+.password-field .password-toggle {
+  position: absolute; top: 2px; right: 3px; bottom: 2px;
+  width: 64px; min-height: 0; margin: 0; padding: 0 8px;
+  border: 0; border-radius: 9px; background: transparent;
+  color: #39745a; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.password-toggle:hover { background: #edf3ef; }

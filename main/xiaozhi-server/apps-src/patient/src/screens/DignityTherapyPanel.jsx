@@ -53,7 +53,7 @@ function DignityInterviewStage({
     userSpeaking,
   });
   const displayState = voiceMode
-    ? (listening ? 'listening' : aiState)
+    ? (listening ? 'listening' : passiveState)
     : passiveState;
   const activitySource = userSpeaking || aiState !== 'speaking' ? 'input' : 'output';
   const activityLevel = activitySource === 'input' ? inputLevel : outputLevel;
@@ -125,7 +125,8 @@ function DignityInterviewStage({
           <WaveBars
             source={activitySource}
             level={activityLevel}
-            active={!paused && connected && ((voiceMode && recording) || aiState === 'speaking')}
+            active={!paused && connected && ((voiceMode && userSpeaking) || aiState === 'speaking')}
+            connected={connected}
           />
         </div>
         <button

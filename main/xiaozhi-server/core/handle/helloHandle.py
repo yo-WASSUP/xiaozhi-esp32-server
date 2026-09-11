@@ -62,7 +62,8 @@ async def handleHelloMessage(conn, msg_json):
 
         conn.voice_mode = "doubao_s2s"
         conn.realtime_voice = DoubaoS2SClient(conn, doubao_config)
-        conn.realtime_voice.start()
+        # 端到端服务有音频空闲超时。患者连接时可能仍停留在首页，
+        # 第一帧真实音频到达时再创建上游会话。
     else:
         conn.voice_mode = "cascade"
 

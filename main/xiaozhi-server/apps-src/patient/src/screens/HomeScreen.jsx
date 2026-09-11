@@ -48,7 +48,15 @@ function greeting() {
   return '晚上好';
 }
 
-export default function HomeScreen({ unread = 0, onOpenApp }) {
+export default function HomeScreen({ unread = 0, onOpenApp, connected, micOk, homeListening }) {
+  const voiceGuide = !connected
+    ? '语音助手正在连接'
+    : !micOk
+      ? '允许使用麦克风后，可以说“你好，安安”'
+      : homeListening
+        ? '我在，请说想打开的功能'
+        : '说“你好，安安”，我来帮您打开功能';
+
   return (
     <div className="patient-home">
       <section className="patient-home__intro" aria-labelledby="home-title">
@@ -66,7 +74,7 @@ export default function HomeScreen({ unread = 0, onOpenApp }) {
       <section className="patient-home__apps" aria-labelledby="app-menu-title">
         <div className="patient-home__section-head">
           <h2 id="app-menu-title">常用服务</h2>
-          <span>6 项</span>
+          <span>也可以直接点击下方功能</span>
         </div>
         <nav className="patient-app-grid" aria-label="应用菜单">
           {APP_ITEMS.map((item) => {
@@ -91,6 +99,10 @@ export default function HomeScreen({ unread = 0, onOpenApp }) {
             );
           })}
         </nav>
+        <div className={`patient-home__voice-guide${homeListening ? ' patient-home__voice-guide--active' : ''}`} aria-live="polite">
+          <span className="patient-home__voice-dot" aria-hidden="true" />
+          <strong>{voiceGuide}</strong>
+        </div>
       </section>
     </div>
   );

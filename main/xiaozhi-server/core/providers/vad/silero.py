@@ -49,7 +49,7 @@ class VADProvider(VADProviderBase):
             return True
             
         try:
-            pcm_frame = self.decoder.decode(opus_packet, 960)
+            pcm_frame = opus_packet if conn.audio_format == "pcm" else self.decoder.decode(opus_packet, 960)
             conn.client_audio_buffer.extend(pcm_frame)  # 将新数据加入缓冲区
 
             # 处理缓冲区中的完整帧（每次处理512采样点）

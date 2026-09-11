@@ -90,7 +90,7 @@ const statusTone = (status, active) => {
 
 const voiceKey = (voice) => voice?.voice_id || voice?.speaker_id || '';
 
-export default function SettingsPanel({ open, onClose, voiceMode = 'doubao_s2s', onVoiceModeChange }) {
+export default function SettingsPanel({ open, onClose, onLogout, voiceMode = 'cascade', onVoiceModeChange }) {
   const [configured, setConfigured] = useState(false);
   const [missingConfig, setMissingConfig] = useState([]);
   const [maxSampleMb, setMaxSampleMb] = useState(10);
@@ -204,6 +204,9 @@ export default function SettingsPanel({ open, onClose, voiceMode = 'doubao_s2s',
     setBusy('pairing');
     setTip('');
     try {
+      const session = await fetch('/api/auth/me');
+      const identity = await session.json();
+      if (session.ok && identity.user?.role !== 'patient') throw new Error('请先登录患者账号再生成配对码。');
       const r = await fetch('/api/hospice/pairing/code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -423,7 +426,7 @@ export default function SettingsPanel({ open, onClose, voiceMode = 'doubao_s2s',
       fd.append('language', 'zh');
       fd.append('enable_preprocess', 'true');
       fd.append('file', blob, `cosyvoice-${Date.now()}.${sourceExt || 'wav'}`);
-      const r = await fetch('/api/hospice/voice-clone/train', { method: 'POST', body: fd });
+    const r = await fetch(`/api/hospice/voice-clone/train?device_id=${encodeURIComponent(DEVICE_ID)}`, { method: 'POST', body: fd });
       const j = await r.json();
       if (!j.success) throw new Error(j.error || '提交失败');
       applySettings(j.settings || {});
@@ -843,6 +846,7 @@ export default function SettingsPanel({ open, onClose, voiceMode = 'doubao_s2s',
             启用后，安安会用这个声音说四川话。{settings.resource_link && <a href={settings.resource_link} target="_blank" rel="noreferrer" style={{ color: C.sage, marginLeft: 8 }}>试听样音</a>}
             {tip && <div style={{ marginTop: 8, color: warn ? C.red : C.inkMid }}>{tip}</div>}
           </div>
+          {onLogout && <button className="auth-logout" type="button" onClick={onLogout}>退出登录</button>}
         </div>
       </div>
     </div>

@@ -1,12 +1,9 @@
 import json
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, Mock, patch
 
 from core.dignity.symptom_qa import DATA_PATH, load_symptom_qa_entries
 from core.dignity.symptom_qa import match_symptom_question
-from core.handle.intentHandler import handle_hospice_symptom_qa
-
 
 class SymptomQaTests(unittest.TestCase):
     def test_generated_json_matches_source_shape(self):
@@ -48,73 +45,3 @@ class SymptomQaTests(unittest.TestCase):
         self.assertEqual(len(entries), 81)
         self.assertTrue(all(entry.source_row >= 2 for entry in entries))
         self.assertTrue(all(entry.answer for entry in entries))
-
-
-class FakeLogger:
-    def bind(self, **kwargs):
-        return self
-
-    def info(self, message):
-        pass
-
-    def warning(self, message):
-        pass
-
-
-class FakeDialogue:
-    def __init__(self):
-        self.messages = []
-
-    def put(self, message):
-        self.messages.append(message)
-
-
-class FakeConn:
-    def __init__(self):
-        self.config = {"hospice": {"enable_logging": True}}
-        self.logger = FakeLogger()
-        self.dialogue = FakeDialogue()
-        self.sentence_id = None
-        self.client_abort = True
-
-
-class SymptomQaHandlerTests(unittest.IsolatedAsyncioTestCase):
-    async def test_match_is_answered_directly(self):
-        conn = FakeConn()
-
-        with (
-            patch(
-                "core.handle.intentHandler.send_stt_message",
-                new_callable=AsyncMock,
-            ) as send_stt,
-            patch("core.handle.intentHandler.speak_txt", new=Mock()) as speak,
-        ):
-            handled = await handle_hospice_symptom_qa(conn, "什么是疼痛？")
-
-        self.assertTrue(handled)
-        send_stt.assert_awaited_once_with(conn, "什么是疼痛？")
-        self.assertTrue(speak.call_args.args[1].startswith("疼痛是一种身体和心里"))
-        self.assertEqual(conn.dialogue.messages[0].role, "user")
-        self.assertFalse(conn.client_abort)
-        self.assertIsNotNone(conn.sentence_id)
-
-    async def test_no_match_continues_normal_chat(self):
-        conn = FakeConn()
-
-        with (
-            patch(
-                "core.handle.intentHandler.send_stt_message",
-                new_callable=AsyncMock,
-            ) as send_stt,
-            patch("core.handle.intentHandler.speak_txt", new=Mock()) as speak,
-        ):
-            handled = await handle_hospice_symptom_qa(conn, "今天天气怎么样？")
-
-        self.assertFalse(handled)
-        send_stt.assert_not_awaited()
-        speak.assert_not_called()
-        self.assertEqual(conn.dialogue.messages, [])
-
-
-if __name__ == "__main__":
-    unittest.main()

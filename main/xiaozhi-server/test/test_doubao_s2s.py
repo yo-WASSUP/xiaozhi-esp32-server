@@ -2,7 +2,7 @@ import asyncio
 import json
 import unittest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock, patch
 
 from core.providers.realtime.doubao_s2s import (
     EVENT_ASR_INFO,
@@ -104,6 +104,54 @@ class DoubaoS2SProtocolTests(unittest.TestCase):
 
 
 class DoubaoS2SPcmBridgeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_audio_idle_timeout_keeps_end_to_end_mode(self):
+        logger = SimpleNamespace(
+            bind=lambda **_: SimpleNamespace(info=Mock(), error=Mock())
+        )
+        client = DoubaoS2SClient.__new__(DoubaoS2SClient)
+        client.api_key = "test-key"
+        client.url = "wss://example.invalid"
+        client.resource_id = "test-resource"
+        client.closed = False
+        client.active = False
+        client.upstream = None
+        client.audio_queue = asyncio.Queue()
+        client.conn = SimpleNamespace(logger=logger)
+        client._activate_fallback = AsyncMock()
+
+        error = RuntimeError(
+            "sami error: codes=52000042, desc=DialogAudioIdleTimeoutError"
+        )
+        with patch(
+            "core.providers.realtime.doubao_s2s.websockets.connect",
+            AsyncMock(side_effect=error),
+        ):
+            await client._run()
+
+        client._activate_fallback.assert_not_awaited()
+
+    async def test_home_pause_closes_idle_session_without_disabling_reconnect(self):
+        upstream = AsyncMock()
+        client = DoubaoS2SClient.__new__(DoubaoS2SClient)
+        client.run_task = asyncio.create_task(asyncio.sleep(60))
+        client.upstream = upstream
+        client.audio_queue = asyncio.Queue()
+        await client.audio_queue.put(bytes(640))
+        client.closed = False
+        client.active = True
+        client.responding = True
+        client.interrupt_sent = True
+        client.user_text = "未完成内容"
+
+        await client.pause()
+
+        self.assertIsNone(client.run_task)
+        self.assertIsNone(client.upstream)
+        self.assertTrue(client.audio_queue.empty())
+        self.assertFalse(client.closed)
+        self.assertFalse(client.active)
+        upstream.close.assert_awaited_once()
+
     async def test_browser_pcm_is_queued_without_opus_decode(self):
         client = DoubaoS2SClient.__new__(DoubaoS2SClient)
         client.closed = False
@@ -115,11 +163,13 @@ class DoubaoS2SPcmBridgeTests(unittest.IsolatedAsyncioTestCase):
             ),
         )
         client.audio_queue = asyncio.Queue(maxsize=4)
+        client.start = Mock()
         pcm = bytes(640)
 
         await client.send_pcm(pcm)
 
         self.assertIs(await client.audio_queue.get(), pcm)
+        client.start.assert_called_once_with()
 
     async def test_doubao_pcm_is_forwarded_directly_to_browser(self):
         websocket = AsyncMock()

@@ -63,9 +63,15 @@ class DignityTextMessageHandler(TextMessageHandler):
             await update_dignity_memory(conn, msg_json)
             return
         if action == "list_safety_alerts":
+            if getattr(getattr(conn, "server", None), "hospice_auth_store", None) and getattr(getattr(conn, "hospice_auth_user", None), "role", "") != "clinician":
+                await send_dignity_event(conn, "safety_task_error", {"message": "安全预警详情仅限医护账号查看。"})
+                return
             await list_dignity_safety_alerts(conn, msg_json)
             return
         if action == "update_safety_task":
+            if getattr(getattr(conn, "server", None), "hospice_auth_store", None) and getattr(getattr(conn, "hospice_auth_user", None), "role", "") != "clinician":
+                await send_dignity_event(conn, "safety_task_error", {"message": "安全预警处置仅限医护账号操作。"})
+                return
             await update_dignity_safety_task(conn, msg_json)
             return
 

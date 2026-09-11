@@ -166,8 +166,35 @@ function mergeSafetyAlertList(items, alert) {
     .sort((a, b) => String(b?.created_at || '').localeCompare(String(a?.created_at || '')));
 }
 
-export default function App() {
+export default function App({ onLogout }) {
   const [activeApp, setActiveApp] = useState('home');
+  const [homeListening, setHomeListening] = useState(false);
+  const homeWakeBusyRef = useRef(false);
+  const homePromptRef = useRef(null);
+
+  useEffect(() => {
+    const audio = new Audio(`${import.meta.env.BASE_URL}audio/home-wakeup.mp3`);
+    audio.preload = 'auto';
+    homePromptRef.current = audio;
+    return () => { audio.pause(); homePromptRef.current = null; };
+  }, []);
+
+  const playHomePrompt = useCallback(() => new Promise(resolve => {
+    const audio = homePromptRef.current;
+    if (!audio) { resolve(); return; }
+    const finish = () => {
+      clearTimeout(timer);
+      audio.pause();
+      audio.onended = null;
+      audio.onerror = null;
+      resolve();
+    };
+    const timer = setTimeout(finish, 5000);
+    audio.currentTime = 0;
+    audio.onended = finish;
+    audio.onerror = finish;
+    audio.play().catch(finish);
+  }), []);
   const [aiState, setAiState]     = useState('idle');
   const [ordinaryMsg, setOrdinaryMsg] = useState(null);
   const [ordinaryLastHeard, setOrdinaryLastHeard] = useState('');
@@ -189,7 +216,7 @@ export default function App() {
   const [patientWakeup, setPatientWakeup] = useState({ enabled: false, mode: 'sherpa_onnx_kws' });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [voiceMode, setVoiceMode] = useState(
-    () => localStorage.getItem('anan_voice_mode') || 'doubao_s2s'
+    () => localStorage.getItem('anan_voice_mode') || 'cascade'
   );
   const [dignityMode, setDignityMode] = useState(false);
   const [dignityStatus, setDignityStatus] = useState(null);
@@ -225,6 +252,7 @@ export default function App() {
   const connectingRef = useRef(false);
   const initStartedRef = useRef(false);
   const reconnectTimerRef = useRef(null);
+  const voiceModeSwitchRef = useRef(false);
   const callStateTimerRef = useRef(null);
   const callCommandRecognizerRef = useRef(null);
   const callCommandRecognizerActiveRef = useRef(false);
@@ -418,9 +446,13 @@ export default function App() {
   const startWakeWordListening = useCallback(async () => {
     if (!window.XiaozhiClient || typeof window.XiaozhiClient.startWakeWord !== 'function') return false;
     try {
+      await window.XiaozhiClient.initWakeWord({ ...patientWakeupRef.current, device_id: DEVICE_ID });
       return await window.XiaozhiClient.startWakeWord();
     } catch (e) {
       console.error('唤醒词监听启动失败', e);
+      if (activeAppRef.current === 'home') {
+        setConnectStatus('语音助手没有启动，请重新连接');
+      }
       return false;
     }
   }, []);
@@ -443,6 +475,7 @@ export default function App() {
     if (!window.XiaozhiClient || recordingRef.current || !connectedRef.current || !micOkRef.current) return;
     if (!allowInCall && (assistantHoldRef.current || inCallRef.current)) return;
     try {
+      window.XiaozhiClient.sendClientState({ home_navigation: activeAppRef.current === 'home', home_listening: activeAppRef.current === 'home' });
       const ok = await window.XiaozhiClient.startRecording({ callActive: allowInCall });
       const active = !!ok || !!window.XiaozhiClient.isRecording?.();
       recordingRef.current = active;
@@ -452,7 +485,7 @@ export default function App() {
         setConnectStatus('');
       }
       if (!ok) setConnectStatus('麦克风没有开始工作，请重新连接后再试');
-      if (active) setConnectStatus('');
+      if (active) setConnectStatus(activeAppRef.current === 'home' ? '请说功能名称，例如：家属消息' : '');
     } catch (err) {
       console.error('自动拾音失败', err);
       recordingRef.current = false;
@@ -533,6 +566,11 @@ export default function App() {
   }, [assistantToolView, assistantToolsOpen, loadDignitySafetyAlerts]);
 
   const openPatientApp = useCallback(async (appId) => {
+    await stopNormalRecording();
+    await stopWakeWordListening();
+    window.XiaozhiClient?.sendClientState({ home_navigation: false });
+    setHomeListening(false);
+    setConnectStatus('');
     activeAppRef.current = appId;
     setActiveApp(appId);
 
@@ -540,6 +578,8 @@ export default function App() {
       if (dignityModeRef.current) {
         await sendDignityAction('stop', { patient_id: DEVICE_ID });
       }
+      setOrdinaryVoiceAwake(true);
+      ordinaryVoiceAwakeRef.current = true;
       resumeAssistantListening();
       return;
     }
@@ -558,7 +598,7 @@ export default function App() {
 
     await pauseAssistantListening();
     await stopWakeWordListening();
-  }, [pauseAssistantListening, resumeAssistantListening, sendDignityAction, stopWakeWordListening]);
+  }, [pauseAssistantListening, resumeAssistantListening, sendDignityAction, stopNormalRecording, stopWakeWordListening]);
 
   const returnToHome = useCallback(async () => {
     try {
@@ -566,16 +606,20 @@ export default function App() {
     } catch (e) {
       console.error('退出语音页面时停止播放失败', e);
     }
-    activeAppRef.current = 'home';
-    setActiveApp('home');
     void stopTtsPlayback();
     await pauseAssistantListening();
     await stopWakeWordListening();
+    setHomeListening(false);
+    setOrdinaryVoiceAwake(!kwsWakeupEnabled);
+    ordinaryVoiceAwakeRef.current = !kwsWakeupEnabled;
+    setConnectStatus('');
+    activeAppRef.current = 'home';
+    setActiveApp('home');
     if (dignityModeRef.current) {
       const ok = await sendDignityAction('stop', { patient_id: DEVICE_ID });
       if (!ok) setConnectStatus('尊严疗法退出失败，请稍后再试');
     }
-  }, [pauseAssistantListening, sendDignityAction, stopTtsPlayback, stopWakeWordListening]);
+  }, [kwsWakeupEnabled, pauseAssistantListening, sendDignityAction, stopTtsPlayback, stopWakeWordListening]);
 
   const runDignityDebugTurn = useCallback(async (text) => {
     setDignityDebugBusy(true);
@@ -957,12 +1001,17 @@ export default function App() {
       setConnectStatus('');
     } catch (err) {
       console.error('connect failed', err);
-      setConnectStatus(err?.message === 'CONNECT_TIMEOUT' ? '连接超时，正在自动重试' : '连接失败，正在自动重试');
+      const switchingMode = voiceModeSwitchRef.current;
+      setConnectStatus(switchingMode
+        ? '正在切换语音模式...'
+        : err?.message === 'CONNECT_TIMEOUT'
+          ? '连接超时，正在自动重试'
+          : '连接失败，正在自动重试');
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = setTimeout(() => {
         reconnectTimerRef.current = null;
         connectXiaozhi();
-      }, 3000);
+      }, switchingMode ? 100 : 3000);
     } finally {
       connectingRef.current = false;
     }
@@ -970,10 +1019,15 @@ export default function App() {
 
   const scheduleReconnect = useCallback((delay = 2500) => {
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-    reconnectTimerRef.current = setTimeout(() => {
+    const attempt = () => {
+      if (connectingRef.current) {
+        reconnectTimerRef.current = setTimeout(attempt, 200);
+        return;
+      }
       reconnectTimerRef.current = null;
       connectXiaozhi();
-    }, delay);
+    };
+    reconnectTimerRef.current = setTimeout(attempt, delay);
   }, [connectXiaozhi]);
 
   const handleManualConnect = useCallback(async () => {
@@ -989,24 +1043,37 @@ export default function App() {
         setConnectStatus('请允许麦克风权限后重试');
         return;
       }
-      await connectXiaozhi();
+      if (!connectedRef.current) {
+        await connectXiaozhi();
+      } else if (activeAppRef.current === 'home' && kwsWakeupEnabled) {
+        setConnectStatus('');
+        await stopWakeWordListening();
+        await startWakeWordListening();
+      }
     } catch (err) {
       setConnectStatus('连接模块初始化失败：' + (err?.message || '未知错误'));
     }
-  }, [connectXiaozhi]);
+  }, [connectXiaozhi, kwsWakeupEnabled, startWakeWordListening, stopWakeWordListening]);
 
-  const handleVoiceModeChange = useCallback((nextMode) => {
+  const handleVoiceModeChange = useCallback(async (nextMode) => {
     const normalized = nextMode === 'cascade' ? 'cascade' : 'doubao_s2s';
+    if (normalized === voiceMode && !voiceModeSwitchRef.current) return;
+    voiceModeSwitchRef.current = true;
     setVoiceMode(normalized);
     localStorage.setItem('anan_voice_mode', normalized);
-    window.XiaozhiClient?.setVoiceMode?.(normalized);
     setConnectStatus(normalized === 'doubao_s2s' ? '正在切换到端到端模式...' : '正在切换到标准模式...');
-    if (connectedRef.current) {
-      window.XiaozhiClient?.disconnect?.();
-    } else {
+    try {
+      await window.XiaozhiClient?.setVoiceMode?.(normalized);
+      if (connectedRef.current || connectingRef.current) {
+        await window.XiaozhiClient?.disconnect?.();
+      }
       scheduleReconnect(100);
+    } catch (error) {
+      console.error('语音模式切换失败', error);
+      voiceModeSwitchRef.current = false;
+      setConnectStatus('语音模式切换失败，请重试');
     }
-  }, [scheduleReconnect]);
+  }, [scheduleReconnect, voiceMode]);
 
   const { announceUnread, readFamilyMessages, speakAndWait, stopPlayback } = useFamilyMessageReader({
     loadContacts,
@@ -1061,12 +1128,14 @@ export default function App() {
       const isConnected = !!e.detail.connected;
       setConnected(isConnected);
       connectedRef.current = isConnected;
-      if (!isConnected) {
+      if (isConnected) {
+        voiceModeSwitchRef.current = false;
+      } else {
         recordingRef.current = false;
         setRecording(false);
         userSpeakingRef.current = false;
         setUserSpeaking(false);
-        scheduleReconnect();
+        scheduleReconnect(voiceModeSwitchRef.current ? 100 : 2500);
       }
     };
     const onState = e => {
@@ -1149,6 +1218,21 @@ export default function App() {
     const onWakeWordDetected = async (e) => {
       if (!kwsWakeupEnabled || patientWakeupRef.current?.enabled !== true) return;
       if (!connectedRef.current || !micOkRef.current || dignityModeRef.current || inCallRef.current) return;
+      if (activeAppRef.current === 'home') {
+        if (homeWakeBusyRef.current || recordingRef.current) return;
+        homeWakeBusyRef.current = true;
+        try {
+          await stopWakeWordListening();
+          setConnectStatus('我在，请说要打开的功能');
+          if (activeAppRef.current === 'home' && !inCallRef.current) {
+            setHomeListening(true);
+            void playHomePrompt();
+          }
+        } finally {
+          homeWakeBusyRef.current = false;
+        }
+        return;
+      }
       setOrdinaryVoiceAwake(true);
       ordinaryVoiceAwakeRef.current = true;
       setConnectStatus('');
@@ -1169,8 +1253,12 @@ export default function App() {
       if (!kwsWakeupEnabled || patientWakeupRef.current?.enabled !== true) {
         return;
       }
-      if (e.detail?.state === 'error') {
-        setConnectStatus(e.detail?.message || '本地唤醒词模型未就绪');
+      if (e.detail?.state === 'listening' && activeAppRef.current === 'home') {
+        setConnectStatus('');
+      }
+      if (e.detail?.state === 'error' && activeAppRef.current === 'home') {
+        console.error('唤醒词服务异常', e.detail?.message || e.detail);
+        setConnectStatus('语音助手没有启动，请重新连接');
       }
     };
     const onErr = e => setConnectStatus(e.detail?.message || e.detail?.error?.message || '连接模块初始化失败');
@@ -1447,7 +1535,7 @@ export default function App() {
       window.removeEventListener('xz:dignity', onDignity);
       window.removeEventListener('xz:ready', onReady);
     };
-  }, [assistantToolsOpen, connectXiaozhi, kwsWakeupEnabled, loadDignityArtifacts, pauseAssistantListening, resumeAssistantAndStart, resumeAssistantListening, scheduleReconnect, settingsOpen, speakViaTts, startListening, stopNormalRecording, stopTtsPlayback, stopWakeWordListening]);
+  }, [assistantToolsOpen, connectXiaozhi, kwsWakeupEnabled, loadDignityArtifacts, pauseAssistantListening, playHomePrompt, resumeAssistantAndStart, resumeAssistantListening, scheduleReconnect, settingsOpen, speakViaTts, startListening, stopNormalRecording, stopTtsPlayback, stopWakeWordListening]);
 
   useEffect(() => {
     if (dignityMode) loadDignityArtifacts();
@@ -1502,6 +1590,23 @@ export default function App() {
   }, [dignityStatus?.transcript]);
 
   useEffect(() => {
+    if (activeApp === 'home') {
+      if (!connected || !micOk || inCall || settingsOpen || assistantToolsOpen) {
+        void stopWakeWordListening();
+        return;
+      }
+      if (!homeListening) {
+        void (async () => {
+          await stopNormalRecording();
+          window.XiaozhiClient?.sendClientState({ home_navigation: true, home_listening: false });
+          if (kwsWakeupEnabled) await startWakeWordListening();
+        })();
+      } else {
+        resumeAssistantListening();
+        void startListening();
+      }
+      return;
+    }
     if (activeApp !== 'voice' && activeApp !== 'dignity') {
       stopNormalRecording();
       stopWakeWordListening();
@@ -1519,7 +1624,25 @@ export default function App() {
       return;
     }
     startListening();
-  }, [activeApp, assistantHold, connected, dignityMode, dignityVoiceMode, inCall, kwsWakeupEnabled, micOk, ordinaryVoiceAwake, startListening, startWakeWordListening, stopNormalRecording, stopWakeWordListening]);
+  }, [activeApp, assistantHold, assistantToolsOpen, connected, dignityMode, dignityVoiceMode, homeListening, inCall, kwsWakeupEnabled, micOk, ordinaryVoiceAwake, resumeAssistantListening, settingsOpen, startListening, startWakeWordListening, stopNormalRecording, stopWakeWordListening]);
+
+  useEffect(() => {
+    if (!homeListening) return;
+    if (activeApp !== 'home' || !connected || inCall || settingsOpen || assistantToolsOpen) {
+      setHomeListening(false);
+      void stopNormalRecording();
+      window.XiaozhiClient?.sendClientState({ home_listening: false });
+      return;
+    }
+    // 固定二十秒上限，噪声和未匹配口令都不会延长计费窗口。
+    const timer = window.setTimeout(() => {
+      setHomeListening(false);
+      void stopNormalRecording();
+      window.XiaozhiClient?.sendClientState({ home_listening: false });
+      setConnectStatus('识别已关闭，需要时请再说“你好，安安”');
+    }, 20000);
+    return () => window.clearTimeout(timer);
+  }, [activeApp, assistantToolsOpen, connected, homeListening, inCall, settingsOpen, stopNormalRecording]);
 
   useEffect(() => {
     if (!kwsWakeupEnabled) {
@@ -1529,7 +1652,7 @@ export default function App() {
       return;
     }
     if (!window.XiaozhiClient || typeof window.XiaozhiClient.initWakeWord !== 'function') return;
-    window.XiaozhiClient.initWakeWord(patientWakeup).catch((e) => {
+    window.XiaozhiClient.initWakeWord({ ...patientWakeup, device_id: DEVICE_ID }).catch((e) => {
       console.error('唤醒词模型初始化失败', e);
       setConnectStatus('本地唤醒词模型初始化失败：' + (e?.message || '未知错误'));
     });
@@ -1653,6 +1776,15 @@ export default function App() {
       const detail = e.detail || {};
       const action = detail.action;
       if (!action) return;
+      if (action === 'home_navigation') {
+        if (activeAppRef.current !== 'home' || inCallRef.current || !recordingRef.current) return;
+        if (Object.hasOwn(APP_TITLES, detail.app_id)) {
+          await openPatientApp(detail.app_id);
+        } else {
+          setConnectStatus('没有匹配到功能，请说：语音沟通、家属消息、尊严疗法、数字疗法、芳香疗法或智能床');
+        }
+        return;
+      }
       if (action === 'robot_action') return;
       setAiState('idle');
       if (action === 'accept_call') {
@@ -1718,7 +1850,11 @@ export default function App() {
     };
     window.addEventListener('xz:client-action', onClientAction);
     return () => window.removeEventListener('xz:client-action', onClientAction);
-  }, [announceUnread, kwsWakeupEnabled, pauseAssistantListening, readFamilyMessages, resumeAssistantAndStart, speakAndWait, speakViaTts, startWakeWordListening, stopNormalRecording, stopPlayback, stopTtsPlayback]);
+  }, [announceUnread, kwsWakeupEnabled, openPatientApp, pauseAssistantListening, readFamilyMessages, resumeAssistantAndStart, speakAndWait, speakViaTts, startWakeWordListening, stopNormalRecording, stopPlayback, stopTtsPlayback]);
+
+  const showConnectionHelp = activeApp === 'home' && (
+    !connected || !micOk || connectStatus === '语音助手没有启动，请重新连接'
+  );
 
   return (
     <PaperBg>
@@ -1733,7 +1869,13 @@ export default function App() {
       />
       <main className="patient-app-shell">
         {activeApp === 'home' && (
-          <HomeScreen unread={unread} onOpenApp={openPatientApp} />
+          <HomeScreen
+            unread={unread}
+            onOpenApp={openPatientApp}
+            connected={connected}
+            micOk={micOk}
+            homeListening={homeListening}
+          />
         )}
 
         {activeApp === 'voice' && (
@@ -1858,9 +2000,9 @@ export default function App() {
         )}
       </main>
 
-      {(activeApp === 'voice' || activeApp === 'dignity') && (!connected || !micOk || connectStatus) && (
+      {showConnectionHelp && (
         <ConnectBar
-          connected={connected} onConnect={handleManualConnect} recording={recording} micOk={micOk}
+          connected={connected} onConnect={handleManualConnect} micOk={micOk}
           connectStatus={connectStatus}
         />
       )}
@@ -1876,6 +2018,7 @@ export default function App() {
           onToggleMute={toggleMute} onToggleCamera={toggleCamera} />
       )}
       <SettingsPanel
+        onLogout={onLogout}
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         voiceMode={voiceMode}

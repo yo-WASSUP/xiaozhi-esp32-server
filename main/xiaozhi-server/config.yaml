@@ -6,6 +6,18 @@
 
 # #####################################################################################
 # #############################以下是服务器基本运行配置####################################
+hospice:
+  auth:
+    enabled: false
+    db_path: .hospice_auth.db
+    secret_key: ""
+    admin_username: admin
+    admin_password: ""
+    access_token_seconds: 43200
+    refresh_token_seconds: 2592000
+    max_failed_attempts: 5
+    lock_seconds: 600
+
 server:
   # 服务器监听地址和端口(Server listening address and port)
   ip: 0.0.0.0
@@ -351,8 +363,13 @@ ASR:
     # 开通地址https://console.volcengine.com/speech/service/10011
     # 一般来说按次收费的更便宜，但是DoubaoStreamASR使用了大模型技术，效果更好
     type: doubao_stream
-    appid: 你的火山引擎语音合成服务appid
-    access_token: 你的火山引擎语音合成服务access_token
+    # 2.0 小时版；使用 1.0 时改为 volc.bigasr.sauc.duration
+    resource_id: volc.seedasr.sauc.duration
+    ws_url: wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async
+    enable_nonstream: true
+    result_type: full
+    appid: 你的火山引擎语音识别服务appid
+    access_token: 你的火山引擎语音识别服务access_token
     cluster: volcengine_input_common
     # 热词、替换词使用流程：https://www.volcengine.com/docs/6561/155738
     boosting_table_name: （选填）你的热词文件名称

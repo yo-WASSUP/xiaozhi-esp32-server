@@ -38,7 +38,9 @@ export default function TopBar({
 }) {
   const isVoicePage = activeApp === 'voice' || activeApp === 'dignity';
 
-  const status = !isVoicePage
+  const status = activeApp === 'home'
+    ? { label: !connected ? '语音服务未连接' : !micOk ? '需要麦克风权限' : '安安已准备好', type: connected && micOk ? 'ready' : 'waiting' }
+    : !isVoicePage
     ? { label: '系统待机', type: 'ready' }
     : recording
     ? { label: activeApp === 'dignity' ? '访谈正在进行' : '语音通话中', type: 'active' }
