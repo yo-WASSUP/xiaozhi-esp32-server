@@ -26,7 +26,7 @@ cozepy==0.20.0
 mem0ai==1.0.0
 bs4==0.0.2
 modelscope==1.32.0
-sherpa_onnx==1.12.17
+sherpa_onnx==1.12.26
 mcp==1.22.0
 cnlunar==0.2.0
 PySocks==1.7.1
@@ -43,3 +43,4 @@ Jinja2==3.1.6
 vosk==0.3.45
 tokenizers==0.21.4
 onnxruntime==1.20.1
+langgraph==1.2.0

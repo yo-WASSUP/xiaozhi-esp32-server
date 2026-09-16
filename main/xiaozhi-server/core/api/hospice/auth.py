@@ -572,6 +572,13 @@ def build_auth_middleware(store: HospiceAuthStore, config: Optional[dict] = None
         if path.startswith("/api/hospice/safety-alerts") and user.role != "clinician":
             return web.json_response({"success": False, "error": "安全预警处置仅限医护账号"}, status=403)
 
+        review_only_prefixes = (
+            "/api/hospice/interview/audio-segments",
+            "/api/hospice/video/",
+        )
+        if path.startswith(review_only_prefixes) and user.role != "clinician":
+            return web.json_response({"success": False, "error": "尊严疗法审核仅限医护账号"}, status=403)
+
         if path == "/api/hospice/pairing/bind":
             if user.role != "family":
                 return web.json_response({"success": False, "error": "只有家属账号可以绑定患者"}, status=403)

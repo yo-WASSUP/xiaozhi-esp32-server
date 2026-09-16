@@ -100,7 +100,7 @@ const [
   playerMod,
   opusMod,
 ] = await Promise.all([
-  import(`${TEST}/core/network/websocket.js?v=0134`),
+  import(`${TEST}/core/network/websocket.js?v=0135`),
   import(`${TEST}/core/audio/recorder.js?v=0129`),
   import(`${TEST}/core/audio/player.js?v=0127`),
   import(`${TEST}/core/audio/opus-codec.js?v=0127`),

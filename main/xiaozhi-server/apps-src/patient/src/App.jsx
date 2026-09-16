@@ -9,11 +9,9 @@ import ChatScreen from './screens/ChatScreen';
 import InboxScreen from './screens/InboxScreen';
 import DignityDebugPanel from './screens/DignityDebugPanel';
 import DignityTherapyPanel from './screens/DignityTherapyPanel';
-import LegacyVideoScreen from './screens/LegacyVideoScreen';
 import IncomingCallOverlay from './components/IncomingCallOverlay';
 import ActiveCallOverlay from './components/ActiveCallOverlay';
 import SettingsPanel from './components/SettingsPanel';
-import InterviewAudioEditor from './components/InterviewAudioEditor';
 import useFamilyMessageReader from './hooks/useFamilyMessageReader';
 import { C } from './theme';
 
@@ -91,59 +89,6 @@ function buildDignityReadingText(kind, payload) {
   return '';
 }
 
-function interviewSegmentId(text, index = 0) {
-  let hash = 0;
-  const value = String(text || '');
-  for (let i = 0; i < value.length; i += 1) {
-    hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
-  }
-  return `seg_${String(index + 1).padStart(3, '0')}_${Math.abs(hash).toString(36)}`;
-}
-
-function normalizeInterviewSegments(segments) {
-  if (!Array.isArray(segments)) return [];
-  return segments
-    .map((item, index) => {
-      const text = String(item?.text || item?.patient || item?.patient_text || '').trim();
-      if (!text) return null;
-      return {
-        id: String(item?.id || interviewSegmentId(text, index)),
-        text,
-        speaker: item?.speaker || 'patient',
-        deleted: !!item?.deleted,
-        audio_url: item?.audio_url || '',
-        start_time: Number.isFinite(Number(item?.start_time)) ? Number(item.start_time) : undefined,
-        end_time: Number.isFinite(Number(item?.end_time)) ? Number(item.end_time) : undefined,
-      };
-    })
-    .filter(Boolean);
-}
-
-function segmentsFromTranscript(transcript) {
-  if (!Array.isArray(transcript)) return [];
-  return normalizeInterviewSegments(transcript.map((turn, index) => ({
-    id: turn?.id,
-    text: turn?.patient || turn?.patient_text || turn?.text,
-    speaker: turn?.speaker || 'patient',
-    audio_url: turn?.audio_url,
-    start_time: turn?.start_time,
-    end_time: turn?.end_time,
-    deleted: !!turn?.deleted,
-    index,
-  })));
-}
-
-function mergeInterviewSegments(current, incoming) {
-  const currentList = normalizeInterviewSegments(current);
-  const incomingList = normalizeInterviewSegments(incoming);
-  const byId = new Map(currentList.map(item => [item.id, item]));
-  for (const item of incomingList) {
-    const old = byId.get(item.id);
-    byId.set(item.id, old ? { ...item, deleted: old.deleted } : item);
-  }
-  return Array.from(byId.values());
-}
-
 function mergeAssistantDisplayText(current, incoming) {
   const previous = String(current || '').trim();
   const next = String(incoming || '').trim();
@@ -215,6 +160,7 @@ export default function App({ onLogout }) {
   const [maxUploadMb, setMaxUploadMb] = useState(50);
   const [patientWakeup, setPatientWakeup] = useState({ enabled: false, mode: 'sherpa_onnx_kws' });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsScope, setSettingsScope] = useState('voice');
   const [voiceMode, setVoiceMode] = useState(
     () => localStorage.getItem('anan_voice_mode') || 'cascade'
   );
@@ -235,15 +181,12 @@ export default function App({ onLogout }) {
   const [familyLetter, setFamilyLetter] = useState(null);
   const [familyLetterImageUrl, setFamilyLetterImageUrl] = useState('');
   const [familyLetterTemplate, setFamilyLetterTemplate] = useState('warm');
-  const [interviewSegments, setInterviewSegments] = useState([]);
-  const [interviewAudioBusy, setInterviewAudioBusy] = useState(false);
   const [dignityVoiceMode, setDignityVoiceMode] = useState(false);
   const [dignityPaused, setDignityPaused] = useState(false);
   const [dignitySilencePromptCount, setDignitySilencePromptCount] = useState(0);
   const [ordinaryVoiceAwake, setOrdinaryVoiceAwake] = useState(true);
   const [dignityReadingKind, setDignityReadingKind] = useState('');
   const [assistantToolsOpen, setAssistantToolsOpen] = useState(false);
-  const [assistantToolView, setAssistantToolView] = useState('audio');
   const [dignitySafetyAlerts, setDignitySafetyAlerts] = useState([]);
   const [safetyAlertsBusy, setSafetyAlertsBusy] = useState(false);
   const [safetyTaskBusyId, setSafetyTaskBusyId] = useState('');
@@ -555,15 +498,12 @@ export default function App({ onLogout }) {
   }, [sendDignityAction]);
 
   const openSafetyDisposition = useCallback(() => {
-    setAssistantToolView('safety');
     setAssistantToolsOpen(true);
   }, []);
 
   useEffect(() => {
-    if (assistantToolsOpen && assistantToolView === 'safety') {
-      void loadDignitySafetyAlerts();
-    }
-  }, [assistantToolView, assistantToolsOpen, loadDignitySafetyAlerts]);
+    if (assistantToolsOpen) void loadDignitySafetyAlerts();
+  }, [assistantToolsOpen, loadDignitySafetyAlerts]);
 
   const openPatientApp = useCallback(async (appId) => {
     await stopNormalRecording();
@@ -571,6 +511,11 @@ export default function App({ onLogout }) {
     window.XiaozhiClient?.sendClientState({ home_navigation: false });
     setHomeListening(false);
     setConnectStatus('');
+    if (appId === 'settings') {
+      setSettingsScope('global');
+      setSettingsOpen(true);
+      return;
+    }
     activeAppRef.current = appId;
     setActiveApp(appId);
 
@@ -695,14 +640,12 @@ export default function App({ onLogout }) {
 
   const loadDignityArtifacts = useCallback(async () => {
     try {
-      const [cardRes, letterRes, audioRes] = await Promise.all([
+      const [cardRes, letterRes] = await Promise.all([
         fetch(`/api/hospice/legacy-card/latest?device_id=${encodeURIComponent(DEVICE_ID)}`),
         fetch(`/api/hospice/family-letter/latest?device_id=${encodeURIComponent(DEVICE_ID)}`),
-        fetch(`/api/hospice/interview/audio-segments/latest?device_id=${encodeURIComponent(DEVICE_ID)}`),
       ]);
       const cardJson = await cardRes.json().catch(() => ({}));
       const letterJson = await letterRes.json().catch(() => ({}));
-      const audioJson = await audioRes.json().catch(() => ({}));
       if (cardRes.ok && cardJson.success && cardJson.card) {
         setLegacyCard(cardJson.card);
         setLegacyCardImageUrl(cardJson.image_url || '');
@@ -711,9 +654,6 @@ export default function App({ onLogout }) {
         setFamilyLetter(letterJson.letter);
         setFamilyLetterImageUrl(letterJson.image_url || '');
         if (letterJson.template) setFamilyLetterTemplate(letterJson.template);
-      }
-      if (audioRes.ok && audioJson.success) {
-        setInterviewSegments(items => mergeInterviewSegments(audioJson.segments || [], items));
       }
     } catch (err) {
       console.error('load dignity artifacts failed', err);
@@ -835,33 +775,6 @@ export default function App({ onLogout }) {
       setFamilyLetterBusy(false);
     }
   }, [familyLetter, familyLetterTemplate]);
-
-  const toggleInterviewSegmentDeleted = useCallback((segmentId) => {
-    setInterviewSegments(items => items.map(item => (
-      item.id === segmentId ? { ...item, deleted: !item.deleted } : item
-    )));
-  }, []);
-
-  const saveInterviewAudioSegments = useCallback(async (segments = interviewSegments) => {
-    const payloadSegments = normalizeInterviewSegments(segments);
-    setInterviewAudioBusy(true);
-    try {
-      const r = await fetch('/api/hospice/interview/audio-segments/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ device_id: DEVICE_ID, segments: payloadSegments }),
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || !j.success) throw new Error(j.error || '访谈语音编辑保存失败');
-      setInterviewSegments(normalizeInterviewSegments(j.segments || payloadSegments));
-      setConnectStatus('');
-    } catch (err) {
-      console.error('interview audio edit save failed', err);
-      setConnectStatus(err?.message || '访谈语音编辑保存失败');
-    } finally {
-      setInterviewAudioBusy(false);
-    }
-  }, [interviewSegments]);
 
   const toggleDignityVoiceMode = useCallback(async () => {
     if (!dignityMode) return;
@@ -1583,13 +1496,6 @@ export default function App({ onLogout }) {
   }, [activeApp, aiState, assistantHold, assistantToolsOpen, connected, dignityMode, dignityPaused, dignityReadingKind, dignitySilencePromptCount, dignityVoiceMode, inCall, recording, sendDignityAction, settingsOpen, userSpeaking]);
 
   useEffect(() => {
-    const nextSegments = segmentsFromTranscript(dignityStatus?.transcript);
-    if (nextSegments.length) {
-      setInterviewSegments(items => mergeInterviewSegments(items, nextSegments));
-    }
-  }, [dignityStatus?.transcript]);
-
-  useEffect(() => {
     if (activeApp === 'home') {
       if (!connected || !micOk || inCall || settingsOpen || assistantToolsOpen) {
         void stopWakeWordListening();
@@ -1781,7 +1687,7 @@ export default function App({ onLogout }) {
         if (Object.hasOwn(APP_TITLES, detail.app_id)) {
           await openPatientApp(detail.app_id);
         } else {
-          setConnectStatus('没有匹配到功能，请说：语音沟通、家属消息、尊严疗法、数字疗法、芳香疗法或智能床');
+          setConnectStatus('没有匹配到功能，请说：语音沟通、家属消息、尊严疗法、数字疗法、芳香疗法、智能床或设置');
         }
         return;
       }
@@ -1866,6 +1772,10 @@ export default function App({ onLogout }) {
         micOk={micOk}
         connectStatus={connectStatus}
         onHome={returnToHome}
+        onOpenSettings={() => {
+          setSettingsScope('global');
+          setSettingsOpen(true);
+        }}
       />
       <main className="patient-app-shell">
         {activeApp === 'home' && (
@@ -1890,8 +1800,10 @@ export default function App({ onLogout }) {
             inputLevel={audioLevels.input}
             outputLevel={audioLevels.output}
             ordinaryVoiceAwake={ordinaryVoiceAwake || !kwsWakeupEnabled}
-            onOpenSettings={() => setSettingsOpen(true)}
-            onOpenAssistantTools={() => setAssistantToolsOpen(true)}
+            onOpenSettings={() => {
+              setSettingsScope('voice');
+              setSettingsOpen(true);
+            }}
           />
           {robotDebugEnabled && <RobotActionDebugPanel actions={robotActionLog} />}
           </section>
@@ -2020,19 +1932,14 @@ export default function App({ onLogout }) {
       <SettingsPanel
         onLogout={onLogout}
         open={settingsOpen}
+        scope={settingsScope}
         onClose={() => setSettingsOpen(false)}
         voiceMode={voiceMode}
         onVoiceModeChange={handleVoiceModeChange}
       />
       <AssistantToolsModal
         open={assistantToolsOpen}
-        active={assistantToolView}
-        onChange={setAssistantToolView}
         onClose={() => setAssistantToolsOpen(false)}
-        interviewSegments={interviewSegments}
-        interviewAudioBusy={interviewAudioBusy}
-        onToggleInterviewSegment={toggleInterviewSegmentDeleted}
-        onSaveInterviewAudioSegments={saveInterviewAudioSegments}
         safetyAlerts={dignitySafetyAlerts}
         safetyAlertsBusy={safetyAlertsBusy}
         safetyTaskBusyId={safetyTaskBusyId}
@@ -2198,13 +2105,7 @@ function SafetyAlertTaskCard({ alert, operator, busy, onUpdate }) {
 
 function AssistantToolsModal({
   open,
-  active,
-  onChange,
   onClose,
-  interviewSegments,
-  interviewAudioBusy,
-  onToggleInterviewSegment,
-  onSaveInterviewAudioSegments,
   safetyAlerts,
   safetyAlertsBusy,
   safetyTaskBusyId,
@@ -2217,41 +2118,19 @@ function AssistantToolsModal({
       <div style={assistantModalStyle}>
         <div style={assistantModalHeaderStyle}>
           <div>
-            <div style={assistantModalTitleStyle}>助理功能</div>
-            <div style={assistantModalSubStyle}>低频维护和审核工具</div>
+            <div style={assistantModalTitleStyle}>安全预警处置</div>
+            <div style={assistantModalSubStyle}>查看当前安全任务与处置状态</div>
           </div>
           <button type="button" onClick={onClose} style={assistantCloseButtonStyle}>关闭</button>
         </div>
-        <div style={assistantModalTabsStyle}>
-          <button type="button" onClick={() => onChange('audio')} style={assistantModalTabStyle(active === 'audio')}>
-            访谈语音编辑
-          </button>
-          <button type="button" onClick={() => onChange('video')} style={assistantModalTabStyle(active === 'video')}>
-            生命影像审核
-          </button>
-          <button type="button" onClick={() => onChange('safety')} style={assistantModalTabStyle(active === 'safety')}>
-            安全预警处置
-          </button>
-        </div>
         <div style={assistantModalBodyStyle}>
-          {active === 'safety' ? (
-            <SafetyDispositionPanel
-              alerts={safetyAlerts}
-              busy={safetyAlertsBusy}
-              busyId={safetyTaskBusyId}
-              onRefresh={onRefreshSafetyAlerts}
-              onUpdate={onUpdateSafetyTask}
-            />
-          ) : active === 'video' ? (
-            <LegacyVideoScreen />
-          ) : (
-            <InterviewAudioEditor
-              segments={interviewSegments}
-              busy={interviewAudioBusy}
-              onToggleSegment={onToggleInterviewSegment}
-              onSave={onSaveInterviewAudioSegments}
-            />
-          )}
+          <SafetyDispositionPanel
+            alerts={safetyAlerts}
+            busy={safetyAlertsBusy}
+            busyId={safetyTaskBusyId}
+            onRefresh={onRefreshSafetyAlerts}
+            onUpdate={onUpdateSafetyTask}
+          />
         </div>
       </div>
     </div>
@@ -2358,27 +2237,6 @@ const assistantCloseButtonStyle = {
   fontFamily: 'Noto Sans SC',
   cursor: 'pointer',
 };
-
-const assistantModalTabsStyle = {
-  display: 'flex',
-  gap: 10,
-  padding: '12px 24px',
-  borderBottom: `1px solid ${C.mist}22`,
-  background: 'rgba(243,233,212,.45)',
-};
-
-const assistantModalTabStyle = (active) => ({
-  height: 40,
-  padding: '0 16px',
-  borderRadius: 8,
-  border: `1px solid ${active ? C.sage : C.mist}66`,
-  background: active ? `${C.sage}22` : 'rgba(255,250,242,.72)',
-  color: active ? C.ink : C.inkMid,
-  fontSize: 15,
-  fontWeight: active ? 700 : 500,
-  fontFamily: 'Noto Sans SC',
-  cursor: 'pointer',
-});
 
 const assistantModalBodyStyle = {
   minHeight: 0,

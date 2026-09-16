@@ -90,7 +90,7 @@ const statusTone = (status, active) => {
 
 const voiceKey = (voice) => voice?.voice_id || voice?.speaker_id || '';
 
-export default function SettingsPanel({ open, onClose, onLogout, voiceMode = 'cascade', onVoiceModeChange }) {
+export default function SettingsPanel({ open, scope = 'voice', onClose, onLogout, voiceMode = 'cascade', onVoiceModeChange }) {
   const [configured, setConfigured] = useState(false);
   const [missingConfig, setMissingConfig] = useState([]);
   const [maxSampleMb, setMaxSampleMb] = useState(10);
@@ -226,9 +226,11 @@ export default function SettingsPanel({ open, onClose, onLogout, voiceMode = 'ca
 
   useEffect(() => {
     if (open) {
-      loadConfig();
-      loadFamilies();
-      loadMicrophones();
+      if (scope === 'voice') loadConfig();
+      if (scope === 'global') {
+        loadFamilies();
+        loadMicrophones();
+      }
     }
     const handleDeviceChange = () => loadMicrophones();
     navigator.mediaDevices?.addEventListener?.('devicechange', handleDeviceChange);
@@ -241,7 +243,7 @@ export default function SettingsPanel({ open, onClose, onLogout, voiceMode = 'ca
       audioCtxRef.current?.close?.().catch?.(() => {});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, scope]);
 
   if (!open) return null;
 
@@ -602,13 +604,16 @@ export default function SettingsPanel({ open, onClose, onLogout, voiceMode = 'ca
       <div style={{ width: 520, maxWidth: '94vw', height: '100%', background: '#fffaf2', boxShadow: '-10px 0 32px rgba(30,24,16,.18)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '20px 24px', borderBottom: `1px solid ${C.mist}22`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ fontSize: 22, color: C.ink, fontFamily: 'Noto Serif SC,serif' }}>语音与设备设置</div>
-            <div style={{ fontSize: 12, color: C.mist, marginTop: 4, fontFamily: 'Noto Sans SC' }}>麦克风、语音模式、家属配对与声音管理</div>
+            <div style={{ fontSize: 22, color: C.ink, fontFamily: 'Noto Serif SC,serif' }}>{scope === 'global' ? '设置' : '语音设置'}</div>
+            <div style={{ fontSize: 12, color: C.mist, marginTop: 4, fontFamily: 'Noto Sans SC' }}>
+              {scope === 'global' ? '对话麦克风、家属配对与账号' : 'AI 语音模式与声音管理'}
+            </div>
           </div>
           <button onClick={onClose} style={{ ...buttonStyle(), width: 38, height: 38, borderRadius: '50%', padding: 0, fontSize: 20 }}>×</button>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: 22, fontFamily: 'Noto Sans SC', color: C.inkMid }}>
+          {scope === 'global' && (
           <div style={sectionStyle}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
               <Mic size={19} strokeWidth={1.8} color={C.sage} aria-hidden="true" />
@@ -644,7 +649,9 @@ export default function SettingsPanel({ open, onClose, onLogout, voiceMode = 'ca
               ))}
             </select>
           </div>
+          )}
 
+          {scope === 'voice' && (
           <div style={sectionStyle}>
             <div style={{ fontSize: 17, color: C.ink, marginBottom: 10 }}>AI 语音模式</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -685,11 +692,13 @@ export default function SettingsPanel({ open, onClose, onLogout, voiceMode = 'ca
               })}
             </div>
           </div>
+          )}
 
-          {!configured && (
+          {scope === 'voice' && !configured && (
             <div style={{ ...sectionStyle, color: C.red, fontSize: 13 }}>配置未完成：{missingConfig.join('、')}</div>
           )}
 
+          {scope === 'global' && (
           <div style={sectionStyle}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
               <div>
@@ -710,7 +719,9 @@ export default function SettingsPanel({ open, onClose, onLogout, voiceMode = 'ca
               {families.length === 0 ? '还没有绑定家属。' : `已绑定：${families.map(item => item.family_name).join('、')}`}
             </div>
           </div>
+          )}
 
+          {scope === 'voice' && (
           <div style={sectionStyle}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
               <div style={{ fontSize: 17, color: C.ink }}>声音克隆</div>
@@ -778,7 +789,9 @@ export default function SettingsPanel({ open, onClose, onLogout, voiceMode = 'ca
             </button>
             <span style={{ marginLeft: 10, fontSize: 12, color: C.inkFaint }}>最多 {maxSampleMb}MB</span>
           </div>
+          )}
 
+          {scope === 'voice' && (
           <div style={sectionStyle}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
               <div style={{ fontSize: 16, color: C.ink, flex: 1 }}>已有声音</div>
@@ -841,12 +854,14 @@ export default function SettingsPanel({ open, onClose, onLogout, voiceMode = 'ca
               );
             })}
           </div>
+          )}
 
-          <div style={{ fontSize: 13, lineHeight: 1.8, color: C.inkFaint }}>
+          {scope === 'voice' && <div style={{ fontSize: 13, lineHeight: 1.8, color: C.inkFaint }}>
             启用后，安安会用这个声音说四川话。{settings.resource_link && <a href={settings.resource_link} target="_blank" rel="noreferrer" style={{ color: C.sage, marginLeft: 8 }}>试听样音</a>}
             {tip && <div style={{ marginTop: 8, color: warn ? C.red : C.inkMid }}>{tip}</div>}
-          </div>
-          {onLogout && <button className="auth-logout" type="button" onClick={onLogout}>退出登录</button>}
+          </div>}
+          {scope === 'global' && tip && <div style={{ marginTop: 8, color: warn ? C.red : C.inkMid }}>{tip}</div>}
+          {scope === 'global' && onLogout && <button className="auth-logout" type="button" onClick={onLogout}>退出登录</button>}
         </div>
       </div>
     </div>

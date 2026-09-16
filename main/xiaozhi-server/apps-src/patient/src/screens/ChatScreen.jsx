@@ -1,4 +1,3 @@
-import { useRef } from 'react';
 import { SlidersHorizontal } from 'lucide-react';
 import RobotAvatar from '../components/RobotAvatar';
 import WaveBars from '../components/WaveBars';
@@ -23,10 +22,7 @@ export default function ChatScreen({
   outputLevel = 0,
   ordinaryVoiceAwake = true,
   onOpenSettings,
-  onOpenAssistantTools,
 }) {
-  const pressTimerRef = useRef(null);
-  const longPressTriggeredRef = useRef(false);
   const standby = !ordinaryVoiceAwake;
   const listening = useListeningTurn({
     enabled: !standby,
@@ -49,31 +45,6 @@ export default function ChatScreen({
   const replyText = msg || fallback;
   const replyDensity = getReplyDensity(replyText);
 
-  const clearPressTimer = () => {
-    if (!pressTimerRef.current) return;
-    clearTimeout(pressTimerRef.current);
-    pressTimerRef.current = null;
-  };
-
-  const beginSettingsPress = () => {
-    longPressTriggeredRef.current = false;
-    clearPressTimer();
-    pressTimerRef.current = setTimeout(() => {
-      longPressTriggeredRef.current = true;
-      pressTimerRef.current = null;
-      onOpenAssistantTools?.();
-    }, 1200);
-  };
-
-  const endSettingsPress = () => {
-    clearPressTimer();
-    if (longPressTriggeredRef.current) {
-      longPressTriggeredRef.current = false;
-      return;
-    }
-    onOpenSettings?.();
-  };
-
   return (
     <div
       className={`voice-screen voice-screen--${displayState} voice-screen--reply-${replyDensity}`}
@@ -82,10 +53,7 @@ export default function ChatScreen({
       <button
         className="voice-screen__settings"
         type="button"
-        onPointerDown={beginSettingsPress}
-        onPointerUp={endSettingsPress}
-        onPointerLeave={clearPressTimer}
-        onPointerCancel={clearPressTimer}
+        onClick={onOpenSettings}
         aria-label="打开语音设置"
         title="语音设置"
       >

@@ -23,6 +23,8 @@ export class WebSocketHandler {
         this.currentSessionId = null;
         this.isRemoteSpeaking = false;
         this.ttsStopTimer = null;
+        this.outputAudioFormat = null;
+        this.outputSampleRate = null;
     }
 
     // 发送hello握手消息
@@ -185,6 +187,8 @@ export class WebSocketHandler {
             }
             log('服务器开始发送语音', 'info');
             this.currentSessionId = message.session_id;
+            this.outputAudioFormat = message.audio_format || null;
+            this.outputSampleRate = Number(message.sample_rate) || null;
             this.isRemoteSpeaking = true;
             if (this.onSessionStateChange) {
                 this.onSessionStateChange(true);
@@ -216,7 +220,8 @@ export class WebSocketHandler {
             // 句子结束时不清除动画，等待下一个句子或最终停止
         } else if (message.state === 'stop') {
             const audioPlayer = getAudioPlayer();
-            if (message.drain) audioPlayer.finishPcmAudio();
+            const isPcm = this.outputAudioFormat === 'pcm';
+            if (message.drain && isPcm) audioPlayer.finishPcmAudio();
             if (!message.drain) {
                 audioPlayer.clearAllAudio();
             }
@@ -232,7 +237,7 @@ export class WebSocketHandler {
                 this.stopLive2DTalking();
                 this.ttsSentenceCount = 0;
             };
-            const drainMs = message.drain ? audioPlayer.getPcmQueuedMs() : 0;
+            const drainMs = message.drain && isPcm ? audioPlayer.getPcmQueuedMs() : 0;
             if (drainMs > 20) {
                 this.ttsStopTimer = setTimeout(finish, drainMs + 20);
             } else {
@@ -381,13 +386,22 @@ export class WebSocketHandler {
             const opusData = new Uint8Array(arrayBuffer);
             const audioPlayer = getAudioPlayer();
             const voiceMode = document.getElementById('voiceMode')?.value || 'cascade';
-            if (voiceMode === 'doubao_s2s') {
-                audioPlayer.enqueuePcmData(opusData, 24000);
+            const audioFormat = this.outputAudioFormat
+                || (voiceMode === 'doubao_s2s' ? 'pcm' : 'opus');
+            const sampleRate = this.outputSampleRate
+                || (audioFormat === 'pcm' ? 24000 : 16000);
+            if (audioFormat === 'pcm') {
+                audioPlayer.enqueuePcmData(opusData, sampleRate);
             } else {
                 audioPlayer.enqueueAudioData(opusData);
             }
             if (this.onAudioData) {
-                this.onAudioData({ byteLength: opusData.byteLength, voiceMode });
+                this.onAudioData({
+                    byteLength: opusData.byteLength,
+                    voiceMode,
+                    audioFormat,
+                    sampleRate,
+                });
             }
         } catch (error) {
             log(`处理二进制消息出错: ${error.message}`, 'error');

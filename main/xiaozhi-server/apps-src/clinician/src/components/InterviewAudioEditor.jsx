@@ -1,5 +1,12 @@
 import { useState } from 'react';
-import { C } from '../theme';
+const C = {
+  ink: '#24362e',
+  inkMid: '#455b50',
+  inkFaint: '#68776f',
+  mist: '#bdcbc3',
+  sage: '#39745a',
+  red: '#a94742',
+};
 
 function formatSegmentTime(value) {
   const total = Number(value);

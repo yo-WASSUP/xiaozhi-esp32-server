@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { House } from 'lucide-react';
+import { House, Settings } from 'lucide-react';
 
 function Clock() {
   const [now, setNow] = useState(new Date());
@@ -35,6 +35,7 @@ export default function TopBar({
   micOk,
   connectStatus,
   onHome,
+  onOpenSettings,
 }) {
   const isVoicePage = activeApp === 'voice' || activeApp === 'dignity';
 
@@ -83,6 +84,15 @@ export default function TopBar({
           <div className="patient-topbar__notice patient-topbar__notice--truncate">{connectStatus}</div>
         )}
         <Clock />
+        <button
+          className="patient-topbar__settings"
+          type="button"
+          onClick={onOpenSettings}
+          aria-label="打开设置"
+          title="设置"
+        >
+          <Settings size={22} strokeWidth={1.8} aria-hidden="true" />
+        </button>
       </div>
     </header>
   );

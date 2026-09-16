@@ -2,6 +2,8 @@ import { installSession } from '../../shared/session';
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
+import InterviewAudioEditor from './components/InterviewAudioEditor';
+import LegacyVideoReview from './components/LegacyVideoReview';
 
 installSession(window.location.pathname.startsWith('/admin/') ? 'admin' : 'clinician');
 
@@ -130,25 +132,49 @@ function AccountManager({ user, onLogout }) {
 
 function Dashboard({ user, onLogout }) {
   const [patientId, setPatientId] = useState(user.patient_ids?.[0] || '');
-  const [summary, setSummary] = useState(null);
-  const [emotion, setEmotion] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [taskBusy, setTaskBusy] = useState('');
+  const [dignityTab, setDignityTab] = useState('audio');
+  const [interviewSegments, setInterviewSegments] = useState([]);
+  const [interviewBusy, setInterviewBusy] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (!patientId) return;
     setError('');
     Promise.all([
-      fetch(`/api/hospice/summary/today?device_id=${encodeURIComponent(patientId)}`).then((response) => response.json()),
-      fetch(`/api/hospice/emotion/today?device_id=${encodeURIComponent(patientId)}`).then((response) => response.json()),
       fetch(`/api/hospice/safety-alerts?device_id=${encodeURIComponent(patientId)}`).then((response) => response.json()),
-    ]).then(([summaryData, emotionData, alertData]) => {
-      setSummary(summaryData);
-      setEmotion(emotionData);
+      fetch(`/api/hospice/interview/audio-segments/latest?device_id=${encodeURIComponent(patientId)}`).then((response) => response.json()),
+    ]).then(([alertData, interviewData]) => {
       setAlerts(alertData.alerts || []);
+      setInterviewSegments(interviewData.segments || []);
     }).catch((reason) => setError(reason.message || '患者信息加载失败'));
   }, [patientId]);
+
+  const toggleInterviewSegment = (segmentId) => {
+    setInterviewSegments((items) => items.map((item) => (
+      item.id === segmentId ? { ...item, deleted: !item.deleted } : item
+    )));
+  };
+
+  const saveInterviewSegments = async (segments) => {
+    setInterviewBusy(true);
+    setError('');
+    try {
+      const response = await fetch('/api/hospice/interview/audio-segments/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_id: patientId, segments }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success) throw new Error(payload.error || '访谈记录保存失败');
+      setInterviewSegments(payload.segments || segments);
+    } catch (reason) {
+      setError(reason.message || '访谈记录保存失败');
+    } finally {
+      setInterviewBusy(false);
+    }
+  };
 
   const updateSafetyTask = async (alert, action) => {
     const note = window.prompt('填写处置备注（可以留空）', alert.disposition_note || '');
@@ -175,36 +201,48 @@ function Dashboard({ user, onLogout }) {
     }
   };
 
+  const openAlertCount = alerts.filter((alert) => !['released', 'closed'].includes(alert.task?.status)).length;
+
   return (
     <main className="dashboard">
-      <header>
-        <div><div className="brand">安安医护端</div><h1>患者概览</h1></div>
+      <header className="dashboard-header">
+        <div>
+          <div className="brand">安安医护端</div>
+          <h1>患者工作台</h1>
+          <p className="dashboard-kicker">审核访谈记录，处理安全预警，整理生命影像。</p>
+        </div>
         <div className="account"><span>{user.display_name}</span><button className="secondary" onClick={onLogout}>退出登录</button></div>
       </header>
-      <section className="card">
-        <label htmlFor="patient">当前患者</label>
+      <section className="patient-context">
         {user.patient_ids?.length ? (
-          <select id="patient" value={patientId} onChange={(event) => setPatientId(event.target.value)}>
-            {user.patient_ids.map((id) => <option key={id} value={id}>{id}</option>)}
-          </select>
+          <div className="patient-picker">
+            <span className="patient-picker__mark" aria-hidden="true">患</span>
+            <label htmlFor="patient">
+              <span>当前患者</span>
+              <select id="patient" value={patientId} onChange={(event) => setPatientId(event.target.value)}>
+                {user.patient_ids.map((id) => <option key={id} value={id}>{id}</option>)}
+              </select>
+            </label>
+          </div>
         ) : <div className="empty">该账号尚未关联患者，请由管理员授权。</div>}
+        {patientId && <div className="workload-summary" aria-label="当前患者工作概览">
+          <div><strong>{openAlertCount}</strong><span>待处理预警</span></div>
+          <div><strong>{interviewSegments.length}</strong><span>访谈片段</span></div>
+          <div><strong>{user.patient_ids?.length || 0}</strong><span>关联患者</span></div>
+        </div>}
       </section>
       {error && <div className="error">{error}</div>}
-      {patientId && <div className="grid">
-        <section className="card">
-          <h2>今日陪伴摘要</h2>
-          <div className="metric">{summary?.conversation_count ?? 0}<small>轮对话</small></div>
-          <p>{summary?.summary || '今天暂无摘要'}</p>
-        </section>
-        <section className="card">
-          <h2>今日情绪</h2>
-          <div className="metric">{emotion?.dominant_mood || '暂无'}</div>
-          <p>记录数：{emotion?.count ?? 0}</p>
-        </section>
-      </div>}
-      {patientId && <section className="card safety-section">
-        <h2>安全预警处置</h2>
-        {alerts.length === 0 ? <div className="empty">当前没有安全预警记录。</div> : alerts.map((alert) => {
+      {patientId && (alerts.length === 0 ? (
+        <div className="safety-clear" role="status">
+          <span aria-hidden="true">✓</span>
+          <div><strong>当前无安全预警</strong><small>发现风险线索后会在这里生成医护处置任务。</small></div>
+        </div>
+      ) : <section className="card safety-section">
+        <div className="section-heading">
+          <div><div className="section-eyebrow">需要关注</div><h2>安全预警处置</h2></div>
+          <span className="alert-count">{openAlertCount} 项待处理</span>
+        </div>
+        {alerts.map((alert) => {
           const status = alert.task?.status || 'pending';
           const resolved = ['released', 'closed'].includes(status);
           const busy = taskBusy === alert.alert_id;
@@ -221,6 +259,47 @@ function Dashboard({ user, onLogout }) {
             </div>}
           </article>;
         })}
+      </section>)}
+      {patientId && <section className="card dignity-review-section">
+        <div className="section-heading">
+          <div>
+            <div className="section-eyebrow">尊严疗法</div>
+            <h2>访谈与生命影像审核</h2>
+          </div>
+          <span className="section-meta">{patientId}</span>
+        </div>
+        <div className="review-tabs" role="tablist" aria-label="尊严疗法审核工具">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={dignityTab === 'audio'}
+            className={dignityTab === 'audio' ? 'active' : ''}
+            onClick={() => setDignityTab('audio')}
+          >
+            访谈记录
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={dignityTab === 'video'}
+            className={dignityTab === 'video' ? 'active' : ''}
+            onClick={() => setDignityTab('video')}
+          >
+            生命影像审核
+          </button>
+        </div>
+        <div className="review-panel" role="tabpanel">
+          {dignityTab === 'audio' ? (
+            <InterviewAudioEditor
+              segments={interviewSegments}
+              busy={interviewBusy}
+              onToggleSegment={toggleInterviewSegment}
+              onSave={saveInterviewSegments}
+            />
+          ) : (
+            <LegacyVideoReview key={patientId} deviceId={patientId} />
+          )}
+        </div>
       </section>}
     </main>
   );

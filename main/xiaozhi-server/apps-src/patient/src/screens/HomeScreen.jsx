@@ -36,6 +36,12 @@ export const APP_ITEMS = [
     subtitle: '调节更舒适的姿势',
     pending: true,
   },
+  {
+    id: 'settings',
+    title: '设置',
+    subtitle: '麦克风、家属配对与账号',
+    utility: true,
+  },
 ];
 
 export const APP_TITLES = Object.fromEntries(APP_ITEMS.map(item => [item.id, item.title]));
@@ -77,7 +83,7 @@ export default function HomeScreen({ unread = 0, onOpenApp, connected, micOk, ho
           <span>也可以直接点击下方功能</span>
         </div>
         <nav className="patient-app-grid" aria-label="应用菜单">
-          {APP_ITEMS.map((item) => {
+          {APP_ITEMS.filter(item => !item.utility).map((item) => {
             const badge = item.id === 'family' && unread > 0 ? Math.min(unread, 99) : null;
             return (
               <button

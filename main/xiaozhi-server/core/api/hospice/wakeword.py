@@ -27,7 +27,11 @@ class HospiceWakeWordMixin:
         path = str(value or "").strip()
         server_root = Path(__file__).resolve().parents[3]
         if path.startswith("/wakeword/"):
-            return server_root / "apps-src" / "patient" / "public" / path.lstrip("/")
+            relative = path.lstrip("/")
+            deployed = server_root / "apps" / "patient" / relative
+            if deployed.exists():
+                return deployed
+            return server_root / "apps-src" / "patient" / "public" / relative
         p = Path(path)
         if p.is_absolute():
             return p

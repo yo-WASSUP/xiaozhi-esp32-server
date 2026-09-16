@@ -66,6 +66,7 @@ HOME_APP_PHRASES = {
     "digital": ("数字疗法",),
     "aroma": ("芳香疗法",),
     "smartbed": ("智能床", "智能床联动", "调节床铺"),
+    "settings": ("设置", "系统设置", "打开设置"),
 }
 
 

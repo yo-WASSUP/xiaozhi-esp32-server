@@ -605,7 +605,12 @@ class DoubaoS2SClient:
                 self.conn.client_abort = False
                 self.conn.client_is_speaking = True
                 self.conn.sentence_id = uuid.uuid4().hex
-                await send_tts_message(self.conn, "start")
+                await send_tts_message(
+                    self.conn,
+                    "start",
+                    audio_format="pcm",
+                    sample_rate=self.output_rate,
+                )
             elif event == EVENT_TTS_AUDIO:
                 audio = frame.payload
                 if not audio and payload.get("audio"):

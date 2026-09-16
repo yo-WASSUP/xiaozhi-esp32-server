@@ -115,6 +115,28 @@ a:focus-visible {
   background: #f4f8f5;
 }
 
+.patient-topbar__settings {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid rgba(55, 78, 68, .18);
+  border-radius: 50%;
+  color: #52675d;
+  background: rgba(255, 255, 255, .72);
+  cursor: pointer;
+  transition: border-color .18s ease, color .18s ease, background .18s ease;
+}
+
+.patient-topbar__settings:hover,
+.patient-topbar__settings:focus-visible {
+  border-color: rgba(53, 104, 83, .42);
+  color: #356b54;
+  background: #f1f7f3;
+}
+
 .patient-topbar__divider {
   width: 1px;
   height: 30px;

@@ -276,7 +276,14 @@ async def send_llm_message(conn, text, state="complete"):
     )
 
 
-async def send_tts_message(conn, state, text=None):
+async def send_tts_message(
+    conn,
+    state,
+    text=None,
+    *,
+    audio_format=None,
+    sample_rate=None,
+):
     """发送 TTS 状态消息"""
     if text is None and state == "sentence_start":
         return
@@ -288,6 +295,9 @@ async def send_tts_message(conn, state, text=None):
     }
     if text is not None:
         message["text"] = textUtils.check_emoji(text)
+    if state == "start":
+        message["audio_format"] = audio_format or "opus"
+        message["sample_rate"] = int(sample_rate or conn.sample_rate)
 
     # TTS播放结束
     if state == "stop":

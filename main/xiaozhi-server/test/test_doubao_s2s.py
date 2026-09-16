@@ -9,6 +9,7 @@ from core.providers.realtime.doubao_s2s import (
     EVENT_ASR_ENDED,
     EVENT_ASR_RESPONSE,
     EVENT_TTS_AUDIO,
+    EVENT_TTS_STARTED,
     MESSAGE_AUDIO_SERVER,
     MESSAGE_FULL_CLIENT,
     SERIALIZATION_JSON,
@@ -104,6 +105,41 @@ class DoubaoS2SProtocolTests(unittest.TestCase):
 
 
 class DoubaoS2SPcmBridgeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_tts_start_identifies_pcm_output_for_browser(self):
+        frame = build_event_frame(
+            MESSAGE_FULL_CLIENT,
+            EVENT_TTS_STARTED,
+            "session-1",
+            b"{}",
+            SERIALIZATION_JSON,
+        )
+        client = DoubaoS2SClient.__new__(DoubaoS2SClient)
+        client.upstream = AsyncFrames(frame)
+        client.responding = False
+        client.interrupt_sent = False
+        client.assistant_chat_text = ""
+        client.assistant_tts_text = ""
+        client.assistant_finalized = False
+        client.assistant_sent_text = ""
+        client.conn = SimpleNamespace(
+            client_abort=False,
+            client_is_speaking=False,
+            sentence_id="",
+        )
+
+        with patch(
+            "core.providers.realtime.doubao_s2s.send_tts_message",
+            new=AsyncMock(),
+        ) as send_tts:
+            await client._receive_loop()
+
+        send_tts.assert_awaited_once_with(
+            client.conn,
+            "start",
+            audio_format="pcm",
+            sample_rate=24000,
+        )
+
     async def test_audio_idle_timeout_keeps_end_to_end_mode(self):
         logger = SimpleNamespace(
             bind=lambda **_: SimpleNamespace(info=Mock(), error=Mock())
