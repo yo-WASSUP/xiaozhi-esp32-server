@@ -250,6 +250,18 @@ ASR:
     semantic_punctuation_enabled: false
     disfluency_removal_enabled: true
     punctuation_prediction_enabled: true
+  # 使用时将 selected_module.ASR 改为 QwenAudioStreamASR。
+  QwenAudioStreamASR:
+    type: aliyunbl_stream
+    api_key: YOUR_ALIYUN_DASHSCOPE_API_KEY_HERE
+    model: qwen-audio-3.0-asr-flash-streaming
+    output_dir: tmp/
+    max_sentence_silence: 1200
+    semantic_punctuation_enabled: false
+    punctuation_prediction_enabled: true
+    language_hints:
+      - zh
+    heartbeat: true
 
 TTS:
   AliBLTTS:
