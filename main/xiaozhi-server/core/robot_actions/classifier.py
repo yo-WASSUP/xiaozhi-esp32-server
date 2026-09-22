@@ -1,79 +1,25 @@
 from __future__ import annotations
 
-import json
 import re
-from difflib import SequenceMatcher
 from typing import Any, Dict, Optional
 
 from core.robot_actions.contract import (
-    ACTION_EXAMPLE_HINTS,
     ACTION_EXAMPLES,
-    NO_ACTION,
+    default_params_for,
     is_valid_action_id,
 )
 
 
-TAG = __name__
-
-SYSTEM_PROMPT = """你只负责把用户语音分类为一个机器人动作 action_id。
-只能从动作表里选择一个 action_id。
-如果不是明确的机器人控制意图，输出 no_action。
-不要调用工具，不要解释，不要编造参数。
-只输出 JSON：{"action_id":"...","reason":"..."}。"""
-
-ACTION_TABLE = """
-可选 action_id:
-- system.stop: 停止、别动、暂停
-- system.resume: 继续、恢复
-- base.forward: 过来一点、靠近一点、往前一点
-- base.backward: 后退一点、离远一点
-- base.turn_left: 左转、看左边、转向左边
-- base.turn_right: 右转、看右边、转向右边
-- base.move: 特定底盘动作
-- arm.wave: 挥手、打招呼
-- arm.gentle: 轻微摆动、简单动作
-- arm.comfort: 安抚动作、陪伴、安慰
-- arm.reset: 收回来、复位、恢复原位
-- eye.calm: 平静
-- eye.warm_smile: 微笑、开心
-- eye.attentive: 专注倾听
-- eye.speak: 说话表情
-- eye.gentle: 温和安抚表情
-- eye.concern: 关切、风险提醒
-- aroma.start: 打开香薰
-- aroma.stop: 关闭香薰
-- aroma.scene_relax: 放松香薰场景
-- notify.nurse_alert: 护士提醒、需要人工介入
-- no_action: 不是明确机器人动作控制
-"""
-
-CANDIDATE_HINTS = (
-    "机器人",
-    "安安",
-    "动作",
-    "动一下",
-    "动一动",
-    "过来",
-    "靠近",
-    "离远",
-    "后退",
-    "左",
-    "右",
-    "转",
-    "停",
-    "别动",
-    "挥",
-    "招呼",
-    "复位",
-    "收回",
-    "香薰",
-    "安抚",
-    "护士",
-)
-
 HARD_RULES = {
+    "bed.head.stop": ("床头停止", "床头停一下", "床头保持"),
+    "bed.feet.stop": ("床尾停止", "床尾停一下", "床尾保持"),
     "system.stop": ("停一下", "停止", "停下", "别动", "不要动", "急停", "马上停"),
 }
+
+ACTOR_PREFIXES = ("机器人", "安安")
+HIGH_CONFIDENCE_NAVIGATION_PREFIXES = ("导航到", "导航去", "去到", "前往", "带我去", "送我去")
+ACTOR_SCOPED_NAVIGATION_PREFIXES = ("去",)
+GENERIC_NAVIGATION_TARGETS = {"那里", "那边", "这里", "这边", "前面", "后面"}
 
 
 async def classify_robot_action(conn, text: str) -> Optional[Dict[str, Any]]:
@@ -83,12 +29,8 @@ async def classify_robot_action(conn, text: str) -> Optional[Dict[str, Any]]:
 
     rule_result = classify_robot_action_by_rule(clean_text)
     if rule_result:
-        return rule_result
-
-    if not _looks_like_robot_action(clean_text):
-        return None
-
-    return await classify_robot_action_with_llm(conn, clean_text)
+        return _with_extracted_params(rule_result, clean_text)
+    return None
 
 
 def classify_robot_action_by_rule(text: str) -> Optional[Dict[str, Any]]:
@@ -96,119 +38,252 @@ def classify_robot_action_by_rule(text: str) -> Optional[Dict[str, Any]]:
     if not clean_text:
         return None
 
+    aroma_action = _parse_aroma_command(clean_text)
+    if aroma_action:
+        return aroma_action
+
     for action_id, phrases in HARD_RULES.items():
         if any(phrase in clean_text for phrase in phrases):
-            return {
+            return _with_extracted_params({
                 "action_id": action_id,
                 "source": "voice_hard_rule",
                 "reason": f"硬安全规则命中: {action_id}",
                 "params": {},
-            }
+            }, clean_text)
 
+    navigation_target = _parse_navigation_target(clean_text)
+    if navigation_target:
+        return _matched_result(
+            "base.move",
+            "voice_navigation_rule",
+            f"导航目标命中: {navigation_target}",
+            {"target_name": navigation_target},
+        )
+
+    matched_action = None
+    matched_length = 0
     for action_id, examples in ACTION_EXAMPLES.items():
+        # 香薰完整指令由专用规则解析，避免非法时长或否定句命中短语后开启。
+        if action_id.startswith("aroma."):
+            continue
         for example in examples:
             clean_example = _clean_text(example)
-            if clean_example and (clean_example in clean_text or clean_text in clean_example):
-                return _matched_result(action_id, "voice_example", f"样例命中: {example}")
+            # 完整动作短语优先，避免“床头复位”先命中机械臂的“复位”。
+            if len(clean_example) > matched_length and clean_example in clean_text:
+                matched_action = _matched_result(
+                    action_id, "voice_example", f"样例命中: {example}"
+                )
+                matched_length = len(clean_example)
 
-    fuzzy = _best_example_match(clean_text)
-    if fuzzy:
-        action_id, example, score = fuzzy
-        return _matched_result(
-            action_id,
-            "voice_example_fuzzy",
-            f"样例相似命中: {example}, score={score:.2f}",
-        )
+    return _with_extracted_params(matched_action, clean_text)
+
+
+def _parse_aroma_command(text: str) -> Optional[Dict[str, Any]]:
+    text = text.replace("香熏", "香薰")
+    start = re.fullmatch(
+        r"(?:开启|打开|开)(?:([一二三123])号)?香薰"
+        r"(?:(\d+|[零〇一二两三四五六七八九十百]+)分钟)?",
+        text,
+    )
+    if start:
+        params = {}
+        if start.group(1):
+            params["type"] = start.group(1).translate(str.maketrans("一二三", "123"))
+        if start.group(2):
+            duration = start.group(2)
+            minutes = int(duration) if duration.isdecimal() else _parse_chinese_int(duration)
+            if minutes is None:
+                return None
+            params["duration_ms"] = minutes * 60000
+        return _matched_result("aroma.start", "voice_aroma_rule", "香薰开启指令", params)
+
+    if re.fullmatch(r"(?:关闭|关掉|关|停止|停)(?:所有)?香薰", text):
+        return _matched_result("aroma.stop", "voice_aroma_rule", "香薰关闭指令")
+
+    if text in {"安抚", "睡前", "紧张", "开启放松香薰"}:
+        return _matched_result("aroma.scene_relax", "voice_aroma_rule", "香薰放松场景")
+    for action_id in ("aroma.start", "aroma.stop", "aroma.scene_relax"):
+        if text in ACTION_EXAMPLES[action_id]:
+            return _matched_result(action_id, "voice_aroma_rule", f"香薰指令: {text}")
     return None
 
 
-async def classify_robot_action_with_llm(conn, text: str) -> Optional[Dict[str, Any]]:
-    llm = getattr(conn, "llm", None)
-    if llm is None:
-        return None
-
-    prompt = f"{ACTION_TABLE}\n用户语音：{text}\n请输出 JSON："
-
-    def call_llm() -> str:
-        return llm.response_no_stream(SYSTEM_PROMPT, prompt, temperature=0)
-
-    try:
-        loop = getattr(conn, "loop", None)
-        executor = getattr(conn, "executor", None)
-        if loop and executor:
-            content = await loop.run_in_executor(executor, call_llm)
-        else:
-            content = call_llm()
-        data = _loads_json_object(content)
-    except Exception as exc:
-        logger = getattr(conn, "logger", None)
-        if logger:
-            logger.bind(tag=TAG).warning(f"机器人动作 LLM 分类失败: {exc}")
-        return None
-
-    action_id = str(data.get("action_id") or "").strip()
-    if action_id == NO_ACTION:
-        return None
-    if not is_valid_action_id(action_id):
-        return None
-
-    return {
-        "action_id": action_id,
-        "source": "voice_llm",
-        "reason": str(data.get("reason") or "LLM JSON 分类命中").strip(),
-        "params": {},
-    }
-
-
-def _looks_like_robot_action(text: str) -> bool:
-    return any(hint in text for hint in CANDIDATE_HINTS) or any(
-        hint in text for hint in ACTION_EXAMPLE_HINTS
-    )
-
-
-def _best_example_match(text: str) -> Optional[tuple[str, str, float]]:
-    best: Optional[tuple[str, str, float]] = None
-    for action_id, examples in ACTION_EXAMPLES.items():
-        for example in examples:
-            clean_example = _clean_text(example)
-            if not clean_example:
-                continue
-            score = SequenceMatcher(None, text, clean_example).ratio()
-            if score >= 0.78 and (best is None or score > best[2]):
-                best = (action_id, example, score)
-    return best
-
-
-def _matched_result(action_id: str, source: str, reason: str) -> Dict[str, Any]:
+def _matched_result(
+    action_id: str,
+    source: str,
+    reason: str,
+    params: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     return {
         "action_id": action_id,
         "source": source,
         "reason": reason,
-        "params": {},
+        "params": params or {},
     }
 
 
-def _clean_text(text: str) -> str:
-    return re.sub(r"\s+", "", str(text or "")).strip()
+def _with_extracted_params(
+    action: Optional[Dict[str, Any]],
+    text: str,
+) -> Optional[Dict[str, Any]]:
+    if not action:
+        return None
+
+    action_id = str(action.get("action_id") or "")
+    params = dict(action.get("params") or {})
+
+    if action_id in {"base.forward", "base.backward"}:
+        distance_m = _extract_distance_m(text)
+        if distance_m is not None:
+            params["distance_m"] = distance_m
+    elif action_id in {"base.turn_left", "base.turn_right"}:
+        angle = _extract_angle_deg(text)
+        if angle is not None:
+            params["angle"] = angle
+    elif action_id == "base.move":
+        target_name = _extract_navigation_target(text)
+        if target_name:
+            params["target_name"] = target_name
+    elif action_id.startswith("arm."):
+        params["side"] = _extract_arm_side(text, action_id)
+
+    action["params"] = params
+    return action
 
 
-def _loads_json_object(content: str) -> Dict[str, Any]:
-    text = (content or "").strip()
+def _extract_arm_side(text: str, action_id: str) -> str:
+    has_left = "左" in text
+    has_right = "右" in text
+    if has_left and not has_right:
+        return "left"
+    if has_right and not has_left:
+        return "right"
+    if has_left and has_right:
+        return "both"
+    return str(default_params_for(action_id).get("side") or "both")
+
+
+def _extract_distance_m(text: str) -> Optional[float]:
+    match = re.search(r"(\d+(?:\.\d+)?)(?:\s*)(厘米|公分|cm|米|m)", text, re.IGNORECASE)
+    if match:
+        try:
+            distance = float(match.group(1))
+        except ValueError:
+            return None
+        return distance / 100 if match.group(2).lower() in {"厘米", "公分", "cm"} else distance
+
+    chinese_match = re.search(r"([零〇一二两三四五六七八九十百]+)(厘米|公分|米)", text)
+    if not chinese_match:
+        return None
+    distance = _parse_chinese_int(chinese_match.group(1))
+    if distance is None:
+        return None
+    return distance / 100 if chinese_match.group(2) in {"厘米", "公分"} else float(distance)
+
+
+def _extract_angle_deg(text: str) -> Optional[int]:
+    match = re.search(r"(\d+(?:\.\d+)?)(?:度|°)", text)
+    if match:
+        try:
+            return int(round(float(match.group(1))))
+        except ValueError:
+            return None
+
+    chinese_match = re.search(r"([零〇一二两三四五六七八九十百]+)(?:度|°)", text)
+    if not chinese_match:
+        return None
+    return _parse_chinese_int(chinese_match.group(1))
+
+
+def _parse_chinese_int(text: str) -> Optional[int]:
+    digits = {
+        "零": 0,
+        "〇": 0,
+        "一": 1,
+        "二": 2,
+        "两": 2,
+        "三": 3,
+        "四": 4,
+        "五": 5,
+        "六": 6,
+        "七": 7,
+        "八": 8,
+        "九": 9,
+    }
+
+    def digit_value(value: str, default: Optional[int] = None) -> Optional[int]:
+        if value == "":
+            return default
+        if len(value) == 1:
+            return digits.get(value)
+        result = 0
+        for char in value:
+            if char not in digits:
+                return None
+            result = result * 10 + digits[char]
+        return result
+
     if not text:
-        return {}
-    try:
-        value = json.loads(text)
-    except json.JSONDecodeError:
-        extracted = _extract_json_object(text)
-        if not extracted:
-            return {}
-        value = json.loads(extracted)
-    return value if isinstance(value, dict) else {}
+        return None
+    if "百" in text:
+        left, right = text.split("百", 1)
+        hundreds = digit_value(left, 1)
+        if hundreds is None:
+            return None
+        rest = _parse_chinese_int(right) if right else 0
+        if rest is None:
+            return None
+        return hundreds * 100 + rest
+    if "十" in text:
+        left, right = text.split("十", 1)
+        tens = digit_value(left, 1)
+        ones = digit_value(right, 0)
+        if tens is None or ones is None:
+            return None
+        return tens * 10 + ones
+    return digit_value(text)
 
 
-def _extract_json_object(text: str) -> str:
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1 or end <= start:
-        return ""
-    return text[start : end + 1]
+def _extract_navigation_target(text: str) -> str:
+    target = _parse_navigation_target(text)
+    if target:
+        return target
+    for prefix in HIGH_CONFIDENCE_NAVIGATION_PREFIXES:
+        if prefix in text:
+            target = text.split(prefix, 1)[1].strip()
+            return "" if target in GENERIC_NAVIGATION_TARGETS else target
+    return ""
+
+
+def _parse_navigation_target(text: str) -> str:
+    stripped_actor_text = ""
+    for actor in ACTOR_PREFIXES:
+        if text.startswith(actor):
+            stripped_actor_text = text[len(actor) :].strip()
+            break
+
+    for candidate in (text, stripped_actor_text):
+        if not candidate:
+            continue
+        target = _target_after_prefix(candidate, HIGH_CONFIDENCE_NAVIGATION_PREFIXES)
+        if target:
+            return target
+
+    if stripped_actor_text:
+        target = _target_after_prefix(stripped_actor_text, ACTOR_SCOPED_NAVIGATION_PREFIXES)
+        if target:
+            return target
+
+    return ""
+
+
+def _target_after_prefix(text: str, prefixes: tuple[str, ...]) -> str:
+    for prefix in prefixes:
+        if text.startswith(prefix):
+            target = text[len(prefix) :].strip()
+            return "" if not target or target in GENERIC_NAVIGATION_TARGETS else target
+    return ""
+
+
+def _clean_text(text: str) -> str:
+    return re.sub(r"[，。！？、；：,!?\s]+", "", str(text or "")).strip()

@@ -5,17 +5,20 @@ import time
 import uuid
 
 from core.providers.tts.dto.dto import ContentType, TTSMessageDTO, SentenceType
+from core.providers.emotion import filter_stream_emotion_tag, parse_emotion
 from core.handle.sendAudioHandle import send_llm_message
 from core.utils import textUtils
 from core.utils.dialogue import Message
 from core.utils.util import extract_json_from_string, get_system_error_response
+from core.providers.tools.query_policy import (
+    filter_weather_context_for_query,
+    filter_tool_calls_for_query,
+    filter_tools_for_query,
+)
 from plugins_func.register import Action
 
 
 TAG = __name__
-
-EMOTION_TAG_PREFIX = "<!--emotion:"
-EMOTION_TAG_END = "-->"
 
 _STAGE_DIRECTION_CUE = re.compile(
     r"微笑|笑着|笑了笑|轻笑|苦笑|点头|摇头|叹气|轻声|柔声|"
@@ -104,40 +107,6 @@ class _StreamingStageDirectionFilter:
         return output
 
 
-def _filter_stream_emotion_tag(content, pending=""):
-    """Remove hospice emotion tags before streaming text to TTS."""
-    if not content:
-        return "", pending
-
-    combined = pending + content
-    output = []
-    index = 0
-
-    while index < len(combined):
-        tag_start = combined.find(EMOTION_TAG_PREFIX, index)
-        if tag_start == -1:
-            tail = combined[index:]
-            keep = 0
-            max_keep = min(len(tail), len(EMOTION_TAG_PREFIX) - 1)
-            for size in range(max_keep, 0, -1):
-                if tail.endswith(EMOTION_TAG_PREFIX[:size]):
-                    keep = size
-                    break
-            if keep:
-                output.append(tail[:-keep])
-                return "".join(output), tail[-keep:]
-            output.append(tail)
-            return "".join(output), ""
-
-        output.append(combined[index:tag_start])
-        tag_end = combined.find(EMOTION_TAG_END, tag_start + len(EMOTION_TAG_PREFIX))
-        if tag_end == -1:
-            return "".join(output), combined[tag_start:]
-        index = tag_end + len(EMOTION_TAG_END)
-
-    return "".join(output), ""
-
-
 class ChatMixin:
     def chat(self, query, depth=0):
         if query is not None:
@@ -180,9 +149,21 @@ class ChatMixin:
             and hasattr(self, "func_handler")
             and not force_final_answer
         ):
-            functions = self.func_handler.get_functions()
+            available_functions = self.func_handler.get_functions()
+            functions = filter_tools_for_query(
+                available_functions,
+                query,
+            )
+            if available_functions and not functions:
+                functions = None
         response_message = []
         final_display_text = ""
+        # 天气工具轮次可能先流出过渡句；确认是否调用工具前暂不播报。
+        defer_tool_preamble = any(
+            str((tool.get("function") or {}).get("name") or "") == "get_weather"
+            for tool in functions or []
+        )
+        deferred_tts_content = []
 
         try:
             # LLM 调用性能日志（普通聊天）
@@ -196,6 +177,7 @@ class ChatMixin:
                     self.memory.query_memory(query), self.loop
                 )
                 memory_str = future.result()
+                memory_str = filter_weather_context_for_query(memory_str, query)
 
             dialogue_data = self.dialogue.get_llm_dialogue_with_memory(
                 memory_str, self.config.get("voiceprint", {})
@@ -284,7 +266,12 @@ class ChatMixin:
                     content = response
 
                 # 在llm回复中获取情绪表情，一轮对话只在开头获取一次
-                if emotion_flag and content is not None and content.strip():
+                if (
+                    emotion_flag
+                    and not defer_tool_preamble
+                    and content is not None
+                    and content.strip()
+                ):
                     asyncio.run_coroutine_threadsafe(
                         textUtils.get_emotion(self, content),
                         self.loop,
@@ -293,20 +280,23 @@ class ChatMixin:
 
                 if content is not None and len(content) > 0:
                     if not tool_call_flag:
-                        tts_content, emotion_tag_pending = _filter_stream_emotion_tag(
+                        tts_content, emotion_tag_pending = filter_stream_emotion_tag(
                             content, emotion_tag_pending
                         )
                         tts_content = stage_direction_filter.feed(tts_content)
                         response_message.append(content)
                         if tts_content:
-                            self.tts.tts_text_queue.put(
-                                TTSMessageDTO(
-                                    sentence_id=self.sentence_id,
-                                    sentence_type=SentenceType.MIDDLE,
-                                    content_type=ContentType.TEXT,
-                                    content_detail=tts_content,
+                            if defer_tool_preamble:
+                                deferred_tts_content.append(tts_content)
+                            else:
+                                self.tts.tts_text_queue.put(
+                                    TTSMessageDTO(
+                                        sentence_id=self.sentence_id,
+                                        sentence_type=SentenceType.MIDDLE,
+                                        content_type=ContentType.TEXT,
+                                        content_detail=tts_content,
+                                    )
                                 )
-                            )
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"LLM stream processing error: {e}")
             self.tts.tts_text_queue.put(
@@ -328,8 +318,24 @@ class ChatMixin:
             return
 
         if not tool_call_flag:
-            tts_content = stage_direction_filter.flush()
+            tts_content, _ = filter_stream_emotion_tag("", emotion_tag_pending, final=True)
+            tts_content = (
+                stage_direction_filter.feed(tts_content)
+                + stage_direction_filter.flush()
+            )
             if tts_content:
+                deferred_tts_content.append(tts_content)
+            if defer_tool_preamble:
+                for deferred_content in deferred_tts_content:
+                    self.tts.tts_text_queue.put(
+                        TTSMessageDTO(
+                            sentence_id=self.sentence_id,
+                            sentence_type=SentenceType.MIDDLE,
+                            content_type=ContentType.TEXT,
+                            content_detail=deferred_content,
+                        )
+                    )
+            elif tts_content:
                 self.tts.tts_text_queue.put(
                     TTSMessageDTO(
                         sentence_id=self.sentence_id,
@@ -369,8 +375,24 @@ class ChatMixin:
                     )
 
             if not bHasError and len(tool_calls_list) > 0:
+                proposed_tool_calls = tool_calls_list
+                tool_calls_list = filter_tool_calls_for_query(
+                    proposed_tool_calls,
+                    query,
+                )
+                rejected_tool_names = [
+                    call.get("name", "")
+                    for call in proposed_tool_calls
+                    if call not in tool_calls_list
+                ]
+                if rejected_tool_names:
+                    self.logger.bind(tag=TAG).warning(
+                        f"工具调用与当前消息无关，已拒绝: {rejected_tool_names}"
+                    )
+
+            if not bHasError and len(tool_calls_list) > 0:
                 # 如需要大模型先处理一轮，添加相关处理后的日志情况
-                if len(response_message) > 0:
+                if len(response_message) > 0 and not defer_tool_preamble:
                     text_buff = "".join(response_message)
                     self.tts_MessageText = text_buff
                     self.dialogue.put(Message(role="assistant", content=text_buff))
@@ -410,16 +432,14 @@ class ChatMixin:
             text_buff = "".join(response_message)
 
             # ── 安宁疗护：情感解析 + 会话日志 ──
+            clean_text, emotion_data = parse_emotion(text_buff)
+            clean_text = _strip_leading_stage_directions(clean_text)
+            self.tts_MessageText = clean_text
+            final_display_text = clean_text
+            # 存入对话历史时去掉情感标签，避免标签累积。
+            # 日志写入失败也必须保留清理结果。
+            self.dialogue.put(Message(role="assistant", content=clean_text))
             try:
-                from core.providers.emotion import parse_emotion
-
-                clean_text, emotion_data = parse_emotion(text_buff)
-                clean_text = _strip_leading_stage_directions(clean_text)
-                self.tts_MessageText = clean_text
-                final_display_text = clean_text
-                # 存入对话历史时去掉情感标签，避免标签累积
-                self.dialogue.put(Message(role="assistant", content=clean_text))
-
                 # 记录到会话日志（如果启用了 hospice 模块）
                 hospice_config = self.config.get("hospice", {})
                 if hospice_config.get("enable_logging", False):
@@ -444,11 +464,7 @@ class ChatMixin:
                         emotion_intensity=intensity,
                     )
             except Exception as e:
-                self.logger.bind(tag=TAG).debug(f"情感解析/会话日志记录跳过: {e}")
-                clean_text = _strip_leading_stage_directions(text_buff)
-                self.tts_MessageText = clean_text
-                final_display_text = clean_text
-                self.dialogue.put(Message(role="assistant", content=clean_text))
+                self.logger.bind(tag=TAG).warning(f"会话日志记录失败: {e}")
 
         # LLM 调用总耗时日志
         if final_display_text:

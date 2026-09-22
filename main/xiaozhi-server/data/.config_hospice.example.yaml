@@ -126,6 +126,76 @@ hospice:
   db_path: data/hospice_sessions.db
   # summary_schedule: "22:00"  # 每日摘要定时任务，未启用
   upload_max_mb: 200            # 家属/患者发送媒体文件的大小上限
+  robot_eye:
+    enabled: false
+    device_id: rk3588-eye-001
+    broker_host: 127.0.0.1
+    broker_port: 1883
+    command_topic: robot/rk3588-eye-001/eye/cmd
+    status_topic: robot/rk3588-eye-001/eye/status
+    username: ""
+    password: ""
+    tls: false
+    qos: 0
+    keepalive_seconds: 30
+    connect_timeout_seconds: 2.0
+    publish_timeout_seconds: 2.0
+  robot_arm:
+    enabled: false
+    device_id: rk3588-eye-001
+    broker_host: 127.0.0.1
+    broker_port: 1883
+    command_topic: robot/rk3588-eye-001/arm/cmd
+    status_topic: robot/rk3588-eye-001/arm/status
+    username: ""
+    password: ""
+    tls: false
+    qos: 0
+    keepalive_seconds: 30
+    connect_timeout_seconds: 2.0
+    publish_timeout_seconds: 2.0
+  robot_aroma:
+    enabled: false
+    device_id: rk3588-eye-001
+    broker_host: 127.0.0.1
+    broker_port: 1883
+    command_topic: robot/rk3588-eye-001/aroma/cmd
+    status_topic: robot/rk3588-eye-001/aroma/status
+    username: ""
+    password: ""
+    tls: false
+    qos: 0
+    keepalive_seconds: 30
+    publish_timeout_seconds: 2.0
+  robot_bed:
+    enabled: false
+    device_id: rk3588-bed-001
+    broker_host: 127.0.0.1
+    broker_port: 1883
+    command_topic: robot/rk3588-bed-001/bed/cmd
+    status_topic: robot/rk3588-bed-001/bed/status
+    username: ""
+    password: ""
+    tls: false
+    qos: 0
+    keepalive_seconds: 30
+    connect_timeout_seconds: 2.0
+    publish_timeout_seconds: 2.0
+  robot_base:
+    enabled: false
+    driver: slamware
+    base_url: "http://127.0.0.1:1448"
+    linear_speed_mps: 0.2
+    max_direct_distance_m: 0.5
+    max_direct_angle_deg: 30
+    timeout_sec: 3
+    poll_interval_sec: 0.2
+    max_wait_sec: 10
+    navigation_mode: 0
+    speed_ratio: 0.3
+    force_single_floor_mode: true
+    localization_quality_min: 50
+    skip_localization_quality_check: true
 
 # 声纹识别配置（可选，未用到可留空）
 # voiceprint:
@@ -180,6 +250,18 @@ ASR:
     semantic_punctuation_enabled: false
     disfluency_removal_enabled: true
     punctuation_prediction_enabled: true
+  # 使用时将 selected_module.ASR 改为 QwenAudioStreamASR。
+  QwenAudioStreamASR:
+    type: aliyunbl_stream
+    api_key: YOUR_ALIYUN_DASHSCOPE_API_KEY_HERE
+    model: qwen-audio-3.0-asr-flash-streaming
+    output_dir: tmp/
+    max_sentence_silence: 1200
+    semantic_punctuation_enabled: false
+    punctuation_prediction_enabled: true
+    language_hints:
+      - zh
+    heartbeat: true
 
 TTS:
   AliBLTTS:

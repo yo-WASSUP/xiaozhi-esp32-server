@@ -99,6 +99,8 @@ LLM 分类兜底只允许输出下面这种 JSON：
 | `arm.wave` | “挥挥手”“招招手”“打个招呼” |
 | `arm.comfort` | “安慰一下”“陪陪我”“我有点难过” |
 | `aroma.start` | “打开香薰”“来点香薰” |
+| `bed.head.up` | “床头上升一点”“升高床头” |
+| `bed.feet.stop` | “床尾停止运动”“床尾保持” |
 
 ## 1. 分工边界
 
@@ -177,7 +179,8 @@ LLM 分类兜底只允许输出下面这种 JSON：
 | `base.backward`   | 后退   | 后退一点、离远一点 |
 | `base.turn_left`  | 左转   | 向左转、看左边   |
 | `base.turn_right` | 右转   | 向右转、看右边   |
-| `base.move`       | 特定动作 | 暂定        |
+| `base.move`       | 特定动作 | 导航到某点位    |
+| `base.homedock`   | 回桩   | 回充电桩      |
 
 ### 底盘参数约束
 
@@ -202,9 +205,20 @@ LLM 分类兜底只允许输出下面这种 JSON：
 
 | 参数            | 类型        | 可选值／范围         | 说明     |
 | ------------- | --------- | -------------- | ------ |
-| `side`        | `string`  | `left`、`right` | 使用哪侧手臂 |
+| `side`        | `string`  | `left`、`right`、`both` | 使用左侧、右侧或双侧手臂 |
 | `repeat`      | `integer` | `1 - 3`        | 重复次数   |
 | `duration_ms` | `integer` | `500 - 3000`   | 动作持续时间 |
+
+默认参数：
+
+| action_id | side | repeat | duration_ms |
+| --- | --- | --- | --- |
+| `arm.wave` | `right` | `1` | `1500` |
+| `arm.gentle` | `both` | `1` | `1000` |
+| `arm.comfort` | `both` | `1` | `2000` |
+| `arm.reset` | `both` | `1` | `1000` |
+
+语音明确包含“左手／左臂”时使用 `left`，明确包含“右手／右臂”时使用 `right`，同时出现左右方向时使用 `both`。未出现方向时使用动作默认值：`arm.wave` 使用 `right`，其余 `arm.*` 使用 `both`。
 
 ---
 
@@ -225,7 +239,7 @@ LLM 分类兜底只允许输出下面这种 JSON：
 
 | action_id           | 中文名  | 触发意图      | 硬件侧责任    |
 | ------------------- | ---- | --------- | -------- |
-| `aroma.start`       | 开启香薰 | 打开香薰、放松一下 | 按档位和时长开启 |
+| `aroma.start`       | 开启香薰 | 打开香薰、放松一下 | 按香型和时长开启 |
 | `aroma.stop`        | 关闭香薰 | 关掉香薰、不要香味 | 关闭香薰     |
 | `aroma.scene_relax` | 放松场景 | 安抚、睡前、紧张  | 使用放松场景参数 |
 
@@ -233,9 +247,22 @@ LLM 分类兜底只允许输出下面这种 JSON：
 
 | 参数            | 类型        | 范围               | 说明   |
 | ------------- | --------- | ---------------- | ---- |
-| `level`       | `integer` | `1 - 3`          | 香薰档位 |
-| `type`        | `string`  | 暂定               | 香薰种类 |
-| `duration_ms` | `integer` | `60000 - 600000` | 开启时长 |
+| `type`        | `string`  | `"1"` - `"3"`  | 香薰种类 |
+| `duration_ms` | `integer` | `1000 - 1800000` | 开启时长，默认 `60000` |
+
+默认参数：
+
+| action_id | type | duration_ms |
+| --- | --- | --- |
+| `aroma.start` | `"1"` | `60000` |
+| `aroma.stop` | — | — |
+| `aroma.scene_relax` | `"1"` | `60000` |
+
+未传 `type` 时使用默认值 `"1"`；显式传入的 `type` 必须是 `"1"`、`"2"` 或 `"3"`，其他值拒绝执行，避免静默切换为错误香型。
+
+未传 `duration_ms` 时使用默认值 `60000`。正整数小于 `1000` 时限幅为 `1000`，大于 `1800000` 时限幅为 `1800000`；`0`、负数和非整数拒绝执行。
+
+`aroma.scene_relax` 固定使用 `type="1"`：未传时补齐 `"1"`，显式传入其他香型时拒绝执行；`duration_ms` 可以覆盖。
 
 ---
 
@@ -250,6 +277,27 @@ LLM 分类兜底只允许输出下面这种 JSON：
 | 参数      | 类型       | 可选值               | 说明   |
 | ------- | -------- | ----------------- | ---- |
 | `level` | `string` | `normal`、`urgent` | 提醒等级 |
+
+## 7. 医疗床动作
+
+| action_id | 中文名 | 硬件侧责任 |
+| --- | --- | --- |
+| `bed.head.1` | 床头 1 档 | 电机 1 运动至 20° |
+| `bed.head.2` | 床头 2 档 | 电机 1 运动至 45° |
+| `bed.head.3` | 床头 3 档 | 电机 1 运动至 65° |
+| `bed.head.up` | 床头升高 | 电机 1 升高 3° |
+| `bed.head.down` | 床头降低 | 电机 1 降低 3° |
+| `bed.head.stop` | 床头停止 | 电机 1 停止 |
+| `bed.head.reset` | 床头复位 | 电机 1 运动至 0° |
+| `bed.feet.1` | 床尾 1 档 | 电机 2 运动至 10° |
+| `bed.feet.2` | 床尾 2 档 | 电机 2 运动至 15° |
+| `bed.feet.3` | 床尾 3 档 | 电机 2 运动至 20° |
+| `bed.feet.up` | 床尾升高 | 电机 2 升高 3° |
+| `bed.feet.down` | 床尾降低 | 电机 2 降低 3° |
+| `bed.feet.stop` | 床尾停止 | 电机 2 停止 |
+| `bed.feet.reset` | 床尾复位 | 电机 2 运动至 0° |
+
+医疗床动作无业务参数，`params` 固定为空对象。全局 `system.stop` 会向医疗床 RK3588 分别发布 `bed.head.stop` 和 `bed.feet.stop`。
 
 
 ## 5. 尊严疗法动作映射
@@ -276,12 +324,19 @@ LLM 分类兜底只允许输出下面这种 JSON：
 | “离远一点”“后退一点” | `base.backward` | `{}` |
 | “向左转一下” | `base.turn_left` | `{}` |
 | “向右转一下” | `base.turn_right` | `{}` |
+| “回充电桩” | `base.homedock` | `{}` |
 | “挥挥手”“打个招呼” | `arm.wave` | `{}` |
+| “挥动左手” | `arm.wave` | `{"side":"left"}` |
+| “挥动右手” | `arm.wave` | `{"side":"right"}` |
+| “左右手一起挥动” | `arm.wave` | `{"side":"both"}` |
 | “收回来” | `arm.reset` | `{}` |
-| “打开香薰” | `aroma.start` | `{}` |
+| “打开香薰” | `aroma.start` | `{"type":"1","duration_ms":60000}` |
 | “关掉香薰” | `aroma.stop` | `{}` |
+| “床头上升一点” | `bed.head.up` | `{}` |
+| “床尾调到二档” | `bed.feet.2` | `{}` |
+| “床头停止运动” | `bed.head.stop` | `{}` |
 
-首版语音侧只负责选动作。速度、角度、持续时间、挥手次数、香薰时长都先由控制适配层使用默认值。
+首版语音侧负责选择动作并提取明确的上肢方向。速度、角度、持续时间、挥手次数和香薰时长由控制适配层使用默认值。
 
 ## 7. 安全门禁约定
 
@@ -289,7 +344,7 @@ LLM 分类兜底只允许输出下面这种 JSON：
 
 | 检查项 | 适用动作 | 处理方式 |
 | --- | --- | --- |
-| 急停状态 | 全部动作 | 只允许 `system.stop`、`notify.nurse_alert`、`eye.*` |
+| 急停状态 | 全部动作 | 只允许 `system.stop`、`notify.nurse_alert`、`eye.*`、`aroma.stop`、`bed.head.stop`、`bed.feet.stop` |
 | 障碍物距离 | `base.*` | 距离不足时拒绝移动 |
 | 电量过低 | `base.*`、`arm.*`、`aroma.*` | 拒绝非必要动作，允许 `system.stop` |
 | 硬件故障 | 对应模块 | 拒绝该模块动作并回传错误 |
@@ -341,7 +396,14 @@ ASR 文本
 | `base.*` | 底盘 driver |
 | `arm.*` | 上肢/机械臂 driver |
 | `aroma.*` | 香薰 driver |
+| `bed.*` | 医疗床 driver |
 | `notify.*` | 通知 driver |
+
+第一版 `arm.*` driver 通过 MQTT 发布到 RK3588 独立 Arm Bridge。Arm Bridge 第一阶段只接收、校验、打印和发布状态；后续再在 Arm Bridge 内部接入 CAN、串口、厂商 SDK 或 ROS2。
+
+第一版 `aroma.*` driver 通过 MQTT 发布到 RK3588 独立 Aroma Bridge。Aroma Bridge 第一阶段只接收、校验、打印和发布状态；全局 `system.stop` 由后端转换为 `aroma.stop` 后下发，后续再在 Aroma Bridge 内部接入真实香薰硬件协议。
+
+第一版 `bed.*` driver 通过独立 `hospice.robot_bed` MQTT 连接发布到另一台 RK3588 Bed Bridge。它使用独立 broker IP、设备 ID、client ID 和 topic；全局 `system.stop` 会下发床头与床尾停止动作。
 
 眼睛表情不只由语音触发，也可以由系统状态触发：
 

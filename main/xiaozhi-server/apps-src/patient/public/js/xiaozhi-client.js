@@ -211,10 +211,14 @@ wsHandler.onConnectionStateChange = (connected) => {
   }
 };
 
-wsHandler.onSessionStateChange = (speaking) => {
+wsHandler.onSessionStateChange = (speaking, meta = {}) => {
   isRemoteSpeaking = speaking;
   window.dispatchEvent(new CustomEvent('xz:state', {
-    detail: { state: speaking ? 'speaking' : 'idle' }
+    detail: {
+      state: speaking ? 'speaking' : 'idle',
+      sentenceId: meta.sentenceId || '',
+      sessionId: meta.sessionId || '',
+    }
   }));
 };
 

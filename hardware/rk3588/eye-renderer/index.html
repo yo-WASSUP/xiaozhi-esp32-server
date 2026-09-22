@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RK3588 Eye Renderer</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body data-expression="calm" data-connected="false">
+    <main class="stage" aria-label="机器人眼睛表情">
+      <section class="eye-panel eye-panel-left" aria-hidden="true">
+        <div class="eye eye-left">
+          <div class="lid lid-top"></div>
+          <div class="pupil"></div>
+          <div class="lid lid-bottom"></div>
+          <div class="blink blink-top"></div>
+          <div class="blink blink-bottom"></div>
+        </div>
+      </section>
+      <section class="eye-panel eye-panel-right" aria-hidden="true">
+        <div class="eye eye-right">
+          <div class="lid lid-top"></div>
+          <div class="pupil"></div>
+          <div class="lid lid-bottom"></div>
+          <div class="blink blink-top"></div>
+          <div class="blink blink-bottom"></div>
+        </div>
+      </section>
+      <p class="status" id="status">calm</p>
+    </main>
+    <script src="./app.js"></script>
+  </body>
+</html>
