@@ -7,7 +7,11 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from core.providers.tts.dto.dto import ContentType, SentenceType, TTSMessageDTO
-from core.providers.tts.huoshan_double_stream import TTSProvider
+with (
+    patch("config.logger.check_config_file"),
+    patch("config.logger.load_config", return_value={"log": {}}),
+):
+    from core.providers.tts.huoshan_double_stream import TTSProvider
 
 
 class HuoshanDoubleStreamSessionTests(unittest.TestCase):

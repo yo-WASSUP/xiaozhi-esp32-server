@@ -5,7 +5,11 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from core.connection_parts.chat import ChatMixin
+with (
+    patch("config.logger.check_config_file"),
+    patch("config.logger.load_config", return_value={"log": {}}),
+):
+    from core.connection_parts.chat import ChatMixin
 from core.providers.tts.dto.dto import SentenceType
 from core.utils.dialogue import Dialogue, Message
 from plugins_func.register import Action, ActionResponse
@@ -105,7 +109,10 @@ class WeatherToolChatTests(unittest.TestCase):
         conn.loop = object()
         conn.session_id = "session-weather"
         conn.websocket = SimpleNamespace(send=AsyncMock())
-        conn.config = {"voiceprint": {}, "hospice": {"enable_logging": False}}
+        conn.config = {
+            "voiceprint": {},
+            "hospice": {"enable_logging": False, "symptom_qa": False},
+        }
         conn.device_id = "device-weather"
         conn.client_abort = False
 

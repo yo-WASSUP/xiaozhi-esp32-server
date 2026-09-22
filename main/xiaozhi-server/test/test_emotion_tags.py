@@ -5,8 +5,12 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
-from core.connection_parts.chat import ChatMixin
-from core.providers.emotion import filter_stream_emotion_tag, parse_emotion
+with (
+    patch("config.logger.check_config_file"),
+    patch("config.logger.load_config", return_value={"log": {}}),
+):
+    from core.connection_parts.chat import ChatMixin
+    from core.providers.emotion import filter_stream_emotion_tag, parse_emotion
 from core.providers.tts.dto.dto import SentenceType
 from core.utils.dialogue import Dialogue
 
@@ -89,7 +93,7 @@ class EmotionTagTests(unittest.TestCase):
             tts=SimpleNamespace(tts_text_queue=queue.Queue()),
             intent_type="none", memory=None, loop=object(),
             session_id="emotion-replay", device_id="test-device",
-            config={"hospice": {"enable_logging": True}},
+            config={"hospice": {"enable_logging": True, "symptom_qa": False}},
             llm=SimpleNamespace(
                 model_name="replay",
                 response=lambda *_: iter(list(reply + "{:emotion:calm:0.6")),
@@ -104,7 +108,9 @@ class EmotionTagTests(unittest.TestCase):
             future.set_result(asyncio.run(coroutine))
             return future
 
-        with patch("core.connection_parts.chat.textUtils.get_emotion", new_callable=AsyncMock), patch(
+        with patch("config.logger.check_config_file"), patch(
+            "config.logger.load_config", return_value={"log": {}}
+        ), patch("core.connection_parts.chat.textUtils.get_emotion", new_callable=AsyncMock), patch(
             "core.connection_parts.chat.send_llm_message", new_callable=AsyncMock
         ) as send_text, patch(
             "core.connection_parts.chat.asyncio.run_coroutine_threadsafe", side_effect=run_immediately
