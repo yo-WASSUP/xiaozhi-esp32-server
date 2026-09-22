@@ -1,0 +1,371 @@
+:root {
+  color-scheme: dark;
+  --bg: #010304;
+  --orb-edge: #102326;
+  --orb-mid: #071012;
+  --orb-deep: #010304;
+  --cyan: #24d9dc;
+  --cyan-bright: #6ffaf3;
+  --cyan-deep: #087b82;
+  --lid: #010304;
+  --gaze-x: 0%;
+  --gaze-y: 0%;
+  --gaze-duration: 1000ms;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg);
+  font-family: Arial, sans-serif;
+}
+
+.stage {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background:
+    radial-gradient(ellipse at 25% 50%, rgba(39, 218, 217, 0.055), transparent 31%),
+    radial-gradient(ellipse at 75% 50%, rgba(39, 218, 217, 0.055), transparent 31%),
+    linear-gradient(180deg, #030708 0%, #010304 58%, #000102 100%);
+}
+
+.eye-panel {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: min(4vw, 56px);
+}
+
+.eye {
+  --eye-size: min(78vh, 39vw, 750px);
+  --eye-y: 0px;
+  --eye-tilt: 0deg;
+  --eye-scale-x: 1;
+  --eye-scale-y: 1;
+  --iris-size: 67%;
+  --iris-opacity: 1;
+  --iris-scale-x: 1;
+  --iris-scale-y: 1;
+  --iris-y-bias: 5%;
+  --ring-brightness: 1;
+  --top-lid-height: 0%;
+  --bottom-lid-height: 0%;
+  position: relative;
+  width: var(--eye-size);
+  height: calc(var(--eye-size) * 0.94);
+  overflow: hidden;
+  border: 1px solid rgba(125, 231, 230, 0.08);
+  border-radius: 48% 52% 49% 51% / 47% 49% 51% 53%;
+  background:
+    radial-gradient(ellipse at 31% 19%, rgba(255, 255, 255, 0.2) 0 2%, rgba(202, 245, 247, 0.07) 7%, transparent 20%),
+    radial-gradient(ellipse at 42% 36%, var(--orb-mid) 0 24%, var(--orb-deep) 68%),
+    #010304;
+  box-shadow:
+    inset 18px 16px 30px rgba(204, 248, 247, 0.035),
+    inset -34px -40px 64px rgba(0, 0, 0, 0.92),
+    inset 0 0 30px rgba(25, 104, 107, 0.06),
+    0 18px 42px rgba(0, 0, 0, 0.82),
+    0 0 34px rgba(30, 217, 217, 0.045);
+  transform:
+    translateY(var(--eye-y))
+    rotate(var(--eye-tilt))
+    scaleX(var(--eye-scale-x))
+    scaleY(var(--eye-scale-y));
+  transform-origin: center;
+  transition:
+    transform 720ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-radius 680ms cubic-bezier(0.16, 1, 0.3, 1),
+    background 680ms ease,
+    box-shadow 720ms ease,
+    opacity 620ms ease,
+    filter 620ms ease;
+  animation: breathe 5.2s ease-in-out infinite;
+}
+
+.eye::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  top: 7%;
+  left: 11%;
+  width: 39%;
+  height: 26%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(229, 253, 253, 0.13), transparent 69%);
+  filter: blur(8px);
+  transform: rotate(-22deg);
+  pointer-events: none;
+}
+
+.pupil {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  top: 49%;
+  width: var(--iris-size);
+  height: var(--iris-size);
+  overflow: hidden;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 46%, #010405 0 56%, rgba(1, 5, 6, 0.98) 57%, transparent 60%),
+    conic-gradient(
+      from 0deg,
+      rgba(6, 58, 63, 0.04) 0 13%,
+      rgba(14, 118, 124, 0.2) 20%,
+      var(--cyan) 35%,
+      var(--cyan-bright) 50%,
+      var(--cyan) 65%,
+      rgba(11, 105, 112, 0.24) 81%,
+      rgba(6, 58, 63, 0.04) 88% 100%
+    );
+  box-shadow:
+    inset 0 -3px 7px rgba(189, 255, 253, 0.32),
+    inset 0 0 13px rgba(2, 12, 14, 0.96),
+    0 0 2px rgba(111, 250, 243, 0.7),
+    0 8px 20px rgba(27, 229, 227, 0.17);
+  opacity: var(--iris-opacity);
+  filter: brightness(var(--ring-brightness));
+  transform:
+    translate(
+      calc(-50% + var(--gaze-x)),
+      calc(-50% + var(--iris-y-bias) + var(--gaze-y))
+    )
+    scaleX(var(--iris-scale-x))
+    scaleY(var(--iris-scale-y));
+  transition:
+    width 680ms cubic-bezier(0.16, 1, 0.3, 1),
+    height 680ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform var(--gaze-duration) cubic-bezier(0.22, 0.72, 0.24, 1),
+    opacity 620ms ease,
+    filter 680ms ease,
+    box-shadow 720ms ease;
+}
+
+.pupil::before {
+  content: "";
+  position: absolute;
+  inset: 5%;
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse at 31% 19%, rgba(238, 255, 255, 0.32) 0 5%, rgba(171, 229, 233, 0.11) 14%, transparent 31%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.045), transparent 42%);
+  pointer-events: none;
+}
+
+.pupil::after {
+  content: "";
+  position: absolute;
+  top: 18%;
+  left: 21%;
+  width: 12%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: rgba(238, 255, 255, 0.92);
+  box-shadow:
+    0 0 8px rgba(215, 255, 255, 0.52),
+    12px 15px 18px rgba(159, 240, 240, 0.11);
+  pointer-events: none;
+}
+
+.lid {
+  position: absolute;
+  left: -8%;
+  z-index: 4;
+  width: 116%;
+  background:
+    radial-gradient(ellipse at 50% 120%, rgba(14, 56, 59, 0.18), transparent 49%),
+    var(--lid);
+  transition: height 720ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lid-top {
+  top: -1px;
+  height: var(--top-lid-height);
+  border-radius: 0 0 50% 50%;
+}
+
+.lid-bottom {
+  bottom: -1px;
+  height: var(--bottom-lid-height);
+  border-radius: 50% 50% 0 0;
+  transition-duration: 780ms;
+}
+
+.blink {
+  position: absolute;
+  left: -8%;
+  z-index: 5;
+  width: 116%;
+  height: 0;
+  background: var(--lid);
+  pointer-events: none;
+}
+
+.blink-top {
+  top: -1px;
+  border-radius: 0 0 50% 50%;
+  animation: blinkTop 6.8s ease-in-out infinite;
+}
+
+.blink-bottom {
+  bottom: -1px;
+  border-radius: 50% 50% 0 0;
+  animation: blinkBottom 6.8s ease-in-out infinite;
+}
+
+.status {
+  position: absolute;
+  left: 24px;
+  bottom: 18px;
+  z-index: 6;
+  margin: 0;
+  color: rgba(155, 234, 232, 0.32);
+  font-size: 16px;
+  letter-spacing: 0.04em;
+}
+
+body[data-expression="attentive"] .eye,
+body[data-expression="calm"] .eye {
+  --iris-size: 69%;
+  --ring-brightness: 1.08;
+}
+
+body[data-expression="speak"] .eye {
+  --iris-size: 68%;
+  --ring-brightness: 1.05;
+}
+
+body[data-expression="speak"] .pupil {
+  animation: speakGlow 2.2s ease-in-out infinite;
+}
+
+body[data-expression="gentle"] .eye,
+body[data-expression="warm_smile"] .eye {
+  --eye-y: 7px;
+  --iris-size: 66%;
+  --iris-y-bias: 7%;
+  --iris-scale-y: 0.96;
+  --top-lid-height: 5%;
+  --bottom-lid-height: 16%;
+  --ring-brightness: 1.02;
+}
+
+body[data-expression="gentle"] .eye-left,
+body[data-expression="warm_smile"] .eye-left {
+  --eye-tilt: 1.2deg;
+}
+
+body[data-expression="gentle"] .eye-right,
+body[data-expression="warm_smile"] .eye-right {
+  --eye-tilt: -1.2deg;
+}
+
+body[data-expression="warm_smile"] .eye {
+  --top-lid-height: 7%;
+  --bottom-lid-height: 25%;
+  --iris-y-bias: 10%;
+  --ring-brightness: 1.1;
+  box-shadow:
+    inset 18px 16px 30px rgba(204, 248, 247, 0.04),
+    inset -34px -40px 64px rgba(0, 0, 0, 0.92),
+    inset 0 0 34px rgba(37, 203, 199, 0.075),
+    0 18px 42px rgba(0, 0, 0, 0.82),
+    0 0 38px rgba(50, 240, 232, 0.065);
+}
+
+body[data-expression="concern"] .eye {
+  --eye-y: 4px;
+  --iris-size: 66%;
+  --iris-y-bias: 8%;
+  --iris-scale-y: 0.97;
+  --top-lid-height: 15%;
+  --bottom-lid-height: 3%;
+  --ring-brightness: 0.82;
+}
+
+body[data-expression="concern"] .eye-left {
+  --eye-tilt: -3deg;
+}
+
+body[data-expression="concern"] .eye-right {
+  --eye-tilt: 3deg;
+}
+
+body[data-connected="false"] .eye {
+  opacity: 0.84;
+  filter: saturate(0.88) brightness(0.88);
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    scale: 1;
+  }
+  50% {
+    scale: 1.012;
+  }
+}
+
+@keyframes blinkTop {
+  0%,
+  89%,
+  100% {
+    height: 0;
+  }
+  93%,
+  95% {
+    height: 91%;
+  }
+}
+
+@keyframes blinkBottom {
+  0%,
+  89%,
+  100% {
+    height: 0;
+  }
+  93%,
+  95% {
+    height: 13%;
+  }
+}
+
+@keyframes speakGlow {
+  0%,
+  100% {
+    filter: brightness(1.04);
+    box-shadow:
+      inset 0 -3px 7px rgba(189, 255, 253, 0.28),
+      inset 0 0 13px rgba(2, 12, 14, 0.96),
+      0 0 2px rgba(111, 250, 243, 0.66),
+      0 8px 18px rgba(27, 229, 227, 0.15);
+  }
+  50% {
+    filter: brightness(1.11);
+    box-shadow:
+      inset 0 -3px 8px rgba(207, 255, 253, 0.42),
+      inset 0 0 13px rgba(2, 12, 14, 0.94),
+      0 0 4px rgba(111, 250, 243, 0.82),
+      0 9px 27px rgba(27, 229, 227, 0.24);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eye,
+  .pupil,
+  .lid,
+  .blink {
+    animation: none !important;
+  }
+}
