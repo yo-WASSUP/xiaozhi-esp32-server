@@ -315,6 +315,7 @@ class TTSProvider(TTSProviderBase):
                 if message.sentence_type == SentenceType.FIRST:
                     # 初始化参数
                     try:
+                        self.tts_audio_first_sentence = True
                         if not getattr(self.conn, "sentence_id", None): 
                             self.conn.sentence_id = uuid.uuid4().hex
                             logger.bind(tag=TAG).debug(f"自动生成新的 会话ID: {self.conn.sentence_id}")

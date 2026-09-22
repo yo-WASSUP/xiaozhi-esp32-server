@@ -17,6 +17,7 @@ export class WebSocketHandler {
         this.onAudioData = null;
         this.onSessionEmotionChange = null;
         this.onChatMessage = null; // 新增：聊天消息回调
+        this.onToolCall = null; // 工具调用调试回调，不进入患者对话区
         this.onClientAction = null; // 患者端本地动作：接电话、读消息等
         this.onDignityEvent = null; // 尊严疗法模式事件
         this.onVoiceModeChange = null; // 语音管线切换或服务端降级
@@ -136,13 +137,16 @@ export class WebSocketHandler {
                 window.dispatchEvent(new CustomEvent('xz:voice-mode', { detail: message }));
             }
         } else if (message.type === 'tool_call') {
-            // 显示服务端函数调用信息
+            // 工具调用仅供日志和调试面板使用，不作为助手回复展示给患者。
             let args = message.arguments;
             try { args = JSON.stringify(JSON.parse(args), null, 0); } catch(e) {}
             const toolText = `[Tool] ${message.function}(${args}) => ${message.result}`;
             log(toolText, 'info');
-            if (this.onChatMessage) {
-                this.onChatMessage(toolText, false);
+            const toolDetail = { ...message, arguments: args };
+            if (this.onToolCall) {
+                this.onToolCall(toolDetail);
+            } else if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('xz:tool-call', { detail: toolDetail }));
             }
         } else if (message.type === 'client_action') {
             log(`收到客户端动作: ${JSON.stringify(message)}`, 'info');
@@ -191,7 +195,10 @@ export class WebSocketHandler {
             this.outputSampleRate = Number(message.sample_rate) || null;
             this.isRemoteSpeaking = true;
             if (this.onSessionStateChange) {
-                this.onSessionStateChange(true);
+                this.onSessionStateChange(true, {
+                    sentenceId: message.sentence_id || '',
+                    sessionId: message.session_id || '',
+                });
             }
 
             // 启动Live2D说话动画
@@ -199,6 +206,16 @@ export class WebSocketHandler {
         } else if (message.state === 'sentence_start') {
             log(`服务器发送语音段: ${message.text}`, 'info');
             this.ttsSentenceCount = (this.ttsSentenceCount || 0) + 1;
+
+            if (!this.isRemoteSpeaking) {
+                this.isRemoteSpeaking = true;
+                if (this.onSessionStateChange) {
+                    this.onSessionStateChange(true, {
+                        sentenceId: message.sentence_id || '',
+                        sessionId: message.session_id || '',
+                    });
+                }
+            }
 
             if (message.text && this.onChatMessage) {
                 this.onChatMessage(message.text, false, {
@@ -232,7 +249,10 @@ export class WebSocketHandler {
                     this.onRecordButtonStateChange(false);
                 }
                 if (this.onSessionStateChange) {
-                    this.onSessionStateChange(false);
+                    this.onSessionStateChange(false, {
+                        sentenceId: message.sentence_id || '',
+                        sessionId: message.session_id || '',
+                    });
                 }
                 this.stopLive2DTalking();
                 this.ttsSentenceCount = 0;

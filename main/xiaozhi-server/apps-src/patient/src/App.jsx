@@ -14,6 +14,10 @@ import ActiveCallOverlay from './components/ActiveCallOverlay';
 import SettingsPanel from './components/SettingsPanel';
 import useFamilyMessageReader from './hooks/useFamilyMessageReader';
 import { C } from './theme';
+import {
+  createAssistantReplyState,
+  reduceAssistantReply,
+} from './utils/assistantReplyState';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const DIGNITY_SILENCE_DELAYS_MS = [15000, 30000, 30000];
@@ -87,21 +91,6 @@ function buildDignityReadingText(kind, payload) {
   if (kind === 'card') return buildLegacyCardReadingText(payload);
   if (kind === 'letter') return buildFamilyLetterReadingText(payload);
   return '';
-}
-
-function mergeAssistantDisplayText(current, incoming) {
-  const previous = String(current || '').trim();
-  const next = String(incoming || '').trim();
-  if (!previous) return next;
-  if (!next || previous.includes(next)) return previous;
-  if (next.startsWith(previous)) return next;
-  const maxOverlap = Math.min(previous.length, next.length);
-  for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
-    if (previous.slice(-overlap) === next.slice(0, overlap)) {
-      return previous + next.slice(overlap);
-    }
-  }
-  return previous + next;
 }
 
 function mergeSafetyAlertList(items, alert) {
@@ -217,7 +206,7 @@ export default function App({ onLogout }) {
   const speakingFallbackTimerRef = useRef(null);
   const dignityOpeningSpokenRef = useRef(false);
   const dignitySilenceTimerRef = useRef(null);
-  const assistantReplyRef = useRef({ sentenceId: '', text: '', final: false });
+  const assistantReplyRef = useRef(createAssistantReplyState());
 
   useEffect(() => { connectedRef.current = connected; }, [connected]);
   useEffect(() => { userSpeakingRef.current = userSpeaking; }, [userSpeaking]);
@@ -808,7 +797,7 @@ export default function App({ onLogout }) {
         || '您好，我是安安。今天我来陪您聊聊天。您现在感觉还好吗？'
       ).trim();
       if (openingReply) {
-        assistantReplyRef.current = { sentenceId: '', text: openingReply, final: true };
+        assistantReplyRef.current = createAssistantReplyState({ displayText: openingReply, final: true });
         setDignityMsg(openingReply);
         setAiState('speaking');
         const spoken = await speakViaTtsAndWait(openingReply);
@@ -1037,6 +1026,13 @@ export default function App({ onLogout }) {
 
   // 桥接 XiaozhiClient 事件（connection / state / llm / stt / ready）
   useEffect(() => {
+    const applyAssistantReplyEvent = event => {
+      const next = reduceAssistantReply(assistantReplyRef.current, event);
+      assistantReplyRef.current = next;
+      if (!next.displayText) return;
+      if (dignityModeRef.current) setDignityMsg(next.displayText);
+      else setOrdinaryMsg(next.displayText);
+    };
     const onConn  = e => {
       const isConnected = !!e.detail.connected;
       setConnected(isConnected);
@@ -1058,12 +1054,21 @@ export default function App({ onLogout }) {
         speakingFallbackTimerRef.current = null;
       }
       if (nextState === 'speaking') {
+        applyAssistantReplyEvent({
+          type: 'tts-started',
+          sentenceId: e.detail?.sentenceId || '',
+        });
         setAiState('speaking');
         speakingFallbackTimerRef.current = setTimeout(() => {
           speakingFallbackTimerRef.current = null;
+          applyAssistantReplyEvent({ type: 'tts-stopped' });
           setAiState('idle');
         }, 18000);
       } else if (nextState === 'idle') {
+        applyAssistantReplyEvent({
+          type: 'tts-stopped',
+          sentenceId: e.detail?.sentenceId || '',
+        });
         setAiState('idle');
       } else if (nextState) {
         setAiState(nextState);
@@ -1077,21 +1082,13 @@ export default function App({ onLogout }) {
       const detail = e.detail || {};
       const text = String(detail.text || '').trim();
       if (!text) return;
-      const sentenceId = detail.sentenceId || '';
-      const current = assistantReplyRef.current;
-      if (sentenceId && current.sentenceId && sentenceId !== current.sentenceId) {
-        assistantReplyRef.current = { sentenceId, text: '', final: false };
-      }
-      if (detail.final) {
-        assistantReplyRef.current = { sentenceId, text, final: true };
-      } else {
-        if (assistantReplyRef.current.final) return;
-        const merged = mergeAssistantDisplayText(assistantReplyRef.current.text, text);
-        assistantReplyRef.current = { sentenceId, text: merged, final: false };
-      }
-      const displayText = assistantReplyRef.current.text;
-      if (dignityModeRef.current) setDignityMsg(displayText);
-      else setOrdinaryMsg(displayText);
+      applyAssistantReplyEvent({
+        type: 'assistant-text',
+        source: detail.source || 'llm',
+        final: !!detail.final,
+        sentenceId: detail.sentenceId || '',
+        text,
+      });
     };
     const attachClientLatency = (payload, startedAtRef) => {
       const startedAt = startedAtRef.current;
@@ -1103,7 +1100,7 @@ export default function App({ onLogout }) {
       };
     };
     const onStt = e => {
-      assistantReplyRef.current = { sentenceId: '', text: '', final: false };
+      assistantReplyRef.current = createAssistantReplyState();
       if (dignityModeRef.current) {
         setDignityLastHeard(e.detail?.text || '');
         setDignitySilencePromptCount(0);
@@ -1223,7 +1220,7 @@ export default function App({ onLogout }) {
         setDignityDocumentUrl(data.document_url || '');
         setDignityDocumentConfirmBusy(false);
         if (data.reply) {
-          assistantReplyRef.current = { sentenceId: '', text: data.reply, final: true };
+          assistantReplyRef.current = createAssistantReplyState({ displayText: data.reply, final: true });
           setDignityMsg(data.reply);
         }
         void loadDignityArtifacts();
@@ -1235,7 +1232,7 @@ export default function App({ onLogout }) {
       } else if (event === 'mode_stopped') {
         dignityOpeningSpokenRef.current = false;
         dignityModeRef.current = false;
-        assistantReplyRef.current = { sentenceId: '', text: '', final: false };
+        assistantReplyRef.current = createAssistantReplyState();
         setDignityMode(false);
         setDignityVoiceMode(false);
         setDignityPaused(false);
@@ -1261,7 +1258,7 @@ export default function App({ onLogout }) {
         setDignitySilencePromptCount(Number(data.silence_prompt_count) || 0);
         if (data.reply) {
           setAiState('speaking');
-          assistantReplyRef.current = { sentenceId: '', text: data.reply, final: true };
+          assistantReplyRef.current = createAssistantReplyState({ displayText: data.reply, final: true });
           setDignityMsg(data.reply);
         }
       } else if (event === 'mode_resumed') {
@@ -1271,7 +1268,7 @@ export default function App({ onLogout }) {
         setDignitySilencePromptCount(0);
         if (data.reply) {
           setAiState('speaking');
-          assistantReplyRef.current = { sentenceId: '', text: data.reply, final: true };
+          assistantReplyRef.current = createAssistantReplyState({ displayText: data.reply, final: true });
           setDignityMsg(data.reply);
         }
         if (!assistantToolsOpen && !settingsOpen) void resumeAssistantAndStart();
@@ -1280,7 +1277,7 @@ export default function App({ onLogout }) {
         setDignitySilencePromptCount(Number(data.silence_prompt_count) || 0);
         if (data.reply) {
           setAiState('speaking');
-          assistantReplyRef.current = { sentenceId: '', text: data.reply, final: true };
+          assistantReplyRef.current = createAssistantReplyState({ displayText: data.reply, final: true });
           setDignityMsg(data.reply);
         }
       } else if (event === 'safety_alert' || event === 'nurse_alert') {
@@ -1290,7 +1287,7 @@ export default function App({ onLogout }) {
           setDignitySafetyAlerts(items => mergeSafetyAlertList(items, data.safety_alert));
         }
         if (data.reply) {
-          assistantReplyRef.current = { sentenceId: '', text: data.reply, final: true };
+          assistantReplyRef.current = createAssistantReplyState({ displayText: data.reply, final: true });
           setDignityMsg(data.reply);
         }
       } else if (event === 'safety_alerts_list') {
@@ -1312,7 +1309,7 @@ export default function App({ onLogout }) {
         setDignityStatus(data);
         setConnectStatus(data.message || '安全预警仍在处理中，请等待医护人员确认');
         if (data.reply) {
-          assistantReplyRef.current = { sentenceId: '', text: data.reply, final: true };
+          assistantReplyRef.current = createAssistantReplyState({ displayText: data.reply, final: true });
           setDignityMsg(data.reply);
         }
       } else if (event === 'turn_result') {
@@ -1322,7 +1319,7 @@ export default function App({ onLogout }) {
         setDignityStatus(nextData);
         setDignityTurns(items => [...items, nextData]);
         if (nextData.reply) {
-          assistantReplyRef.current = { sentenceId: '', text: nextData.reply, final: true };
+          assistantReplyRef.current = createAssistantReplyState({ displayText: nextData.reply, final: true });
           setDignityMsg(nextData.reply);
         }
       } else if (event === 'state_updated') {
@@ -1360,7 +1357,7 @@ export default function App({ onLogout }) {
         setDignityStatus(data);
         setDignityOpeningReply(data.reply || '');
         if (data.reply) {
-          assistantReplyRef.current = { sentenceId: '', text: data.reply, final: true };
+          assistantReplyRef.current = createAssistantReplyState({ displayText: data.reply, final: true });
           setDignityMsg(data.reply);
         }
       } else if (event === 'document_started') {
