@@ -149,10 +149,13 @@ class ChatMixin:
             and hasattr(self, "func_handler")
             and not force_final_answer
         ):
+            available_functions = self.func_handler.get_functions()
             functions = filter_tools_for_query(
-                self.func_handler.get_functions(),
+                available_functions,
                 query,
-            ) or None
+            )
+            if available_functions and not functions:
+                functions = None
         response_message = []
         final_display_text = ""
         # 天气工具轮次可能先流出过渡句；确认是否调用工具前暂不播报。
