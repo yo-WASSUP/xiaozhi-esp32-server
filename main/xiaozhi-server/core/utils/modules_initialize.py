@@ -1,6 +1,7 @@
 from typing import Dict, Any
 from config.logger import setup_logging
 from core.utils import tts, llm, intent, memory, vad, asr
+from core.robot_actions.voice_lexicon import build_hardware_vocabulary
 
 TAG = __name__
 logger = setup_logging()
@@ -115,14 +116,21 @@ def initialize_tts(config):
 
 def initialize_asr(config):
     select_asr_module = config["selected_module"]["ASR"]
+    asr_config = dict(config["ASR"][select_asr_module])
     asr_type = (
         select_asr_module
-        if "type" not in config["ASR"][select_asr_module]
-        else config["ASR"][select_asr_module]["type"]
+        if "type" not in asr_config
+        else asr_config["type"]
     )
+    model = str(asr_config.get("model") or "").lower()
+    if model.startswith("qwen-audio-"):
+        asr_config["vocabulary"] = build_hardware_vocabulary(
+            config,
+            asr_config.get("vocabulary"),
+        )
     new_asr = asr.create_instance(
         asr_type,
-        config["ASR"][select_asr_module],
+        asr_config,
         str(config.get("delete_audio", True)).lower() in ("true", "1", "yes"),
     )
     logger.bind(tag=TAG).info("ASR模块初始化完成")
@@ -148,4 +156,3 @@ def initialize_voiceprint(asr_instance, config):
     except Exception as e:
         logger.bind(tag=TAG).error(f"动态初始化声纹识别功能失败: {str(e)}")
         return False
-

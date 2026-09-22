@@ -1,4 +1,5 @@
 import json
+import re
 import uuid
 import time
 import asyncio
@@ -16,6 +17,9 @@ from core.utils.util import remove_punctuation_and_length
 TAG = __name__
 logger = setup_logging()
 
+CHINESE_CHARACTER_PATTERN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
+ENGLISH_LETTER_PATTERN = re.compile(r"[A-Za-z]")
+
 
 class ASRProvider(ASRProviderBase):
     def __init__(self, config, delete_audio_file):
@@ -29,6 +33,9 @@ class ASRProvider(ASRProviderBase):
         self.is_processing = False
         self.server_ready = False  # 服务器准备状态
         self.task_id = None  # 当前任务ID
+        self.task_started = False
+        self.task_terminal = False
+        self.finish_sent = False
 
         # 阿里百炼配置
         self.api_key = config.get("api_key")
@@ -43,15 +50,31 @@ class ASRProvider(ASRProviderBase):
         self.semantic_punctuation_enabled = config.get("semantic_punctuation_enabled", False)
         max_sentence_silence = config.get("max_sentence_silence")
         self.max_sentence_silence = int(max_sentence_silence) if max_sentence_silence else 200
-        self.multi_threshold_mode_enabled = config.get("multi_threshold_mode_enabled", False)
-        self.punctuation_prediction_enabled = config.get("punctuation_prediction_enabled", True)
-        self.inverse_text_normalization_enabled = config.get("inverse_text_normalization_enabled", True)
+        self.multi_threshold_mode_enabled = config.get(
+            "multi_threshold_mode_enabled", False
+        )
+        self.punctuation_prediction_enabled = config.get(
+            "punctuation_prediction_enabled", True
+        )
+        self.inverse_text_normalization_enabled = config.get(
+            "inverse_text_normalization_enabled", True
+        )
+        self.heartbeat = config.get("heartbeat")
+        self.speech_noise_threshold = config.get("speech_noise_threshold")
+        self.vocabulary = config.get("vocabulary")
+        if self.model.lower().startswith("qwen-audio-"):
+            logger.bind(tag=TAG).info(
+                f"ASR热词配置已加载: model={self.model}, "
+                f"count={len(self.vocabulary or {})}"
+            )
 
         # 连接复用配置
         self.enable_ws_reuse = config.get("enable_ws_reuse", True)
 
         # WebSocket URL
-        self.ws_url = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
+        self.ws_url = config.get(
+            "ws_url", "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
+        )
 
         self.output_dir = config.get("output_dir", "./audio_output")
         self.delete_audio_file = delete_audio_file
@@ -113,11 +136,19 @@ class ASRProvider(ASRProviderBase):
             logger.bind(tag=TAG).debug("WebSocket连接建立成功")
 
             self.server_ready = False
+            self.task_started = False
+            self.task_terminal = False
+            self.finish_sent = False
             self.forward_task = asyncio.create_task(self._forward_results(conn))
 
             # 发送run-task指令
             run_task_msg = self._build_run_task_message()
             await self.asr_ws.send(json.dumps(run_task_msg, ensure_ascii=False))
+            if "vocabulary" in run_task_msg["payload"]["parameters"]:
+                logger.bind(tag=TAG).info(
+                    f"ASR热词已随请求发送: task_id={self.task_id}, "
+                    f"model={self.model}, count={len(self.vocabulary)}"
+                )
             logger.bind(tag=TAG).debug("已发送run-task指令，等待服务器准备...")
 
         except Exception as e:
@@ -130,6 +161,41 @@ class ASRProvider(ASRProviderBase):
 
     def _build_run_task_message(self) -> dict:
         """构建run-task指令"""
+        parameters = {
+            "format": self.format,
+            "sample_rate": self.sample_rate,
+            "semantic_punctuation_enabled": self.semantic_punctuation_enabled,
+            "max_sentence_silence": self.max_sentence_silence,
+            "multi_threshold_mode_enabled": self.multi_threshold_mode_enabled,
+            "punctuation_prediction_enabled": self.punctuation_prediction_enabled,
+        }
+
+        normalized_model = self.model.lower()
+        is_paraformer = normalized_model.startswith("paraformer-")
+        is_qwen_audio = normalized_model.startswith("qwen-audio-")
+        is_qwen_or_fun = is_qwen_audio or normalized_model.startswith("fun-asr-")
+
+        if is_paraformer:
+            parameters.update(
+                {
+                    "disfluency_removal_enabled": self.disfluency_removal_enabled,
+                    "inverse_text_normalization_enabled": self.inverse_text_normalization_enabled,
+                }
+            )
+
+        if self.vocabulary_id:
+            parameters["vocabulary_id"] = self.vocabulary_id
+        if self.vocabulary and is_qwen_audio:
+            parameters["vocabulary"] = self.vocabulary
+        if self.language_hints:
+            parameters["language_hints"] = self.language_hints
+        if self.heartbeat is not None:
+            parameters["heartbeat"] = bool(self.heartbeat)
+        if self.speech_noise_threshold is not None and is_qwen_or_fun:
+            parameters["speech_noise_threshold"] = float(
+                self.speech_noise_threshold
+            )
+
         message = {
             "header": {
                 "action": "run-task",
@@ -141,26 +207,10 @@ class ASRProvider(ASRProviderBase):
                 "task": "asr",
                 "function": "recognition",
                 "model": self.model,
-                "parameters": {
-                    "format": self.format,
-                    "sample_rate": self.sample_rate,
-                    "disfluency_removal_enabled": self.disfluency_removal_enabled,
-                    "semantic_punctuation_enabled": self.semantic_punctuation_enabled,
-                    "max_sentence_silence": self.max_sentence_silence,
-                    "multi_threshold_mode_enabled": self.multi_threshold_mode_enabled,
-                    "punctuation_prediction_enabled": self.punctuation_prediction_enabled,
-                    "inverse_text_normalization_enabled": self.inverse_text_normalization_enabled,
-                },
+                "parameters": parameters,
                 "input": {}
             }
         }
-
-        # 只有当模型名称以v2结尾时才添加vocabulary_id参数
-        if self.model.lower().endswith("v2"):
-            message["payload"]["parameters"]["vocabulary_id"] = self.vocabulary_id
-
-        if self.language_hints:
-            message["payload"]["parameters"]["language_hints"] = self.language_hints
 
         return message
 
@@ -180,6 +230,7 @@ class ASRProvider(ASRProviderBase):
 
                     # 处理task-started事件
                     if event == "task-started":
+                        self.task_started = True
                         self.server_ready = True
                         logger.bind(tag=TAG).debug("服务器已准备，开始发送缓存音频...")
 
@@ -207,7 +258,19 @@ class ASRProvider(ASRProviderBase):
                         is_final = sentence_end and end_time is not None
 
                         if is_final:
-                            logger.bind(tag=TAG).info(f"识别到文本: {text}")
+                            if text.strip():
+                                logger.bind(tag=TAG).info(f"识别到文本: {text}")
+                            if text.strip() and self.model.lower().startswith("qwen-audio-") and self.vocabulary:
+                                matched_hotwords = [
+                                    word for word in self.vocabulary if word and word in text
+                                ]
+                                if matched_hotwords:
+                                    logger.bind(tag=TAG).info(
+                                        f"ASR热词文本匹配: task_id={self.task_id}, "
+                                        f"count={len(matched_hotwords)}, "
+                                        f"matched={json.dumps(matched_hotwords, ensure_ascii=False)}, "
+                                        "匹配方式=最终识别文本包含热词，仅表示文本匹配"
+                                    )
 
                             # 修正 client_voice_stop_time：VAD 设置它时已经晚了 min_silence_duration_ms
                             # 减掉这个偏移，让端到端延迟从"嘴巴真正停了"开始算
@@ -224,7 +287,8 @@ class ASRProvider(ASRProviderBase):
 
                                 # 手动模式下,只有在收到stop信号后才触发处理
                                 if conn.client_voice_stop:
-                                    logger.bind(tag=TAG).debug("收到最终识别结果，触发处理")
+                                    if text.strip():
+                                        logger.bind(tag=TAG).debug("收到最终识别结果，触发处理")
                                     await self.handle_voice_stop(conn, audio_data)
                                     if not self.enable_ws_reuse:
                                         break
@@ -237,15 +301,18 @@ class ASRProvider(ASRProviderBase):
                                     break
                                 # 重置音频状态，准备接收下一句
                                 conn.reset_audio_states()
-                                logger.bind(tag=TAG).debug("句子处理完成，继续监听下一句...")
+                                if text.strip():
+                                    logger.bind(tag=TAG).debug("句子处理完成，继续监听下一句...")
 
                     # 处理task-finished事件
                     elif event == "task-finished":
+                        self.task_terminal = True
                         logger.bind(tag=TAG).debug("任务已完成")
                         break
 
                     # 处理task-failed事件
                     elif event == "task-failed":
+                        self.task_terminal = True
                         error_code = header.get("error_code", "UNKNOWN")
                         error_message = header.get("error_message", "未知错误")
                         logger.bind(tag=TAG).error(f"任务失败: {error_code} - {error_message}")
@@ -282,6 +349,18 @@ class ASRProvider(ASRProviderBase):
         """发送finish-task指令"""
         if self.asr_ws and self.task_id:
             try:
+                if self.finish_sent:
+                    logger.bind(tag=TAG).debug("finish-task已发送过，跳过重复发送")
+                    return
+
+                if self.task_terminal:
+                    logger.bind(tag=TAG).debug("任务已结束，跳过发送finish-task")
+                    return
+
+                if not self.task_started:
+                    logger.bind(tag=TAG).debug("任务尚未启动成功，跳过发送finish-task")
+                    return
+
                 finish_msg = {
                     "header": {
                         "action": "finish-task",
@@ -293,6 +372,7 @@ class ASRProvider(ASRProviderBase):
                     }
                 }
                 await self.asr_ws.send(json.dumps(finish_msg, ensure_ascii=False))
+                self.finish_sent = True
                 logger.bind(tag=TAG).debug("已发送finish-task指令")
             except Exception as e:
                 logger.bind(tag=TAG).error(f"发送finish-task指令失败: {e}")
@@ -309,10 +389,10 @@ class ASRProvider(ASRProviderBase):
         # 关闭连接
         if self.asr_ws:
             try:
-                # 先发送finish-task指令
                 await self._send_finish_task()
-                # 等待一小段时间让服务器处理
-                await asyncio.sleep(0.1)
+                if self.finish_sent:
+                    # 仅在确实发送了finish-task后等待服务器处理
+                    await asyncio.sleep(0.1)
 
                 logger.bind(tag=TAG).debug("正在关闭WebSocket连接")
                 await asyncio.wait_for(self.asr_ws.close(), timeout=2.0)
@@ -325,6 +405,9 @@ class ASRProvider(ASRProviderBase):
         # 清理任务引用
         self.forward_task = None
         self.task_id = None
+        self.task_started = False
+        self.task_terminal = False
+        self.finish_sent = False
 
         logger.bind(tag=TAG).debug("ASR会话清理完成")
 
@@ -337,6 +420,12 @@ class ASRProvider(ASRProviderBase):
             self.text = ""
 
             if not text:
+                return
+
+            if self._should_discard_language_result(text):
+                logger.bind(tag=TAG).warning(
+                    f"中文识别模式丢弃纯英文或短中英混合片段: {text}"
+                )
                 return
 
             logger.bind(tag=TAG).info(f"识别文本: {text}")
@@ -380,6 +469,31 @@ class ASRProvider(ASRProviderBase):
             logger.bind(tag=TAG).error(f"流式ASR处理失败: {e}")
             import traceback
             logger.bind(tag=TAG).debug(f"异常详情: {traceback.format_exc()}")
+
+    def _should_discard_language_result(self, text: str) -> bool:
+        """中文单语模式过滤纯英文，以及一个字母夹杂一至两个汉字的短片段。"""
+        language_hints = getattr(self, "language_hints", None) or []
+        if isinstance(language_hints, str):
+            language_hints = [language_hints]
+        normalized_hints = {
+            str(language).strip().lower()
+            for language in language_hints
+            if str(language).strip()
+        }
+        if normalized_hints != {"zh"}:
+            return False
+        english_letters = ENGLISH_LETTER_PATTERN.findall(text)
+        if not english_letters:
+            return False
+        chinese_characters = CHINESE_CHARACTER_PATTERN.findall(text)
+        if not chinese_characters:
+            return True
+        # 保留 WiFi 等多字母词、较完整的中文表达和含数字的设备/床位编号。
+        return (
+            len(english_letters) == 1
+            and len(chinese_characters) <= 2
+            and not any(char.isdigit() for char in text)
+        )
 
     async def _background_voiceprint(self, conn, asr_audio_task: List[bytes]):
         """后台声纹识别，不阻塞主流程"""
